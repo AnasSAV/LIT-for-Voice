@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+:root {
+    /* Core colors for LIT Voice interface */
+    --background: 218 24% 97%;
+    --foreground: 220 16% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 16% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 16% 12%;
+
+    /* Primary: Deep blue for audio analysis */
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --primary-hover: 221 83% 48%;
+
+    /* Secondary: Cool gray for panels */
+    --secondary: 215 25% 95%;
+    --secondary-foreground: 220 16% 12%;
+
+    --muted: 215 25% 95%;
+    --muted-foreground: 220 8% 46%;
+
+    /* Accent: Teal for highlights and active states */
+    --accent: 178 68% 45%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 178 68% 40%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 215 25% 88%;
+    --input: 215 25% 88%;
+    --ring: 221 83% 53%;
+
+    /* Audio specific colors */
+    --waveform-primary: 221 83% 53%;
+    --waveform-secondary: 178 68% 45%;
+    --saliency-high: 15 86% 58%;
+    --saliency-medium: 45 93% 58%;
+    --saliency-low: 178 68% 78%;
+    
+    /* Panel backgrounds */
+    --panel-background: 0 0% 100%;
+    --panel-border: 215 25% 88%;
+    --panel-header: 215 25% 95%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+.dark {
+    --background: 220 27% 8%;
+    --foreground: 210 40% 95%;
+
+    --card: 220 27% 10%;
+    --card-foreground: 210 40% 95%;
+
+    --popover: 220 27% 10%;
+    --popover-foreground: 210 40% 95%;
+
+    --primary: 221 83% 58%;
+    --primary-foreground: 220 27% 8%;
+    --primary-hover: 221 83% 53%;
+
+    --secondary: 220 20% 15%;
+    --secondary-foreground: 210 40% 95%;
+
+    --muted: 220 20% 15%;
+    --muted-foreground: 215 15% 65%;
+
+    --accent: 178 68% 50%;
+    --accent-foreground: 220 27% 8%;
+    --accent-hover: 178 68% 45%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 221 83% 58%;
+
+    /* Audio specific colors - dark mode */
+    --waveform-primary: 221 83% 58%;
+    --waveform-secondary: 178 68% 50%;
+    --saliency-high: 15 86% 63%;
+    --saliency-medium: 45 93% 63%;
+    --saliency-low: 178 68% 30%;
+    
+    /* Panel backgrounds - dark mode */
+    --panel-background: 220 27% 10%;
+    --panel-border: 220 20% 18%;
+    --panel-header: 220 20% 15%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+@layer utilities {
+  .panel-background {
+    background-color: hsl(var(--panel-background));
+  }
+  
+  .panel-border {
+    border-color: hsl(var(--panel-border));
+  }
+  
+  .panel-header {
+    background-color: hsl(var(--panel-header));
+  }
+
+  .waveform-primary {
+    color: hsl(var(--waveform-primary));
+  }
+
+  .waveform-secondary {
+    color: hsl(var(--waveform-secondary));
+  }
+
+  .saliency-high {
+    background-color: hsl(var(--saliency-high));
+  }
+
+  .saliency-medium {
+    background-color: hsl(var(--saliency-medium));
+  }
+
+  .saliency-low {
+    background-color: hsl(var(--saliency-low));
+  }
+}
