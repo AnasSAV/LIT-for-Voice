@@ -2,13 +2,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.session import SessionMiddleware
 from .api.routes import session as session_routes, results as results_routes
-# ➕ imports for health
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 from .core.redis import redis
 
-app = FastAPI(title="LIT for Voice – API")
+from .api.routes import session as session_routes, results as results_routes, inferences as inferences_routes
 
+app = FastAPI(title="LIT for Voice – API")
+origins = [
+    "http://localhost:8080",  # your Vue/React dev server
+    "http://localhost:5173",  # if using Vite
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],  # add your FE origin(s)
@@ -17,12 +21,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(SessionMiddleware)
 
+app.add_middleware(SessionMiddleware)
 app.include_router(session_routes.router)
 app.include_router(results_routes.router)
+app.include_router(inferences_routes.router)
 
-# ➕ health check (simple and fast)
 @app.get("/health")
 async def health():
     try:
