@@ -1,5 +1,6 @@
 import torch
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from transformers import *
+import librosa
 
 def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -30,11 +31,32 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
     )
     return result
 
-def transcribe_whisper_large(audio_file):
+def transcribe_whisper_large():
     model_id = "openai/whisper-large-v3"
-    return transcribe_whisper(model_id, audio_file)
+    return transcribe_whisper(model_id, "sample1.wav")
 
-def transcribe_whisper_base(audio_file):
+def transcribe_whisper_base():
     model_id = "openai/whisper-base"
-    return transcribe_whisper(model_id, audio_file)
+    return transcribe_whisper(model_id, "sample1.wav")
+
+
+feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
+model = Wav2Vec2ForCTC.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
+
+def predict_emotion_wave2vec(audio_path):
+    audio, rate = librosa.load(audio_path, sr=16000)
+    inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
+    
+    with torch.no_grad():
+        outputs = model(inputs.input_values)
+        predictions = torch.nn.functional.softmax(outputs.logits.mean(dim=1), dim=-1)  # Average over sequence length
+        predicted_label = torch.argmax(predictions, dim=-1)
+        emotion = model.config.id2label[predicted_label.item()]
+    return emotion
+
+def wave2vec():
+    emotion = predict_emotion_wave2vec("sample2.mp3")
+    return emotion
+
+
 
