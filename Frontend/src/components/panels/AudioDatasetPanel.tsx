@@ -7,7 +7,17 @@ import { Upload, Search, Play, Pause } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
 
-export const AudioDatasetPanel = () => {
+interface ApiData {
+  prediction: {
+    text: string;
+  };
+}
+
+interface AudioDatasetPanelProps {
+  apiData: ApiData | null; // allow null when not loaded
+}
+
+export const AudioDatasetPanel = ({ apiData }: AudioDatasetPanelProps) => {
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -46,6 +56,7 @@ export const AudioDatasetPanel = () => {
               selectedRow={selectedRow}
               onRowSelect={setSelectedRow}
               searchQuery={searchQuery}
+              apiData={apiData}
             />
           </CardContent>
         </Card>

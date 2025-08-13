@@ -4,12 +4,17 @@ import { EmbeddingPanel } from "../panels/EmbeddingPanel";
 import { AudioDatasetPanel } from "../panels/AudioDatasetPanel";
 import { DatapointEditorPanel } from "../panels/DatapointEditorPanel";
 import { PredictionPanel } from "../panels/PredictionPanel";
+import React, { useState } from "react";
 
 export const MainLayout = () => {
+  const [apiData, setApiData] = useState(null); // NEW
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
-      <Toolbar />
+      <Toolbar
+      apiData={apiData}
+      setApiData={setApiData} 
+      />
       
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden">
@@ -25,7 +30,9 @@ export const MainLayout = () => {
           <Panel defaultSize={50} minSize={30}>
             <PanelGroup direction="vertical">
               <Panel defaultSize={70} minSize={40}>
-                <AudioDatasetPanel />
+                <AudioDatasetPanel
+                apiData = {apiData}
+                />
               </Panel>
               
               <PanelResizeHandle className="h-1 bg-border hover:bg-border/80 transition-colors" />
