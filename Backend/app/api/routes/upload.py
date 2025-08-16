@@ -1,0 +1,96 @@
+from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
+import os
+import shutil
+from pathlib import Path
+import uuid
+
+router = APIRouter()
+
+# Ensure uploads directory exists
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+@router.get("/upload/test")
+async def test_upload_endpoint():
+    """Test endpoint to verify upload service is working"""
+    return {"status": "Upload service is working", "upload_dir": str(UPLOAD_DIR.absolute())}
+
+@router.post("/upload")
+async def upload_audio_file(file: UploadFile = File(...)):
+    """
+    Upload an audio file and return the file path for processing
+    """
+    # Validate file type
+    if not file.content_type or not file.content_type.startswith('audio/'):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only audio files are allowed.")
+    
+    # Validate file extension
+    allowed_extensions = ['.wav', '.mp3', '.m4a', '.flac']
+    file_extension = Path(file.filename).suffix.lower()
+    if file_extension not in allowed_extensions:
+        raise HTTPException(status_code=400, detail=f"Invalid file extension. Allowed: {', '.join(allowed_extensions)}")
+    
+    try:
+        # Generate unique filename to avoid conflicts
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = UPLOAD_DIR / unique_filename
+        
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "File uploaded successfully",
+                "filename": file.filename,
+                "file_path": str(file_path),
+                "file_id": unique_filename
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+
+@router.delete("/upload/{file_id}")
+async def delete_uploaded_file(file_id: str):
+    """
+    Delete an uploaded file
+    """
+    file_path = UPLOAD_DIR / file_id
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        file_path.unlink()
+        return JSONResponse(
+            status_code=200,
+            content={"message": "File deleted successfully"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
+
+@router.get("/upload/list")
+async def list_uploaded_files():
+    """
+    List all uploaded files
+    """
+    try:
+        files = []
+        for file_path in UPLOAD_DIR.iterdir():
+            if file_path.is_file():
+                files.append({
+                    "file_id": file_path.name,
+                    "filename": file_path.name,
+                    "size": file_path.stat().st_size,
+                    "created_at": file_path.stat().st_ctime
+                })
+        
+        return JSONResponse(
+            status_code=200,
+            content={"files": files}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list files: {str(e)}")
