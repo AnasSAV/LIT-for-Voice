@@ -16,7 +16,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# app.add_middleware(SessionMiddleware)
+app.add_middleware(SessionMiddleware)
 
 app.include_router(session_routes.router)
 app.include_router(results_routes.router)

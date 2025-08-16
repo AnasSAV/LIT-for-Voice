@@ -52,6 +52,9 @@ def predict_emotion_wave2vec(audio_path):
         predictions = torch.nn.functional.softmax(outputs.logits.mean(dim=1), dim=-1)  # Average over sequence length
         predicted_label = torch.argmax(predictions, dim=-1)
         emotion = model.config.id2label[predicted_label.item()]
+        print("Logits shape:", outputs.logits.shape)
+        print("num_labels in config:", model.config.num_labels)
+        print("id2label keys:", list(model.config.id2label.keys()))
     return emotion
 
 def wave2vec():
