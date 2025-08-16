@@ -14,3 +14,7 @@ processed/
 !*.csv
 !*.json
 !*.log
+
+# Ignore local dev RAVDESS subset metadata files
+/dev/ravdess_subset/ravdess_subset_checksums.json
+/dev/ravdess_subset/ravdess_subset_metadata.csv
