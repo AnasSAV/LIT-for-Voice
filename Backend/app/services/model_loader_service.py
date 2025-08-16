@@ -33,7 +33,7 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
 
 def transcribe_whisper_large():
     model_id = "openai/whisper-large-v3"
-    return transcribe_whisper(model_id, "sample1.wav")
+    return transcribe_whisper(model_id, "sample2.mp3")
 
 def transcribe_whisper_base():
     model_id = "openai/whisper-base"
