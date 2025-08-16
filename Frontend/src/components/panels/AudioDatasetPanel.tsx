@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,20 +6,42 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, Search, Play, Pause } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
+import { useAudio } from "@/contexts/AudioContext";
+import { toast } from "sonner";
 
-interface ApiData {
-  prediction: {
-    text: string;
-  };
-}
-
-interface AudioDatasetPanelProps {
-  apiData: ApiData | null; // allow null when not loaded
-}
-
-export const AudioDatasetPanel = ({ apiData }: AudioDatasetPanelProps) => {
+export const AudioDatasetPanel = () => {
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const { audioFiles, addAudioFile } = useAudio();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('audio/')) {
+        try {
+          await addAudioFile(file);
+          toast.success(`Uploaded: ${file.name}`);
+        } catch (error) {
+          toast.error(`Failed to upload: ${file.name}`);
+          console.error('Upload error:', error);
+        }
+      } else {
+        toast.error(`Invalid file type: ${file.name}`);
+      }
+    }
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="h-full panel-background flex flex-col">
@@ -28,9 +50,22 @@ export const AudioDatasetPanel = ({ apiData }: AudioDatasetPanelProps) => {
           <h3 className="font-medium text-sm">Audio Dataset</h3>
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-xs">
-              1,247 samples
+              {audioFiles.length} files
             </Badge>
-            <Button size="sm" variant="outline" className="h-7">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="audio/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-7"
+              onClick={handleUploadClick}
+            >
               <Upload className="h-3 w-3 mr-1" />
               Upload
             </Button>
@@ -56,14 +91,13 @@ export const AudioDatasetPanel = ({ apiData }: AudioDatasetPanelProps) => {
               selectedRow={selectedRow}
               onRowSelect={setSelectedRow}
               searchQuery={searchQuery}
-              apiData={apiData}
             />
           </CardContent>
         </Card>
       </div>
       
       {/* Upload overlay */}
-      <AudioUploader />
+      <AudioUploader onUpload={() => {}} />
     </div>
   );
 };

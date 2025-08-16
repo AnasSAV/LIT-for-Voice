@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Select,
   SelectContent,
@@ -9,6 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
+import { useAudio } from "@/contexts/AudioContext";
+import { toast } from "sonner";
 
 const modelDatasetMap: Record<string, string[]> = {
   "whisper-base": ["common-voice", "custom"],
@@ -22,39 +24,82 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-export const Toolbar = ({apiData, setApiData}) => {
+export const Toolbar = () => {
   const [model, setModel] = useState("Select");
   const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
+  const { currentAudio, runPrediction, addAudioFile } = useAudio();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-const onModelChange = async (value: string) => {
-  setModel(value);
+  const onModelChange = async (value: string) => {
+    setModel(value);
 
-  // Update dataset based on model
-  const allowedDatasets = modelDatasetMap[value] || ["custom"];
-  const defaultDataset = defaultDatasetForModel[value] || "custom";
+    // Update dataset based on model
+    const allowedDatasets = modelDatasetMap[value] || ["custom"];
+    const defaultDataset = defaultDatasetForModel[value] || "custom";
 
-  if (!allowedDatasets.includes(dataset)) {
-    setDataset(defaultDataset);
-  }
-
-  console.log("Model selected:", value);
-
-  try {
-    const res = await fetch(`http://localhost:8000/inferences/run?model=${value}`);
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
+    if (!allowedDatasets.includes(dataset)) {
+      setDataset(defaultDataset);
     }
-    const data = await res.json();
-    setApiData(data);
-    console.log("API response:", data);
-  } catch (error) {
-    console.error("Failed to run inference:", error);
-  }
-};
+
+    console.log("Model selected:", value);
+
+    // Run prediction on current audio if available
+    if (currentAudio) {
+      try {
+        await runPrediction(currentAudio.id, value);
+        toast.success(`${value} prediction completed`);
+      } catch (error) {
+        toast.error(`Failed to run ${value} prediction`);
+        console.error("Failed to run inference:", error);
+      }
+    } else {
+      // Run inference on sample data for demonstration
+      try {
+        const res = await fetch(`http://localhost:8000/inferences/run?model=${value}`);
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status}`);
+        }
+        const data = await res.json();
+        console.log("API response:", data);
+        toast.success(`${value} inference completed on sample data`);
+      } catch (error) {
+        console.error("Failed to run inference:", error);
+        toast.error(`Failed to run ${value} inference`);
+      }
+    }
+  };
 
   const onDatasetChange = (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('audio/')) {
+        try {
+          await addAudioFile(file);
+          toast.success(`Uploaded: ${file.name}`);
+        } catch (error) {
+          toast.error(`Failed to upload: ${file.name}`);
+          console.error('Upload error:', error);
+        }
+      } else {
+        toast.error(`Invalid file type: ${file.name}`);
+      }
+    }
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // Get datasets allowed for current model
@@ -62,6 +107,15 @@ const onModelChange = async (value: string) => {
 
   return (
     <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="audio/*"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+      
       {/* Left side: Model and Dataset selectors */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
@@ -122,7 +176,12 @@ const onModelChange = async (value: string) => {
           Pin
         </Button>
 
-        <Button variant="outline" size="sm" className="h-8">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-8"
+          onClick={handleUploadClick}
+        >
           <Upload className="h-4 w-4 mr-2" />
           Upload
         </Button>

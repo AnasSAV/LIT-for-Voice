@@ -11,113 +11,114 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { Play, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { useAudio, AudioFile } from "@/contexts/AudioContext";
 
-interface AudioData {
-  id: string;
-  filename: string;
-  predictedTranscript: string;
-  predictedLabel: string;
-  groundTruthLabel: string;
-  confidence: number;
-  duration: number;
-}
+const columnHelper = createColumnHelper<AudioFile>();
 
-const mockData: AudioData[] = [
-  {
-    id: "1",
-    filename: "audio_sample_001.wav",
-    predictedTranscript: "The quick brown fox jumps over the lazy dog",
-    predictedLabel: "neutral",
-    groundTruthLabel: "neutral",
-    confidence: 0.87,
-    duration: 3.2
-  },
-  // {
-  //   id: "2", 
-  //   filename: "audio_sample_002.wav",
-  //   predictedTranscript: "Hello world this is a test",
-  //   predictedLabel: "happy",
-  //   groundTruthLabel: "happy",
-  //   confidence: 0.92,
-  //   duration: 2.8
-  // },
-  // Add more mock data...
-];
-
-const columnHelper = createColumnHelper<AudioData>();
-interface ApiData {
-  prediction: {
-    text: string;
-  };
-}
 interface AudioDataTableProps {
   selectedRow: string | null;
   onRowSelect: (id: string) => void;
   searchQuery: string;
-  apiData : ApiData
 }
 
-export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery,apiData }: AudioDataTableProps) => {
+export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery }: AudioDataTableProps) => {
+  const { audioFiles, selectAudio, removeAudio, currentAudio } = useAudio();
+
+  const formatDuration = (duration: number | undefined) => {
+    if (!duration) return "0:00";
+    const mins = Math.floor(duration / 60);
+    const secs = Math.floor(duration % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handlePlayClick = (audioFile: AudioFile, e: React.MouseEvent) => {
+    e.stopPropagation();
+    selectAudio(audioFile.id);
+  };
+
+  const handleDeleteClick = (audioFile: AudioFile, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeAudio(audioFile.id);
+  };
+
   const columns = [
-    columnHelper.accessor("filename", {
+    columnHelper.accessor("name", {
       header: "Filename",
-      cell: (info) => (
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-            <Play className="h-3 w-3" />
-          </Button>
-          <span className="font-mono text-xs">{info.getValue()}</span>
-        </div>
-      ),
+      cell: (info) => {
+        const audioFile = info.row.original;
+        const isSelected = currentAudio?.id === audioFile.id;
+        return (
+          <div className="flex items-center gap-2">
+            <Button 
+              size="sm" 
+              variant={isSelected ? "default" : "ghost"} 
+              className="h-6 w-6 p-0"
+              onClick={(e) => handlePlayClick(audioFile, e)}
+            >
+              <Play className="h-3 w-3" />
+            </Button>
+            <span className="font-mono text-xs truncate max-w-[200px]" title={info.getValue()}>
+              {info.getValue()}
+            </span>
+          </div>
+        );
+      },
     }),
-    // columnHelper.accessor("predictedTranscript", {
-    //   header: "Predicted Transcript",
-    //   cell: (info) => (
-    //     <span className="text-xs">{info.getValue()}</span>
-    //   ),
-    // }),
-    columnHelper.accessor("predictedLabel", {
-      header: "Predicted Label",
-      cell: (info) => (
-        <Badge variant="outline" className="text-xs">
-          {apiData?.prediction?.text ?? ""}
-        </Badge>
-      ),
-    }),
-    columnHelper.accessor("groundTruthLabel", {
-      header: "Ground Truth",
-      cell: (info) => (
-        <Badge variant="secondary" className="text-xs">
-          {apiData?.prediction?.text ?? ""}
-        </Badge>
-      ),
-    }),
-    columnHelper.accessor("confidence", {
-      header: "Confidence",
-      cell: (info) => (
-        <span className="text-xs">{apiData ? (info.getValue() * 100).toFixed(0) : ""}%</span>
-      ),
+    columnHelper.accessor("predictions", {
+      header: "Predictions",
+      cell: (info) => {
+        const predictions = info.getValue() || [];
+        return (
+          <div className="flex flex-wrap gap-1">
+            {predictions.map((pred, index) => (
+              <Badge key={index} variant="outline" className="text-xs">
+                {pred.model}: {pred.transcription || pred.emotion || "Processing..."}
+              </Badge>
+            ))}
+            {predictions.length === 0 && (
+              <span className="text-xs text-muted-foreground">No predictions</span>
+            )}
+          </div>
+        );
+      },
     }),
     columnHelper.accessor("duration", {
       header: "Duration",
       cell: (info) => (
-        <span className="text-xs">{apiData ? info.getValue() : ""}s</span>
+        <span className="text-xs">{formatDuration(info.getValue())}</span>
       ),
+    }),
+    columnHelper.display({
+      id: "actions",
+      header: "Actions",
+      cell: (info) => {
+        const audioFile = info.row.original;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+            onClick={(e) => handleDeleteClick(audioFile, e)}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        );
+      },
     }),
   ];
 
+  const filteredData = audioFiles.filter(file => 
+    file.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const table = useReactTable({
-    data: mockData,
+    data: filteredData,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    state: {
-      globalFilter: searchQuery,
-    },
-    onGlobalFilterChange: () => {},
     initialState: {
       pagination: {
         pageSize: 20,
@@ -152,7 +153,10 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery,apiData }
                   key={row.id}
                   data-state={selectedRow === row.original.id ? "selected" : undefined}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => onRowSelect(row.original.id)}
+                  onClick={() => {
+                    onRowSelect(row.original.id);
+                    selectAudio(row.original.id);
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-2">
@@ -164,7 +168,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery,apiData }
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center text-xs">
-                  No results.
+                  {audioFiles.length === 0 ? "No audio files uploaded." : "No results match your search."}
                 </TableCell>
               </TableRow>
             )}
@@ -175,7 +179,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery,apiData }
       {/* Pagination */}
       <div className="border-t panel-border p-2 flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
-          Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          {audioFiles.length} file(s) • Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
         </div>
         <div className="flex items-center gap-1">
           <Button

@@ -3,23 +3,36 @@ import { useDropzone } from "react-dropzone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Upload, FileAudio } from "lucide-react";
 import { toast } from "sonner";
+import { useAudio } from "@/contexts/AudioContext";
 
-export const AudioUploader = () => {
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    acceptedFiles.forEach((file) => {
+interface AudioUploaderProps {
+  onUpload?: () => void;
+}
+
+export const AudioUploader = ({ onUpload }: AudioUploaderProps) => {
+  const { addAudioFile } = useAudio();
+  
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    for (const file of acceptedFiles) {
       if (file.type.startsWith('audio/')) {
-        toast.success(`Uploaded: ${file.name}`);
-        // TODO: Process audio file
+        try {
+          const audioId = await addAudioFile(file);
+          toast.success(`Uploaded: ${file.name}`);
+          onUpload?.();
+        } catch (error) {
+          toast.error(`Failed to upload: ${file.name}`);
+          console.error('Upload error:', error);
+        }
       } else {
         toast.error(`Invalid file type: ${file.name}`);
       }
-    });
-  }, []);
+    }
+  }, [addAudioFile, onUpload]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'audio/*': ['.wav', '.mp3', '.m4a', '.flac']
+      'audio/*': ['.wav', '.mp3', '.m4a', '.flac', '.ogg']
     },
     multiple: true
   });
@@ -49,7 +62,7 @@ export const AudioUploader = () => {
                 {isDragActive ? "Drop files here" : "Upload Audio Files"}
               </h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Supports WAV, MP3, M4A, FLAC
+                Supports WAV, MP3, M4A, FLAC, OGG
               </p>
             </div>
           </div>
