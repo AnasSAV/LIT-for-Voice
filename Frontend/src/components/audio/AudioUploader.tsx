@@ -100,25 +100,6 @@ export const AudioUploader = ({ onUploadSuccess }: AudioUploaderProps) => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Always visible upload area */}
-      <div
-        {...getRootProps()}
-        className="mt-4 p-4 border-2 border-dashed border-gray-300 hover:border-primary cursor-pointer transition-colors rounded-lg"
-      >
-        <input {...getInputProps()} />
-        <div className="text-center">
-          <div className="flex flex-col items-center gap-2">
-            <Upload className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Click to upload or drag & drop audio files
-            </p>
-            <p className="text-xs text-muted-foreground">
-              WAV, MP3, M4A, FLAC supported
-            </p>
-          </div>
-        </div>
-      </div>
     </>
   );
 };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,10 +6,37 @@ import { Badge } from "@/components/ui/badge";
 import { AudioPlayer } from "../audio/AudioPlayer";
 import { WaveformViewer } from "../audio/WaveformViewer";
 import { Play, Pause, RotateCcw, Trash2, Plus } from "lucide-react";
+import WaveSurfer from "wavesurfer.js";
 
-export const DatapointEditorPanel = () => {
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
+interface DatapointEditorPanelProps {
+  selectedFile?: UploadedFile | null;
+}
+
+export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps) => {
   const [selectedLabel, setSelectedLabel] = useState<string>("neutral");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const wavesurferRef = useRef<WaveSurfer | null>(null);
+
+  const audioUrl = selectedFile ? `http://localhost:8000/upload/file/${selectedFile.file_id}` : undefined;
+
+  // Reset playback when file changes
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, [selectedFile?.file_id]);
   
   return (
     <div className="h-full panel-background border-l panel-border flex flex-col">
@@ -26,16 +53,22 @@ export const DatapointEditorPanel = () => {
           <CardContent className="space-y-2">
             <div className="text-xs">
               <span className="text-muted-foreground">File:</span>
-              <span className="ml-2 font-mono">audio_sample_001.wav</span>
+              <span className="ml-2 font-mono">{selectedFile?.filename || "No file selected"}</span>
             </div>
             <div className="text-xs">
               <span className="text-muted-foreground">Duration:</span>
-              <span className="ml-2">3.2s</span>
+              <span className="ml-2">{selectedFile?.duration ? `${selectedFile.duration.toFixed(1)}s` : "N/A"}</span>
             </div>
             <div className="text-xs">
               <span className="text-muted-foreground">Sample Rate:</span>
-              <span className="ml-2">16kHz</span>
+              <span className="ml-2">{selectedFile?.sample_rate ? `${(selectedFile.sample_rate / 1000).toFixed(1)}kHz` : "N/A"}</span>
             </div>
+            {selectedFile?.size && (
+              <div className="text-xs">
+                <span className="text-muted-foreground">Size:</span>
+                <span className="ml-2">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -45,10 +78,42 @@ export const DatapointEditorPanel = () => {
             <CardTitle className="text-sm">Audio Playback</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <WaveformViewer />
+            <WaveformViewer 
+              audioUrl={audioUrl}
+              isPlaying={isPlaying}
+              onReady={(wavesurfer) => {
+                wavesurferRef.current = wavesurfer;
+                setDuration(wavesurfer.getDuration());
+              }}
+              onProgress={(time, dur) => {
+                setCurrentTime(time);
+                setDuration(dur);
+              }}
+            />
             <AudioPlayer 
               isPlaying={isPlaying}
-              onPlayPause={() => setIsPlaying(!isPlaying)}
+              onPlayPause={() => {
+                setIsPlaying(!isPlaying);
+                if (wavesurferRef.current) {
+                  if (isPlaying) {
+                    wavesurferRef.current.pause();
+                  } else {
+                    wavesurferRef.current.play();
+                  }
+                }
+              }}
+              currentTime={currentTime}
+              duration={duration}
+              onSeek={(time) => {
+                if (wavesurferRef.current) {
+                  wavesurferRef.current.seekTo(time / duration);
+                }
+              }}
+              onVolumeChange={(volume) => {
+                if (wavesurferRef.current) {
+                  wavesurferRef.current.setVolume(volume);
+                }
+              }}
             />
           </CardContent>
         </Card>

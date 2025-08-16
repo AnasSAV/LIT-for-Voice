@@ -1,9 +1,11 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 import os
 import shutil
 from pathlib import Path
 import uuid
+import librosa
+import soundfile as sf
 
 router = APIRouter()
 
@@ -40,13 +42,27 @@ async def upload_audio_file(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
+        # Get audio metadata
+        try:
+            audio_data, sample_rate = librosa.load(file_path, sr=None)
+            duration = librosa.get_duration(y=audio_data, sr=sample_rate)
+            file_size = file_path.stat().st_size
+        except Exception as e:
+            # If we can't read audio metadata, use basic file info
+            duration = 0
+            sample_rate = 0
+            file_size = file_path.stat().st_size
+        
         return JSONResponse(
             status_code=200,
             content={
                 "message": "File uploaded successfully",
                 "filename": file.filename,
                 "file_path": str(file_path),
-                "file_id": unique_filename
+                "file_id": unique_filename,
+                "duration": duration,
+                "sample_rate": sample_rate,
+                "size": file_size
             }
         )
     
@@ -71,6 +87,50 @@ async def delete_uploaded_file(file_id: str):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
+
+@router.get("/upload/file/{file_id}")
+async def serve_audio_file(file_id: str):
+    """
+    Serve an uploaded audio file for playback
+    """
+    file_path = UPLOAD_DIR / file_id
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        path=file_path,
+        media_type="audio/*",
+        filename=file_id
+    )
+
+@router.get("/upload/metadata/{file_id}")
+async def get_audio_metadata(file_id: str):
+    """
+    Get metadata for an uploaded audio file
+    """
+    file_path = UPLOAD_DIR / file_id
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        audio_data, sample_rate = librosa.load(file_path, sr=None)
+        duration = librosa.get_duration(y=audio_data, sr=sample_rate)
+        file_size = file_path.stat().st_size
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "file_id": file_id,
+                "duration": duration,
+                "sample_rate": sample_rate,
+                "size": file_size,
+                "channels": 1 if len(audio_data.shape) == 1 else audio_data.shape[0]
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read audio metadata: {str(e)}")
 
 @router.get("/upload/list")
 async def list_uploaded_files():

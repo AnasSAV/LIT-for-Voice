@@ -140,6 +140,14 @@ export const AudioDatasetPanel = ({
               onRowSelect={setSelectedRow}
               searchQuery={searchQuery}
               apiData={apiData}
+              uploadedFiles={uploadedFiles}
+              onFilePlay={(file) => {
+                console.log('Playing file:', file.filename);
+                // This will be connected to the DatapointEditor
+                if (onFileSelect) {
+                  onFileSelect(file);
+                }
+              }}
             />
           </CardContent>
         </Card>
