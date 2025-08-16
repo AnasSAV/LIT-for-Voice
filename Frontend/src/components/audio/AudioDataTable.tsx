@@ -33,27 +33,32 @@ const mockData: AudioData[] = [
     confidence: 0.87,
     duration: 3.2
   },
-  {
-    id: "2", 
-    filename: "audio_sample_002.wav",
-    predictedTranscript: "Hello world this is a test",
-    predictedLabel: "happy",
-    groundTruthLabel: "happy",
-    confidence: 0.92,
-    duration: 2.8
-  },
+  // {
+  //   id: "2", 
+  //   filename: "audio_sample_002.wav",
+  //   predictedTranscript: "Hello world this is a test",
+  //   predictedLabel: "happy",
+  //   groundTruthLabel: "happy",
+  //   confidence: 0.92,
+  //   duration: 2.8
+  // },
   // Add more mock data...
 ];
 
 const columnHelper = createColumnHelper<AudioData>();
-
+interface ApiData {
+  prediction: {
+    text: string;
+  };
+}
 interface AudioDataTableProps {
   selectedRow: string | null;
   onRowSelect: (id: string) => void;
   searchQuery: string;
+  apiData : ApiData
 }
 
-export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery }: AudioDataTableProps) => {
+export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery,apiData }: AudioDataTableProps) => {
   const columns = [
     columnHelper.accessor("filename", {
       header: "Filename",
@@ -66,17 +71,17 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery }: AudioD
         </div>
       ),
     }),
-    columnHelper.accessor("predictedTranscript", {
-      header: "Predicted Transcript",
-      cell: (info) => (
-        <span className="text-xs">{info.getValue()}</span>
-      ),
-    }),
+    // columnHelper.accessor("predictedTranscript", {
+    //   header: "Predicted Transcript",
+    //   cell: (info) => (
+    //     <span className="text-xs">{info.getValue()}</span>
+    //   ),
+    // }),
     columnHelper.accessor("predictedLabel", {
       header: "Predicted Label",
       cell: (info) => (
         <Badge variant="outline" className="text-xs">
-          {info.getValue()}
+          {apiData?.prediction?.text ?? ""}
         </Badge>
       ),
     }),
@@ -84,20 +89,20 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery }: AudioD
       header: "Ground Truth",
       cell: (info) => (
         <Badge variant="secondary" className="text-xs">
-          {info.getValue()}
+          {apiData?.prediction?.text ?? ""}
         </Badge>
       ),
     }),
     columnHelper.accessor("confidence", {
       header: "Confidence",
       cell: (info) => (
-        <span className="text-xs">{(info.getValue() * 100).toFixed(0)}%</span>
+        <span className="text-xs">{apiData ? (info.getValue() * 100).toFixed(0) : ""}%</span>
       ),
     }),
     columnHelper.accessor("duration", {
       header: "Duration",
       cell: (info) => (
-        <span className="text-xs">{info.getValue()}s</span>
+        <span className="text-xs">{apiData ? info.getValue() : ""}s</span>
       ),
     }),
   ];

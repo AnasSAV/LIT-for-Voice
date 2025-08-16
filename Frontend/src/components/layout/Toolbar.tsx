@@ -22,8 +22,8 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-export const Toolbar = () => {
-  const [model, setModel] = useState("whisper-base");
+export const Toolbar = ({apiData, setApiData}) => {
+  const [model, setModel] = useState("Select");
   const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
 
 const onModelChange = async (value: string) => {
@@ -45,6 +45,7 @@ const onModelChange = async (value: string) => {
       throw new Error(`API error: ${res.status}`);
     }
     const data = await res.json();
+    setApiData(data);
     console.log("API response:", data);
   } catch (error) {
     console.error("Failed to run inference:", error);
