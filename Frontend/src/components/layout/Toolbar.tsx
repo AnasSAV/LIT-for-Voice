@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -9,34 +9,40 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
-
-const modelDatasetMap: Record<string, string[]> = {
-  "whisper-base": ["common-voice", "custom"],
-  "whisper-large": ["common-voice", "custom"],
-  "wav2vec2": ["ravdess", "custom"],
-};
-
-const defaultDatasetForModel: Record<string, string> = {
-  "whisper-base": "common-voice",
-  "whisper-large": "common-voice",
-  "wav2vec2": "ravdess",
-};
+import { listDatasets, getActiveDataset, setActiveDataset } from "@/lib/api/datasets";
 
 export const Toolbar = () => {
   const [model, setModel] = useState("whisper-base");
-  const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
+  // Dataset UI value is one of: "ravdess" | "common-voice" | "custom"
+  const [dataset, setDataset] = useState("ravdess");
+  const [hasRavdessSubset, setHasRavdessSubset] = useState(false);
+  const [hasRavdessFull, setHasRavdessFull] = useState(false);
+  const [hasCommonVoice, setHasCommonVoice] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const ds = await listDatasets();
+        setHasRavdessSubset(!!ds.find((d) => d.id === "ravdess_subset" && d.available));
+        setHasRavdessFull(!!ds.find((d) => d.id === "ravdess_full" && d.available));
+        setHasCommonVoice(!!ds.find((d) => d.id === "common_voice_en" && d.available));
+
+        const active = await getActiveDataset();
+        if (active === "ravdess_subset" || active === "ravdess_full") {
+          setDataset("ravdess");
+        } else if (active === "common_voice_en") {
+          setDataset("common-voice");
+        } else if (active) {
+          setDataset("custom");
+        }
+      } catch (e) {
+        console.warn("Dataset API not available", e);
+      }
+    })();
+  }, []);
 
 const onModelChange = async (value: string) => {
   setModel(value);
-
-  // Update dataset based on model
-  const allowedDatasets = modelDatasetMap[value] || ["custom"];
-  const defaultDataset = defaultDatasetForModel[value] || "custom";
-
-  if (!allowedDatasets.includes(dataset)) {
-    setDataset(defaultDataset);
-  }
-
   console.log("Model selected:", value);
 
   try {
@@ -51,13 +57,30 @@ const onModelChange = async (value: string) => {
   }
 };
 
-  const onDatasetChange = (value: string) => {
+  const onDatasetChange = async (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
+
+    try {
+      if (value === "ravdess") {
+        const id = hasRavdessSubset ? "ravdess_subset" : hasRavdessFull ? "ravdess_full" : "ravdess_subset";
+        await setActiveDataset(id);
+      } else if (value === "common-voice") {
+        // Set Common Voice even if not installed; backend will return empty lists
+        await setActiveDataset("common_voice_en");
+      } else {
+        // For custom, we currently don't persist a specific id
+        // Clear selection by setting to a non-existing id could be added in backend if needed
+      }
+      // Notify listeners to reload dataset files for any change
+      window.dispatchEvent(new Event("dataset-changed"));
+    } catch (e) {
+      console.error("Failed to set active dataset:", e);
+    }
   };
 
-  // Get datasets allowed for current model
-  const allowedDatasets = modelDatasetMap[model] || ["custom"];
+  // Dataset options are independent of model
+  const availableDatasetOptions = ["ravdess", "common-voice", "custom"];
 
   return (
     <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
@@ -92,7 +115,7 @@ const onModelChange = async (value: string) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allowedDatasets.map((ds) => {
+                {availableDatasetOptions.map((ds) => {
                   let label = ds;
                   if (ds === "common-voice") label = "Common Voice";
                   else if (ds === "ravdess") label = "RAVDESS";

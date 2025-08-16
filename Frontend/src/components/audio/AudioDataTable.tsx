@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
 import {
   useReactTable,
   getCoreRowModel,
@@ -11,11 +12,13 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { Play, Pause, ChevronLeft, ChevronRight } from "lucide-react";
+import { listDatasetFiles, datasetFileUrl } from "@/lib/api/datasets";
 
 interface AudioData {
   id: string;
   filename: string;
+  relpath: string;
   predictedTranscript: string;
   predictedLabel: string;
   groundTruthLabel: string;
@@ -23,27 +26,20 @@ interface AudioData {
   duration: number;
 }
 
-const mockData: AudioData[] = [
-  {
-    id: "1",
-    filename: "audio_sample_001.wav",
-    predictedTranscript: "The quick brown fox jumps over the lazy dog",
-    predictedLabel: "neutral",
-    groundTruthLabel: "neutral",
-    confidence: 0.87,
-    duration: 3.2
-  },
-  {
-    id: "2", 
-    filename: "audio_sample_002.wav",
-    predictedTranscript: "Hello world this is a test",
-    predictedLabel: "happy",
-    groundTruthLabel: "happy",
-    confidence: 0.92,
-    duration: 2.8
-  },
-  // Add more mock data...
-];
+async function fetchRows(): Promise<AudioData[]> {
+  const { files } = await listDatasetFiles(200, 0);
+  return files.map((f) => ({
+    id: f.id,
+    filename: f.filename,
+    relpath: f.relpath,
+    // Placeholders until inference results are available
+    predictedTranscript: "",
+    predictedLabel: "",
+    groundTruthLabel: "",
+    confidence: 0,
+    duration: 0,
+  }));
+}
 
 const columnHelper = createColumnHelper<AudioData>();
 
@@ -54,13 +50,92 @@ interface AudioDataTableProps {
 }
 
 export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery }: AudioDataTableProps) => {
+  const [data, setData] = useState<AudioData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const rows = await fetchRows();
+        if (mounted) setData(rows);
+      } catch (e) {
+        console.warn("Failed to load dataset files", e);
+        if (mounted) setData([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+
+    const onChanged = () => load();
+    window.addEventListener("dataset-changed", onChanged);
+    return () => {
+      mounted = false;
+      window.removeEventListener("dataset-changed", onChanged);
+      if (audioEl) {
+        audioEl.pause();
+      }
+    };
+  }, []);
+
+  const togglePlay = (row: AudioData) => {
+    try {
+      // If clicking the currently playing row, toggle pause
+      if (playingId === row.id && audioEl) {
+        if (!audioEl.paused) {
+          audioEl.pause();
+          setPlayingId(null);
+        } else {
+          audioEl.play();
+          setPlayingId(row.id);
+        }
+        return;
+      }
+
+      // Stop any previous audio
+      if (audioEl) {
+        audioEl.pause();
+      }
+
+      const src = datasetFileUrl(row.relpath);
+      const el = new Audio(src);
+      el.addEventListener("ended", () => setPlayingId(null));
+      el.addEventListener("pause", () => {
+        // If paused for a different row play, ignore
+      });
+      setAudioEl(el);
+      setPlayingId(row.id);
+      void el.play();
+    } catch (e) {
+      console.warn("Failed to play audio", e);
+    }
+  };
+
   const columns = [
     columnHelper.accessor("filename", {
       header: "Filename",
       cell: (info) => (
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-            <Play className="h-3 w-3" />
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay(info.row.original as AudioData);
+            }}
+            aria-label={playingId === info.row.original.id ? "Pause" : "Play"}
+          >
+            {playingId === info.row.original.id ? (
+              <Pause className="h-3 w-3" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
           </Button>
           <span className="font-mono text-xs">{info.getValue()}</span>
         </div>
@@ -103,7 +178,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery }: AudioD
   ];
 
   const table = useReactTable({
-    data: mockData,
+    data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -141,7 +216,13 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery }: AudioD
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center text-xs">
+                  Loading...
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
