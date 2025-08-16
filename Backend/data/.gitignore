@@ -1,0 +1,16 @@
+# Ignore large dataset files but keep directory structure
+raw/
+processed/
+*.wav
+*.mp3
+*.flac
+*.m4a
+
+# Keep subset for development (add if needed)
+!dev/ravdess_subset/.gitkeep
+!dev/sample_files/
+
+# Keep metadata and logs
+!*.csv
+!*.json
+!*.log
