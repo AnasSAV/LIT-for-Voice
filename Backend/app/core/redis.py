@@ -32,3 +32,15 @@ async def cache_result(model: str, h: str, payload: dict, ttl: int = 6*60*60) ->
 async def get_result(model: str, h: str) -> dict | None:
     raw = await redis.get(k_result(model, h))
     return json.loads(raw) if raw else None
+
+async def clear_model_cache(model: str) -> int:
+    """Clear all cached results for a specific model"""
+    pattern = f"result:{model}:*"
+    keys = await redis.keys(pattern)
+    if keys:
+        return await redis.delete(*keys)
+    return 0
+
+async def clear_all_cache() -> None:
+    """Clear all cached results (admin function)"""
+    await redis.flushdb()

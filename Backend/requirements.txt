@@ -7,3 +7,8 @@ pytest==8.2.0
 pytest-asyncio==0.23.7
 fakeredis==2.23.2
 anyio==4.4.0
+torch
+transformers
+librosa
+numpy
+python-multipart
