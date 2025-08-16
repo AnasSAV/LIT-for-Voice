@@ -22,13 +22,19 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
+let abortController: AbortController | null = null;
+
 export const Toolbar = ({apiData, setApiData}) => {
   const [model, setModel] = useState("Select");
   const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
 
 const onModelChange = async (value: string) => {
   setModel(value);
-
+    if (abortController) {
+    abortController.abort();
+  }
+  abortController = new AbortController();
+  
   // Update dataset based on model
   const allowedDatasets = modelDatasetMap[value] || ["custom"];
   const defaultDataset = defaultDatasetForModel[value] || "custom";
