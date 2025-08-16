@@ -1,6 +1,7 @@
 import torch
 from transformers import *
 import librosa
+import numpy as np
 
 def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -23,8 +24,11 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
 
     generate_kwargs = {"return_timestamps": True}
 
+    audio, sample_rate = librosa.load(audio_file, sr=16000)
+    audio = audio.astype(np.float32)
+
     result = pipe(
-        audio_file,
+        audio,
         generate_kwargs=generate_kwargs,
         chunk_length_s=chunk_length_s,
         batch_size=batch_size,
