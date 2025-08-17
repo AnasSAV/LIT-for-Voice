@@ -20,7 +20,7 @@ interface UploadedFile {
   message: string;
   size?: number;
   duration?: number;
-  sampleRate?: number;
+  sample_rate?: number;
 }
 
 interface AudioData {

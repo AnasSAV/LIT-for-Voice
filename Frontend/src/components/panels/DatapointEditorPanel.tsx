@@ -31,11 +31,22 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
 
   const audioUrl = selectedFile ? `http://localhost:8000/upload/file/${selectedFile.file_id}` : undefined;
 
+  // Debug logging for selectedFile and audioUrl
+  useEffect(() => {
+    console.log('DatapointEditorPanel - selectedFile changed:', selectedFile);
+    console.log('DatapointEditorPanel - audioUrl:', audioUrl);
+  }, [selectedFile, audioUrl]);
+
   // Reset playback when file changes
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    
+    // Reset wavesurfer instance if it exists
+    if (wavesurferRef.current) {
+      wavesurferRef.current.stop();
+    }
   }, [selectedFile?.file_id]);
   
   return (
@@ -82,8 +93,11 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
               audioUrl={audioUrl}
               isPlaying={isPlaying}
               onReady={(wavesurfer) => {
+                console.log('WaveformViewer ready callback in DatapointEditorPanel');
                 wavesurferRef.current = wavesurfer;
-                setDuration(wavesurfer.getDuration());
+                const duration = wavesurfer.getDuration();
+                console.log('Duration from WaveSurfer:', duration);
+                setDuration(duration);
               }}
               onProgress={(time, dur) => {
                 setCurrentTime(time);

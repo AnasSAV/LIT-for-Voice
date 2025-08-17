@@ -89,6 +89,8 @@ async def delete_uploaded_file(file_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
 @router.get("/upload/file/{file_id}")
+@router.head("/upload/file/{file_id}")
+@router.options("/upload/file/{file_id}")
 async def serve_audio_file(file_id: str):
     """
     Serve an uploaded audio file for playback
@@ -98,10 +100,27 @@ async def serve_audio_file(file_id: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     
+    # Determine the correct media type based on file extension
+    file_extension = file_path.suffix.lower()
+    media_type_map = {
+        '.wav': 'audio/wav',
+        '.mp3': 'audio/mpeg',
+        '.m4a': 'audio/mp4',
+        '.flac': 'audio/flac'
+    }
+    media_type = media_type_map.get(file_extension, 'audio/*')
+    
     return FileResponse(
         path=file_path,
-        media_type="audio/*",
-        filename=file_id
+        media_type=media_type,
+        headers={
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'public, max-age=3600',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': 'Range, Accept-Encoding',
+            'Content-Disposition': f'inline; filename="{file_id}"'
+        }
     )
 
 @router.get("/upload/metadata/{file_id}")

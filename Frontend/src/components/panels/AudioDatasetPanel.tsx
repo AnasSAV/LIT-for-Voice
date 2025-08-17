@@ -19,6 +19,9 @@ interface UploadedFile {
   filename: string;
   file_path: string;
   message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
 }
 
 interface AudioDatasetPanelProps {
@@ -142,10 +145,11 @@ export const AudioDatasetPanel = ({
               apiData={apiData}
               uploadedFiles={uploadedFiles}
               onFilePlay={(file) => {
-                console.log('Playing file:', file.filename);
-                // This will be connected to the DatapointEditor
+                console.log('AudioDatasetPanel - File selected for play:', file);
+                console.log('AudioDatasetPanel - onFileSelect callback exists:', !!onFileSelect);
                 if (onFileSelect) {
                   onFileSelect(file);
+                  console.log('AudioDatasetPanel - Called onFileSelect with file');
                 }
               }}
             />

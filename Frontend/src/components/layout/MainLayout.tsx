@@ -11,6 +11,9 @@ interface UploadedFile {
   filename: string;
   file_path: string;
   message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
 }
 
 export const MainLayout = () => {
