@@ -52,16 +52,9 @@ This project aims to extend the interpretability paradigm to audio, empowering r
 ```bash
 git clone https://github.com/AnasSAV/LIT-for-Voice.git
 cd LIT-for-Voice
-```
 
-2. **Start Redis (Required for Backend):**
-```bash
-cd Backend
-docker-compose up
 ```
-Keep this terminal open. Redis will run on port 6379.
-
-3. **Setup and Start Backend (New Terminal):**
+2. **Setup and Start Backend (New Terminal):**
 ```bash
 cd Backend
 
@@ -69,9 +62,16 @@ cd Backend
 pip install -r requirements.txt
 
 # Start the FastAPI server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 
+
 ```
 Backend API will be available at `http://localhost:8000`
+3. **Start Redis (Required for Backend):**
+```bash
+cd Backend
+docker-compose up
+```
+Keep this terminal open. Redis will run on port 6379.
 
 4. **Setup and Start Frontend (New Terminal):**
 ```bash

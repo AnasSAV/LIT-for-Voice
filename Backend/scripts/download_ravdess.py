@@ -36,7 +36,7 @@ BACKEND_ROOT = Path(__file__).parent.parent
 DATA_ROOT = BACKEND_ROOT / "data"
 RAW_DATA_PATH = DATA_ROOT / "raw" / "ravdess_full"
 DEV_DATA_PATH = DATA_ROOT / "dev" / "ravdess_subset"
-KAGGLE_DATASET = "uwrfkaggle/ravdess-emotional-speech-audio"
+KAGGLE_DATASET = "uwrfkaggler/ravdess-emotional-speech-audio"
 
 
 def check_kaggle_auth() -> bool:
