@@ -52,26 +52,52 @@ This project aims to extend the interpretability paradigm to audio, empowering r
 ```bash
 git clone https://github.com/AnasSAV/LIT-for-Voice.git
 cd LIT-for-Voice
-
 ```
 2. **Setup and Start Backend (New Terminal):**
 ```bash
 cd Backend
 
-# Install Python dependencies
-pip install -r requirements.txt
+### Python environment: venv vs global
 
-# Start the FastAPI server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 
+- Option A — Without venv (uses your global Python):
+  ```powershell
+  pip install -r requirements.txt
+  ```
+- Option B — With venv (recommended for isolation):
+  ```powershell
+  python -m venv .venv
+  .\.venv\Scripts\Activate.ps1
+  pip install -r requirements.txt
+  ```
 
-```
+- Notes:
+  - Install dependencies only once per Python environment (global or venv).
+  - Using FakeRedis vs Docker Redis does not change whether you need a venv; venv is just for Python package isolation.
+
+### Recommended ways to run (Redis)
+
+- **Option A (Docker Redis): start Redis before Uvicorn**
+  - PowerShell:
+    ```powershell
+    cd Backend
+    docker-compose up -d
+    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    ```
+
+- **Option B (FakeRedis for dev): no Docker needed**
+  - PowerShell:
+    ```powershell
+    $env:USE_FAKE_REDIS = "1"
+    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    ```
 Backend API will be available at `http://localhost:8000`
+
 3. **Start Redis (Required for Backend):**
 ```bash
 cd Backend
-docker-compose up
+docker-compose up -d
 ```
-Keep this terminal open. Redis will run on port 6379.
+Redis will run on port 6379.
 
 4. **Setup and Start Frontend (New Terminal):**
 ```bash
@@ -107,7 +133,7 @@ Frontend will be available at `http://localhost:8080`
 - `uvicorn app.main:app --reload` - Start development server with auto-reload
 - `pytest` - Run all tests
 - `pytest -v` - Run tests with verbose output
-- `docker-compose up` - Start Redis service
+- `docker-compose up -d` - Start Redis service
 
 ## Project Structure
 
@@ -176,7 +202,7 @@ LIT-for-Voice/
 - ❌ ML model integration
 - ❌ Audio visualization features
 
-**Note**: The project is under active development. The UI is functional but backend integration for audio processing is incomplete.
+**Note**: The project is under active development. Features and API may change between versions.
 
 ## Troubleshooting
 
@@ -205,6 +231,7 @@ Ensure these ports are available or modify the configuration files.
   - `COOKIE_SECURE` (default: `False`)
   - `COOKIE_SAMESITE` (default: `lax`)
   - `COOKIE_DOMAIN` (default: empty)
+  - `USE_FAKE_REDIS` (set to `1` to use in-memory FakeRedis instead of a Docker Redis instance)
 
 - **Frontend API base URL** is defined in `Frontend/src/lib/api/datasets.ts`:
   - Defaults to `http://localhost:8000`.
