@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form,HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 import os
 import shutil
@@ -6,7 +6,8 @@ from pathlib import Path
 import uuid
 import librosa
 import soundfile as sf
-
+import requests
+from .inferences import run_inference
 router = APIRouter()
 
 # Ensure uploads directory exists
@@ -19,7 +20,7 @@ async def test_upload_endpoint():
     return {"status": "Upload service is working", "upload_dir": str(UPLOAD_DIR.absolute())}
 
 @router.post("/upload")
-async def upload_audio_file(file: UploadFile = File(...)):
+async def upload_audio_file(file: UploadFile = File(...),model: str = Form(...)):
     """
     Upload an audio file and return the file path for processing
     """
@@ -53,6 +54,15 @@ async def upload_audio_file(file: UploadFile = File(...)):
             sample_rate = 0
             file_size = file_path.stat().st_size
         
+
+        
+
+        try:
+            prediction = await run_inference(model,file_path)
+            
+        except Exception as e:
+            print("Prediction API failed:", e)
+            prediction = {}
         return JSONResponse(
             status_code=200,
             content={
@@ -62,7 +72,8 @@ async def upload_audio_file(file: UploadFile = File(...)):
                 "file_id": unique_filename,
                 "duration": duration,
                 "sample_rate": sample_rate,
-                "size": file_size
+                "size": file_size,
+                "prediction": prediction
             }
         )
     

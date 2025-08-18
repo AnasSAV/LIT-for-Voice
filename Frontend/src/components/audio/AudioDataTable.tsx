@@ -21,13 +21,13 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
+  prediction?:string;
 }
 
 interface AudioData {
   id: string;
   filename: string;
-  predictedTranscript: string;
-  predictedLabel: string;
+  prediction
   groundTruthLabel: string;
   confidence: number;
   duration: number;
@@ -55,8 +55,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
   const tableData: AudioData[] = uploadedFiles?.map(file => ({
     id: file.file_id,
     filename: file.filename,
-    predictedTranscript: "", // Will be populated from API predictions
-    predictedLabel: apiData?.prediction?.text || "",
+    prediction:file.prediction,
     groundTruthLabel: "", // Can be manually set later
     confidence: 0.85, // Default confidence, will be updated from predictions
     duration: file.duration || 0,
@@ -90,11 +89,11 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
     //     <span className="text-xs">{info.getValue()}</span>
     //   ),
     // }),
-    columnHelper.accessor("predictedLabel", {
+    columnHelper.accessor("prediction", {
       header: "Predicted Label",
       cell: (info) => (
         <Badge variant="outline" className="text-xs">
-          {apiData?.prediction?.text ?? ""}
+          {info.getValue()}
         </Badge>
       ),
     }),
@@ -102,21 +101,22 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       header: "Ground Truth",
       cell: (info) => (
         <Badge variant="secondary" className="text-xs">
-          {apiData?.prediction?.text ?? ""}
+          {info.getValue()}
         </Badge>
       ),
     }),
     columnHelper.accessor("confidence", {
       header: "Confidence",
       cell: (info) => (
-        <span className="text-xs">{apiData ? (info.getValue() * 100).toFixed(0) : ""}%</span>
+        <span className="text-xs">{info.getValue()}%</span>
       ),
     }),
     columnHelper.accessor("duration", {
       header: "Duration",
-      cell: (info) => (
-        <span className="text-xs">{apiData ? info.getValue() : ""}s</span>
-      ),
+      cell: (info) => {
+        const value = info.getValue() as number; // get numeric value
+        return <span className="text-xs">{value.toFixed(2)}s</span>;
+      },
     }),
   ];
 

@@ -29,6 +29,7 @@ export const MainLayout = () => {
     }
   };
 
+  const [model, setModel] = useState("whisper-base");
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
@@ -38,6 +39,8 @@ export const MainLayout = () => {
         selectedFile={selectedFile}
         uploadedFiles={uploadedFiles}
         onFileSelect={setSelectedFile}
+        model={model}        // current model value
+        setModel={setModel} 
       />
       
       {/* Main Content Area */}
@@ -60,6 +63,7 @@ export const MainLayout = () => {
                   selectedFile={selectedFile}
                   onFileSelect={setSelectedFile}
                   onUploadSuccess={handleUploadSuccess}
+                  model={model}
                 />
               </Panel>
               

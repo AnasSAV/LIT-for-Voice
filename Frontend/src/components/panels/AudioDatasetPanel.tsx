@@ -22,10 +22,12 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
+  prediction?:string
 }
 
 interface AudioDatasetPanelProps {
   apiData: ApiData | null;
+  model: string | null;
   uploadedFiles?: UploadedFile[];
   selectedFile?: UploadedFile | null;
   onFileSelect?: (file: UploadedFile) => void;
@@ -34,7 +36,7 @@ interface AudioDatasetPanelProps {
 
 export const AudioDatasetPanel = ({ 
   apiData, 
-  uploadedFiles, 
+  model,
   selectedFile, 
   onFileSelect, 
   onUploadSuccess 
@@ -42,6 +44,7 @@ export const AudioDatasetPanel = ({
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -54,7 +57,7 @@ export const AudioDatasetPanel = ({
         const file = files[i];
         if (file.type.startsWith('audio/')) {
           try {
-            await uploadFile(file);
+            await uploadFile(file,model);
           } catch (error) {
             console.error('Upload error:', error);
           }
@@ -69,9 +72,10 @@ export const AudioDatasetPanel = ({
     }
   };
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = async (file: File,model) => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('model', model);
 
     try {
       const response = await fetch('http://localhost:8000/upload', {
@@ -85,6 +89,7 @@ export const AudioDatasetPanel = ({
       }
 
       const data = await response.json();
+      setUploadedFiles(prevFiles => [...prevFiles, data]);
       toast.success(`Uploaded: ${file.name}`);
       
       if (onUploadSuccess) {
