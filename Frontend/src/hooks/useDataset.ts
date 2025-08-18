@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { DatasetFile } from '@/lib/api/datasets';
+import { useState, useCallback, useEffect } from 'react';
+import { DatasetFile, listDatasetFiles } from '@/lib/api/datasets';
 
 type UseDatasetReturn = {
   files: DatasetFile[];
@@ -7,31 +7,37 @@ type UseDatasetReturn = {
   selectFile: (file: DatasetFile | null) => void;
   isLoading: boolean;
   error: Error | null;
+  refresh: () => Promise<void>;
 };
 
 export function useDataset(): UseDatasetReturn {
   const [files, setFiles] = useState<DatasetFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<DatasetFile | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // TODO: Implement file loading from the API
-  // useEffect(() => {
-  //   const loadFiles = async () => {
-  //     try {
-  //       setIsLoading(true);
-  //       const response = await fetch('/api/datasets/files');
-  //       if (!response.ok) throw new Error('Failed to load files');
-  //       const data = await response.json();
-  //       setFiles(data.files);
-  //     } catch (err) {
-  //       setError(err instanceof Error ? err : new Error('Failed to load files'));
-  //     } finally {
-  //       setIsLoading(false);
-  //     }
-  //   };
-  //   loadFiles();
-  // }, []);
+  const loadFiles = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const { files: datasetFiles } = await listDatasetFiles(200, 0);
+      setFiles(datasetFiles);
+      
+      // Select the first file by default if none is selected
+      if (datasetFiles.length > 0 && !selectedFile) {
+        setSelectedFile(datasetFiles[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load dataset files:', err);
+      setError(err instanceof Error ? err : new Error('Failed to load dataset files'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedFile]);
+
+  useEffect(() => {
+    loadFiles();
+  }, [loadFiles]);
 
   const selectFile = useCallback((file: DatasetFile | null) => {
     setSelectedFile(file);
@@ -43,5 +49,6 @@ export function useDataset(): UseDatasetReturn {
     selectFile,
     isLoading,
     error,
+    refresh: loadFiles,
   };
 }

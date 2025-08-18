@@ -9,14 +9,7 @@ import { useDatasetPredictions } from "@/hooks/useDatasetPredictions";
 import { useMemo } from "react";
 import { DatasetFile } from "@/lib/api/datasets";
 import { PredictionResult } from "@/lib/api/predictions";
-
-// Temporary mock for useDataset until it's properly implemented
-const useDataset = () => {
-  return {
-    selectedFile: null as DatasetFile | null,
-    files: [] as DatasetFile[],
-  };
-};
+import { useDataset } from "@/hooks/useDataset";
 
 interface ClassLabel {
   label: string;
@@ -31,17 +24,20 @@ type ExtendedPredictionResult = PredictionResult & {
 };
 
 export const PredictionPanel = () => {
-  const { selectedFile } = useDataset();
-  const { getPrediction, isLoading } = useDatasetPredictions({
-    files: selectedFile ? [selectedFile] : [],
+  const { selectedFile, files, isLoading: isDatasetLoading } = useDataset();
+  const { getPrediction, isLoading: isPredictionLoading } = useDatasetPredictions({
+    files: files,
     model: "default",
-    enabled: !!selectedFile,
+    enabled: files.length > 0,
   });
 
-  const prediction = (selectedFile ? getPrediction(selectedFile) : null) as ExtendedPredictionResult | null;
+  const prediction = selectedFile ? getPrediction(selectedFile) : null;
+  const isLoading = isDatasetLoading || isPredictionLoading;
 
   const classLabels = useMemo<ClassLabel[]>(() => {
-    if (!prediction?.probabilities) return [];
+    if (!prediction?.probabilities) {
+      return [];
+    }
     
     const probs = prediction.probabilities;
     const trueLabel = selectedFile?.label;
