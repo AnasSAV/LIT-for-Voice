@@ -30,5 +30,9 @@ export async function getBatchPredictions(
     throw new Error(`Failed to fetch batch predictions: ${response.statusText}`);
   }
 
-  return response.json();
+  // Backend returns: { ok: boolean, payloads: Record<string, any | null> }
+  // Transform to frontend shape: { results: Record<string, PredictionResult | null> }
+  const raw = await response.json();
+  const payloads = (raw && typeof raw === 'object' && raw.payloads) ? raw.payloads : {};
+  return { results: payloads } as BatchPredictionResult;
 }
