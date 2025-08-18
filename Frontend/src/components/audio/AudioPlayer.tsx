@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Play, Pause, SkipBack, SkipForward, Volume2 } from "lucide-react";
@@ -6,26 +6,48 @@ import { Play, Pause, SkipBack, SkipForward, Volume2 } from "lucide-react";
 interface AudioPlayerProps {
   isPlaying: boolean;
   onPlayPause: () => void;
+  currentTime?: number;
+  duration?: number;
+  onSeek?: (time: number) => void;
+  onVolumeChange?: (volume: number) => void;
 }
 
-export const AudioPlayer = ({ isPlaying, onPlayPause }: AudioPlayerProps) => {
-  const [currentTime, setCurrentTime] = useState([0]);
-  const [duration] = useState(100);
+export const AudioPlayer = ({ 
+  isPlaying, 
+  onPlayPause, 
+  currentTime = 0, 
+  duration = 0,
+  onSeek,
+  onVolumeChange 
+}: AudioPlayerProps) => {
   const [volume, setVolume] = useState([70]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleVolumeChange = (newVolume: number[]) => {
+    setVolume(newVolume);
+    if (onVolumeChange) {
+      onVolumeChange(newVolume[0] / 100);
+    }
+  };
 
   return (
     <div className="space-y-3">
       {/* Progress bar */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>0:00</span>
-          <span>3:20</span>
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
         </div>
         <Slider
-          value={currentTime}
-          onValueChange={setCurrentTime}
-          max={duration}
-          step={1}
+          value={[currentTime]}
+          onValueChange={(value) => onSeek && onSeek(value[0])}
+          max={duration || 100}
+          step={0.1}
           className="w-full"
         />
       </div>
@@ -55,7 +77,7 @@ export const AudioPlayer = ({ isPlaying, onPlayPause }: AudioPlayerProps) => {
           <Volume2 className="h-4 w-4 text-muted-foreground" />
           <Slider
             value={volume}
-            onValueChange={setVolume}
+            onValueChange={handleVolumeChange}
             max={100}
             step={1}
             className="w-16"

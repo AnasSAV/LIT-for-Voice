@@ -13,6 +13,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
 interface AudioData {
   id: string;
   filename: string;
@@ -21,29 +31,9 @@ interface AudioData {
   groundTruthLabel: string;
   confidence: number;
   duration: number;
+  file_path?: string;
+  size?: number;
 }
-
-const mockData: AudioData[] = [
-  {
-    id: "1",
-    filename: "audio_sample_001.wav",
-    predictedTranscript: "The quick brown fox jumps over the lazy dog",
-    predictedLabel: "neutral",
-    groundTruthLabel: "neutral",
-    confidence: 0.87,
-    duration: 3.2
-  },
-  // {
-  //   id: "2", 
-  //   filename: "audio_sample_002.wav",
-  //   predictedTranscript: "Hello world this is a test",
-  //   predictedLabel: "happy",
-  //   groundTruthLabel: "happy",
-  //   confidence: 0.92,
-  //   duration: 2.8
-  // },
-  // Add more mock data...
-];
 
 const columnHelper = createColumnHelper<AudioData>();
 interface ApiData {
@@ -55,21 +45,44 @@ interface AudioDataTableProps {
   selectedRow: string | null;
   onRowSelect: (id: string) => void;
   searchQuery: string;
-  apiData : ApiData
+  apiData: ApiData;
+  uploadedFiles?: UploadedFile[];
+  onFilePlay?: (file: UploadedFile) => void;
 }
 
-export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery,apiData }: AudioDataTableProps) => {
+export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, uploadedFiles, onFilePlay }: AudioDataTableProps) => {
+  // Convert uploaded files to table data format
+  const tableData: AudioData[] = uploadedFiles?.map(file => ({
+    id: file.file_id,
+    filename: file.filename,
+    predictedTranscript: "", // Will be populated from API predictions
+    predictedLabel: apiData?.prediction?.text || "",
+    groundTruthLabel: "", // Can be manually set later
+    confidence: 0.85, // Default confidence, will be updated from predictions
+    duration: file.duration || 0,
+    file_path: file.file_path,
+    size: file.size
+  })) || [];
   const columns = [
     columnHelper.accessor("filename", {
       header: "Filename",
-      cell: (info) => (
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-            <Play className="h-3 w-3" />
-          </Button>
-          <span className="font-mono text-xs">{info.getValue()}</span>
-        </div>
-      ),
+      cell: (info) => {
+        const row = info.row.original;
+        const file = uploadedFiles?.find(f => f.file_id === row.id);
+        return (
+          <div className="flex items-center gap-2">
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="h-6 w-6 p-0"
+              onClick={() => file && onFilePlay && onFilePlay(file)}
+            >
+              <Play className="h-3 w-3" />
+            </Button>
+            <span className="font-mono text-xs">{info.getValue()}</span>
+          </div>
+        );
+      },
     }),
     // columnHelper.accessor("predictedTranscript", {
     //   header: "Predicted Transcript",
@@ -108,7 +121,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery,apiData }
   ];
 
   const table = useReactTable({
-    data: mockData,
+    data: tableData,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

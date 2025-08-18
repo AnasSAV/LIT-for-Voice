@@ -6,14 +6,38 @@ import { DatapointEditorPanel } from "../panels/DatapointEditorPanel";
 import { PredictionPanel } from "../panels/PredictionPanel";
 import React, { useState } from "react";
 
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
 export const MainLayout = () => {
-  const [apiData, setApiData] = useState(null); // NEW
+  const [apiData, setApiData] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
+
+  const handleUploadSuccess = (uploadResponse: UploadedFile) => {
+    setUploadedFiles(prev => [...prev, uploadResponse]);
+    // Automatically select the first uploaded file
+    if (!selectedFile) {
+      setSelectedFile(uploadResponse);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
       <Toolbar
-      apiData={apiData}
-      setApiData={setApiData} 
+        apiData={apiData}
+        setApiData={setApiData}
+        selectedFile={selectedFile}
+        uploadedFiles={uploadedFiles}
+        onFileSelect={setSelectedFile}
       />
       
       {/* Main Content Area */}
@@ -31,7 +55,11 @@ export const MainLayout = () => {
             <PanelGroup direction="vertical">
               <Panel defaultSize={70} minSize={40}>
                 <AudioDatasetPanel
-                apiData = {apiData}
+                  apiData={apiData}
+                  uploadedFiles={uploadedFiles}
+                  selectedFile={selectedFile}
+                  onFileSelect={setSelectedFile}
+                  onUploadSuccess={handleUploadSuccess}
                 />
               </Panel>
               
@@ -48,7 +76,7 @@ export const MainLayout = () => {
           
           {/* Right Panel: Audio Player & Label Editor */}
           <Panel defaultSize={25} minSize={20}>
-            <DatapointEditorPanel />
+            <DatapointEditorPanel selectedFile={selectedFile} />
           </Panel>
         </PanelGroup>
       </div>

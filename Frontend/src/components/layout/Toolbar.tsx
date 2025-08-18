@@ -10,6 +10,24 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
 
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
+interface ToolbarProps {
+  apiData: any;
+  setApiData: (data: any) => void;
+  selectedFile?: UploadedFile | null;
+  uploadedFiles?: UploadedFile[];
+  onFileSelect?: (file: UploadedFile) => void;
+}
+
 const modelDatasetMap: Record<string, string[]> = {
   "whisper-base": ["common-voice", "custom"],
   "whisper-large": ["common-voice", "custom"],
@@ -22,7 +40,7 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-export const Toolbar = ({apiData, setApiData}) => {
+export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect}: ToolbarProps) => {
   const [model, setModel] = useState("Select");
   const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
 
@@ -40,7 +58,17 @@ const onModelChange = async (value: string) => {
   console.log("Model selected:", value);
 
   try {
-    const res = await fetch(`http://localhost:8000/inferences/run?model=${value}`);
+    let url = `http://localhost:8000/inferences/run?model=${value}`;
+    
+    // If there's a selected file, include it in the API call
+    if (selectedFile) {
+      url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
+      console.log("Using uploaded file:", selectedFile.filename);
+    } else {
+      console.log("Using default sample file");
+    }
+    
+    const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`API error: ${res.status}`);
     }
@@ -107,6 +135,32 @@ const onModelChange = async (value: string) => {
               </SelectContent>
             </Select>
           </div>
+
+          {uploadedFiles && uploadedFiles.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">File:</span>
+              <Select 
+                value={selectedFile?.file_id || ""} 
+                onValueChange={(fileId) => {
+                  const file = uploadedFiles.find(f => f.file_id === fileId);
+                  if (file && onFileSelect) {
+                    onFileSelect(file);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-48 h-8">
+                  <SelectValue placeholder="Select uploaded file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uploadedFiles.map((file) => (
+                    <SelectItem key={file.file_id} value={file.file_id}>
+                      {file.filename}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -130,6 +184,25 @@ const onModelChange = async (value: string) => {
         <Button variant="outline" size="sm" className="h-8">
           <Download className="h-4 w-4 mr-2" />
           Export
+        </Button>
+
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-8"
+          onClick={async () => {
+            try {
+              const response = await fetch('http://localhost:8000/upload/test');
+              const data = await response.json();
+              console.log('Backend test:', data);
+              alert(`Backend is ${response.ok ? 'working' : 'not working'}: ${JSON.stringify(data)}`);
+            } catch (error) {
+              console.error('Backend test failed:', error);
+              alert(`Backend test failed: ${error.message}`);
+            }
+          }}
+        >
+          Test Backend
         </Button>
 
         <Button variant="outline" size="sm" className="h-8">
