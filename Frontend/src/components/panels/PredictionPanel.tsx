@@ -5,8 +5,59 @@ import { Progress } from "@/components/ui/progress";
 import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
+import { useDatasetPredictions } from "@/hooks/useDatasetPredictions";
+import { useMemo } from "react";
+import { DatasetFile } from "@/lib/api/datasets";
+import { PredictionResult } from "@/lib/api/predictions";
+
+// Temporary mock for useDataset until it's properly implemented
+const useDataset = () => {
+  return {
+    selectedFile: null as DatasetFile | null,
+    files: [] as DatasetFile[],
+  };
+};
+
+interface ClassLabel {
+  label: string;
+  probability: number;
+  isPredicted: boolean;
+  isTrue?: boolean;
+}
+
+// Extend the PredictionResult type to include our expected fields
+type ExtendedPredictionResult = PredictionResult & {
+  probabilities?: Record<string, number>;
+};
 
 export const PredictionPanel = () => {
+  const { selectedFile } = useDataset();
+  const { getPrediction, isLoading } = useDatasetPredictions({
+    files: selectedFile ? [selectedFile] : [],
+    model: "default",
+    enabled: !!selectedFile,
+  });
+
+  const prediction = (selectedFile ? getPrediction(selectedFile) : null) as ExtendedPredictionResult | null;
+
+  const classLabels = useMemo<ClassLabel[]>(() => {
+    if (!prediction?.probabilities) return [];
+    
+    const probs = prediction.probabilities;
+    const trueLabel = selectedFile?.label;
+    const values = Object.values(probs);
+    const maxProbability = values.length > 0 ? Math.max(...values) : 0;
+    
+    return Object.entries(probs)
+      .map(([label, probability]) => ({
+        label,
+        probability: Number(probability),
+        isPredicted: Math.abs(Number(probability) - maxProbability) < 0.0001,
+        isTrue: label === trueLabel,
+      }))
+      .sort((a, b) => b.probability - a.probability);
+  }, [prediction, selectedFile]);
+
   return (
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="predictions" className="h-full">
