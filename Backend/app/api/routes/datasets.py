@@ -4,6 +4,7 @@ from ...core.redis import redis, k_meta
 from typing import List, Optional
 from fastapi import HTTPException, Query
 from fastapi.responses import FileResponse
+from ...services.dataset_manifest import get_or_build_manifest
 
 router = APIRouter()
 
@@ -111,21 +112,21 @@ async def list_dataset_files(req: Request, limit: int = 100, offset: int = 0):
     if not base.exists():
         return {"total": 0, "files": [], "active": active}
 
-    # Collect .wav files recursively
-    wavs: List[Path] = sorted(base.rglob("*.wav"))
-    total = len(wavs)
+    # Use cached manifest
+    entries, summary = await get_or_build_manifest(active, base)
+    total = summary.get("total", len(entries))
+
     # window
     items = []
-    for p in wavs[offset: offset + limit]:
-        try:
-            rel = p.relative_to(base)
-        except Exception:
-            rel = p.name
+    for e in entries[offset: offset + limit]:
         items.append({
-            "id": str(rel).replace("\\", "/"),
-            "filename": p.name,
-            "relpath": str(rel).replace("\\", "/"),
-            "size": p.stat().st_size,
+            "id": e.get("id"),
+            "filename": e.get("filename"),
+            "relpath": e.get("relpath"),
+            "size": e.get("size"),
+            "duration": e.get("duration"),
+            "label": e.get("label"),
+            "h": e.get("h"),
         })
 
     return {"total": total, "files": items, "active": active}
