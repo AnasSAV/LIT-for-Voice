@@ -1,0 +1,101 @@
+# Ignore large dataset files but keep directory structure
+raw/
+processed/
+*.wav
+*.mp3
+*.flac
+*.m4a
+
+# Keep subset for development (add if needed)
+!dev/ravdess_subset/.gitkeep
+!dev/sample_files/
+
+# Keep metadata and logs
+!*.csv
+!*.json
+!*.log
+
+# =============================================================
+# Consolidated ignores (Backend + Frontend)
+# =============================================================
+
+# Frontend (Vite/React)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Logs (both)
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editors/IDEs
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python (Backend)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.nox/
+.tox/
+.hypothesis/
+.coverage*
+.cache/
+build/
+dist/
+*.egg-info/
+
+# Environments
+.env
+.env.*
+.venv/
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# -------------------------------------------------------------
+# Re-scope audio/media ignores to Backend/data only
+# Existing repo-wide patterns are neutralized then re-applied under Backend/data
+!*.wav
+!*.mp3
+!*.flac
+!*.m4a
+Backend/data/raw/
+Backend/data/processed/
+Backend/data/**/*.wav
+Backend/data/**/*.mp3
+Backend/data/**/*.flac
+Backend/data/**/*.m4a
+
+# Keep dev subset and sample files tracked
+!Backend/data/dev/ravdess_subset/.gitkeep
+!Backend/data/dev/sample_files/
+
+# Keep metadata and logs under data tracked
+!Backend/data/**/*.csv
+!Backend/data/**/*.json
+!Backend/data/**/*.log
+
+# Ignore local dev RAVDESS subset metadata files
+/dev/ravdess_subset/ravdess_subset_checksums.json
+Backend/data/dev/ravdess_subset/ravdess_subset_checksums.json
+Backend/data/dev/ravdess_subset/ravdess_subset_metadata.csv
+/dev/ravdess_subset/ravdess_subset_metadata.csv
+
+jar.txt
