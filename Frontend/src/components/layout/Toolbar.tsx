@@ -40,12 +40,11 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-let abortController: AbortController | null = null;
-
-export const Toolbar = ({apiData, setApiData}) => {
+export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect}: ToolbarProps) => {
   const [model, setModel] = useState("Select");
   const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
 
+let abortController: AbortController | null = null;
 const onModelChange = async (value: string) => {
   setModel(value);
     if (abortController) {
