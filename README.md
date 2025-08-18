@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Interpreting how deep learning models make decisions is crucial, especially in high-stakes applications like speech recognition, emotion detection, and speaker identification. While the Learning Interpretability Tool (LIT) enables exploration of text and tabular models, there's a lack of equivalent tools for voice-based models. Voice data poses additional challenges due to its temporal nature and multi-modal representations (e.g., waveform, spectrogram). 
+Interpreting how deep learning models make decisions is crucial, especially in high-stakes applications like speech recognition, emotion detection, and speaker identification. While the Learning Interpretability Tool (LIT) enables exploration of text and tabular models, there's a lack of equivalent tools for voice-based models. Voice data poses additional challenges due to its temporal nature and multi-modal representations (e.g., waveform, spectrogram).
 
 This project aims to extend the interpretability paradigm to audio, empowering researchers and developers to analyze and debug speech models with greater transparency. LIT for Voice provides an interactive web-based interface for exploring audio models through various visualization techniques, attention mechanisms, and perturbation analyses.
 
@@ -20,6 +20,7 @@ This project aims to extend the interpretability paradigm to audio, empowering r
 ## Tech Stack
 
 **Frontend:**
+
 - React 18 + TypeScript + Vite
 - Tailwind CSS + shadcn/ui components (Radix UI)
 - TanStack Query for state management and API calls
@@ -29,111 +30,13 @@ This project aims to extend the interpretability paradigm to audio, empowering r
 - Vite with hot module replacement
 
 **Backend:**
+
 - FastAPI + Python
 - Redis for session management and queue operations
 - PyTorch for ML model inference
 - Librosa for audio processing
 - Pydantic for data validation
-- pytest for testing with fakeredis
-
-## Getting Started
-
-### Prerequisites
-
-- **Node.js** (v18 or higher)
-- **Python** (3.8 or higher)
-- **Docker Desktop** (for Redis)
-- npm or bun package manager
-- pip (Python package manager)
-
-### Installation & Setup
-
-1. **Clone the repository:**
-```bash
-git clone https://github.com/AnasSAV/LIT-for-Voice.git
-cd LIT-for-Voice
-```
-2. **Setup and Start Backend (New Terminal):**
-```bash
-cd Backend
-
-### Python environment: venv vs global
-
-- Option A — Without venv (uses your global Python):
-  ```powershell
-  pip install -r requirements.txt
-  ```
-- Option B — With venv (recommended for isolation):
-  ```powershell
-  python -m venv .venv
-  .\.venv\Scripts\Activate.ps1
-  pip install -r requirements.txt
-  ```
-
-- Notes:
-  - Install dependencies only once per Python environment (global or venv).
-  - Using FakeRedis vs Docker Redis does not change whether you need a venv; venv is just for Python package isolation.
-
-### Recommended ways to run (Redis)
-
-- **Option A (Docker Redis): start Redis before Uvicorn**
-  - PowerShell:
-    ```powershell
-    cd Backend
-    docker-compose up -d
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-    ```
-
-- **Option B (FakeRedis for dev): no Docker needed**
-  - PowerShell:
-    ```powershell
-    $env:USE_FAKE_REDIS = "1"
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-    ```
-Backend API will be available at `http://localhost:8000`
-
-3. **Start Redis (Required for Backend):**
-```bash
-cd Backend
-docker-compose up -d
-```
-Redis will run on port 6379.
-
-4. **Setup and Start Frontend (New Terminal):**
-```bash
-cd Frontend
-
-# Install Node.js dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
-Frontend will be available at `http://localhost:8080`
-
-5. **Verify Setup:**
-   - Frontend: `http://localhost:8080`
-   - Backend API Docs (Swagger): `http://localhost:8000/docs`
-   - Health Check: `http://localhost:8000/health`
-   - Datasets: `http://localhost:8000/datasets`
-   - Active Dataset: `http://localhost:8000/datasets/active`
-   - List Dataset Files: `http://localhost:8000/datasets/files?limit=10&offset=0`
-   - Get Dataset File: `http://localhost:8000/datasets/file?relpath=REL_PATH[&id=ravdess_subset]`
-
-### Available Scripts
-
-**Frontend:**
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run build:dev` - Build for development
-- `npm run lint` - Run ESLint
-- `npm run preview` - Preview production build
-
-**Backend:**
-- `uvicorn app.main:app --reload` - Start development server with auto-reload
-- `pytest` - Run all tests
-- `pytest -v` - Run tests with verbose output
-- `docker-compose up -d` - Start Redis service
+- pytest for testing
 
 ## Project Structure
 
@@ -176,6 +79,97 @@ LIT-for-Voice/
 ├── README.md
 ```
 
+## How to Run (Windows)
+
+The app has a FastAPI backend and a React (Vite) frontend. Run the backend first, then the frontend.
+
+### 1) Backend (FastAPI)
+
+Run these in a terminal from the `Backend/` directory.
+
+1. Create and activate a virtual environment
+
+```cmd
+python -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install --upgrade pip
+```
+
+2. Install dependencies
+
+```cmd
+pip install -r requirements.txt
+```
+
+Note: `torch` is a large dependency. Ensure your Python version is supported and you have sufficient disk space.
+
+3. Start Redis
+
+- Using Docker (recommended): ensure Docker Desktop is running, then from `Backend/`:
+
+```cmd
+docker compose up -d
+```
+
+This starts Redis 7 on `localhost:6379` matching the default `REDIS_URL` in `Backend/app/core/settings.py`.
+
+- Or run your own Redis service and set `REDIS_URL` if it differs:
+
+```cmd
+set REDIS_URL=redis://<host>:<port>/0
+```
+
+4. Start the API server
+
+```cmd
+set PYTHONPATH=.
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Endpoints to verify:
+
+```cmd
+curl http://localhost:8000/
+curl http://localhost:8000/health
+curl http://localhost:8000/datasets
+```
+
+Datasets are discovered under `Backend/data/`. If you already downloaded them there, the `/datasets` endpoints will reflect them.
+
+### 2) Frontend (Vite + React)
+
+Run these from the `Frontend/` directory.
+
+1. Install Node dependencies
+
+```cmd
+npm install
+```
+
+2. Configure API base (optional)
+
+If your backend is not at `http://localhost:8000`, set `Frontend/.env`:
+
+```ini
+VITE_API_BASE=http://<your-backend-host>:<port>
+```
+
+3. Start the dev server
+
+```cmd
+npm run dev
+```
+
+Vite will serve the app at `http://localhost:8080`. The backend CORS in `Backend/app/main.py` already allows `http://localhost:8080` and `http://localhost:5173`.
+
+### 3) Run tests (optional)
+
+From `Backend/` with the venv active:
+
+```cmd
+pytest -q
+```
+
 ## Usage
 
 1. **Upload Audio Data**: Use the audio uploader to load your audio files and associated metadata
@@ -192,6 +186,7 @@ LIT-for-Voice/
 ## Development Status
 
 **Current State:**
+
 - ✅ Frontend UI components and dashboard layout
 - ✅ Backend API structure with FastAPI
 - ✅ Redis integration for session management
@@ -204,34 +199,17 @@ LIT-for-Voice/
 
 **Note**: The project is under active development. Features and API may change between versions.
 
-## Troubleshooting
-
-### Windows PowerShell Issues
-If you encounter "execution of scripts is disabled" errors:
-1. Run PowerShell as Administrator
-2. Execute: `Set-ExecutionPolicy RemoteSigned`
-3. Alternative: Use Node directly: `& "$env:ProgramFiles\nodejs\node.exe" ./node_modules/vite/bin/vite.js`
-
-### Docker Issues
-- Ensure Docker Desktop is running before starting Redis
-- If port 6379 is in use, modify the port in `docker-compose.yml`
-
-### Port Conflicts
-- Frontend runs on port 8080
-- Backend runs on port 8000
-- Redis runs on port 6379
-Ensure these ports are available or modify the configuration files.
-
 ## Configuration
 
 - **Backend settings** come from `Backend/app/core/settings.py` via Pydantic BaseSettings. Set these as environment variables if you need to override defaults:
+
   - `REDIS_URL` (default: `redis://localhost:6379/0`)
   - `SESSION_COOKIE_NAME` (default: `sid`)
   - `SESSION_TTL_SECONDS` (default: `86400`)
   - `COOKIE_SECURE` (default: `False`)
   - `COOKIE_SAMESITE` (default: `lax`)
   - `COOKIE_DOMAIN` (default: empty)
-  - `USE_FAKE_REDIS` (set to `1` to use in-memory FakeRedis instead of a Docker Redis instance)
+  
 
 - **Frontend API base URL** is defined in `Frontend/src/lib/api/datasets.ts`:
   - Defaults to `http://localhost:8000`.

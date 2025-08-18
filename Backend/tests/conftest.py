@@ -1,23 +1,24 @@
-import asyncio
-import os
 import pytest
 from httpx import AsyncClient
-from fakeredis.aioredis import FakeRedis
 
 # Make app importable
 from app.main import app
 from app.core import redis as redis_module
 
 @pytest.fixture(autouse=True, scope="function")
-async def fake_redis(monkeypatch):
+async def redis_cleanup():
+    """Ensure a clean Redis database before and after each test.
+
+    Requires a Redis server available at app.core.settings.REDIS_URL
+    (default redis://localhost:6379/0). Start via docker-compose before tests.
     """
-    Replace the global redis client with fakeredis for each test.
-    """
-    client = FakeRedis(decode_responses=True)
-    monkeypatch.setattr(redis_module, "redis", client)
-    yield
-    await client.flushall()
-    await client.aclose()
+    # Flush before
+    await redis_module.redis.flushall()
+    try:
+        yield
+    finally:
+        # Flush after
+        await redis_module.redis.flushall()
 
 @pytest.fixture
 async def client():

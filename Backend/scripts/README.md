@@ -4,26 +4,10 @@ This directory contains scripts for integrating the RAVDESS (Ryerson Audio-Visua
 
 ## 📁 Scripts Overview
 
-### 🚀 Quick Start
-```bash
-# One-command setup (recommended)
-python scripts/setup_ravdess.py
-
-# Or step by step:
-python scripts/download_ravdess.py
-python scripts/create_ravdess_subset.py
-python scripts/sample_ravdess_usage.py
-```
-
 ### 📋 Script Details
 
 #### `setup_ravdess.py` - **Main Setup Script**
 One-stop script that handles the complete RAVDESS integration setup.
-
-**Usage:**
-```bash
-python scripts/setup_ravdess.py [--subset-only] [--subset-size 0.05] [--force]
-```
 
 **Options:**
 - `--subset-only`: Skip download, only create subset (assumes full dataset exists)
@@ -43,15 +27,6 @@ python scripts/setup_ravdess.py [--subset-only] [--subset-size 0.05] [--force]
 #### `download_ravdess.py` - **Dataset Downloader**
 Downloads the full RAVDESS dataset from Kaggle.
 
-**Prerequisites:**
-- Kaggle API credentials configured (kaggle.json)
-- ~5GB free disk space
-
-**Usage:**
-```bash
-python scripts/download_ravdess.py [--force] [--verify-only]
-```
-
 **Features:**
 - ✅ Kaggle API authentication check
 - 📥 Downloads to `data/raw/ravdess_full/`
@@ -63,11 +38,6 @@ python scripts/download_ravdess.py [--force] [--verify-only]
 
 #### `create_ravdess_subset.py` - **Subset Creator**
 Creates a stratified subset of RAVDESS for faster development iteration.
-
-**Usage:**
-```bash
-python scripts/create_ravdess_subset.py [--size 0.05] [--force] [--seed 42]
-```
 
 **Options:**
 - `--size 0.05`: Fraction of dataset (5% = ~72 files from 1,440)
@@ -90,11 +60,6 @@ python scripts/create_ravdess_subset.py [--size 0.05] [--force] [--seed 42]
 
 #### `sample_ravdess_usage.py` - **Usage Example**
 Demonstrates how to load and process RAVDESS data in your application.
-
-**Usage:**
-```bash
-python scripts/sample_ravdess_usage.py
-```
 
 **Demonstrates:**
 - 📊 Loading metadata from CSV
@@ -140,50 +105,6 @@ Backend/data/
 - **Intensities**: normal, strong
 - **Total**: 1,440 audio files
 
-## 🔧 Prerequisites
-
-### 1. Kaggle API Setup
-1. Go to https://www.kaggle.com/account
-2. Create API token → downloads `kaggle.json`
-3. Place in:
-   - **Windows**: `C:\Users\{username}\.kaggle\kaggle.json`
-   - **Linux/Mac**: `~/.kaggle/kaggle.json`
-4. Set permissions: `chmod 600 ~/.kaggle/kaggle.json` (Unix only)
-
-### 2. Python Dependencies
-The setup script will automatically install:
-- `kaggle` - Kaggle API client
-- `librosa` - Audio processing
-- `pandas` - Data manipulation
-- `numpy` - Numerical computing
-
-## 🚨 Troubleshooting
-
-### Kaggle Authentication Issues
-```
-❌ Kaggle API authentication failed
-```
-**Solution**: Follow the Kaggle API setup instructions above.
-
-### Download Failures
-```
-❌ Failed to download RAVDESS dataset
-```
-**Solutions**:
-- Check internet connection
-- Verify Kaggle credentials
-- Ensure sufficient disk space (~5GB)
-- Try `--force` flag to re-download
-
-### Subset Creation Errors
-```
-❌ Raw dataset not found
-```
-**Solution**: Run `python scripts/download_ravdess.py` first.
-
-### File Permission Errors (Windows)
-**Solution**: Run PowerShell as Administrator or use the Node.js workaround from the main README.
-
 ## 🔗 Integration with LIT-for-Voice
 
 This Phase 1 setup prepares the foundation for:
@@ -195,20 +116,3 @@ This Phase 1 setup prepares the foundation for:
 **Phase 6**: Testing and documentation
 
 The stratified subset ensures fast development iteration while maintaining representative samples across all emotional categories and demographic groups.
-
-## 📊 Verification
-
-After setup, verify with:
-```bash
-# Check subset integrity
-python scripts/create_ravdess_subset.py --verify-only
-
-# Test usage
-python scripts/sample_ravdess_usage.py
-```
-
-Expected output:
-- ✅ ~72 audio files in development subset
-- ✅ Metadata CSV with all RAVDESS fields
-- ✅ Checksum verification passes
-- ✅ Feature extraction works

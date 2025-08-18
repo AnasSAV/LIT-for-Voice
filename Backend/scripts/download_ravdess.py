@@ -42,7 +42,7 @@ KAGGLE_DATASET = "uwrfkaggler/ravdess-emotional-speech-audio"
 def check_kaggle_auth() -> bool:
     """Check if Kaggle API is properly configured."""
     try:
-        result = subprocess.run(["kaggle", "competitions", "list", "-v"], 
+        result = subprocess.run([sys.executable, "-m", "kaggle", "competitions", "list", "-v"], 
                               capture_output=True, text=True, check=False)
         if result.returncode == 0:
             logger.info("✅ Kaggle API is properly configured")
@@ -75,7 +75,7 @@ def download_ravdess(force: bool = False) -> bool:
     try:
         # Download the dataset
         cmd = [
-            "kaggle", "datasets", "download", 
+            sys.executable, "-m", "kaggle", "datasets", "download", 
             KAGGLE_DATASET,
             "-p", str(RAW_DATA_PATH),
             "--unzip"

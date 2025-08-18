@@ -1,16 +1,9 @@
-import json, uuid, os
+import json, uuid
 from typing import Any
 from .settings import settings
 
-# Use FakeRedis for development if environment variable is set
-USE_FAKE_REDIS = os.getenv("USE_FAKE_REDIS", "0") == "1"
-
-if USE_FAKE_REDIS:
-    import fakeredis.aioredis as aioredis
-    redis = aioredis.FakeRedis(decode_responses=True)
-else:
-    from redis.asyncio import from_url
-    redis = from_url(settings.REDIS_URL, decode_responses=True)
+from redis.asyncio import from_url
+redis = from_url(settings.REDIS_URL, decode_responses=True)
 
 def k_sess(sid: str) -> str:  return f"sess:{sid}"
 def k_queue(sid: str) -> str: return f"{k_sess(sid)}:queue"
