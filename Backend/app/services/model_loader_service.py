@@ -1,6 +1,7 @@
 import torch
 from transformers import *
 import librosa
+import numpy as np
 
 def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -23,21 +24,24 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
 
     generate_kwargs = {"return_timestamps": True}
 
+    audio, sample_rate = librosa.load(audio_file, sr=16000)
+    audio = audio.astype(np.float32)
+
     result = pipe(
-        audio_file,
+        audio,
         generate_kwargs=generate_kwargs,
         chunk_length_s=chunk_length_s,
         batch_size=batch_size,
     )
     return result
 
-def transcribe_whisper_large():
+def transcribe_whisper_large(audio_file_path="sample1.wav"):
     model_id = "openai/whisper-large-v3"
-    return transcribe_whisper(model_id, "sample2.mp3")
+    return transcribe_whisper(model_id, audio_file_path)
 
-def transcribe_whisper_base():
+def transcribe_whisper_base(audio_file_path="sample1.wav"):
     model_id = "openai/whisper-base"
-    return transcribe_whisper(model_id, "sample1.wav")
+    return transcribe_whisper(model_id, audio_file_path)
 
 
 feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
@@ -57,8 +61,8 @@ def predict_emotion_wave2vec(audio_path):
         print("id2label keys:", list(model.config.id2label.keys()))
     return emotion
 
-def wave2vec():
-    emotion = predict_emotion_wave2vec("sample2.mp3")
+def wave2vec(audio_file_path="sample2.mp3"):
+    emotion = predict_emotion_wave2vec(audio_file_path)
     return emotion
 
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.session import SessionMiddleware
 
-from .api.routes import session as session_routes, results as results_routes, inferences as inferences_routes
+from .api.routes import session as session_routes, results as results_routes, inferences as inferences_routes, upload as upload_routes
 
 app = FastAPI(title="LIT for Voice – API")
 origins = [
@@ -21,3 +21,4 @@ app.add_middleware(
 app.include_router(session_routes.router)
 app.include_router(results_routes.router)
 app.include_router(inferences_routes.router)
+app.include_router(upload_routes.router)
