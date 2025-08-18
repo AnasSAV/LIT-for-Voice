@@ -108,6 +108,7 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
 
     entries: List[Dict[str, Any]] = []
     total_bytes = 0
+    label_counts: Dict[str, int] = {}
 
     for p in sorted(base.rglob("*.wav")):
         try:
@@ -122,6 +123,8 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
         h = _compute_file_hash(rel, size, mtime)
 
         total_bytes += size
+        if label:
+            label_counts[label] = label_counts.get(label, 0) + 1
         entries.append(
             {
                 "id": rel,  # stable row id
@@ -134,7 +137,7 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
             }
         )
 
-    summary = {"total": len(entries), "total_bytes": total_bytes}
+    summary = {"total": len(entries), "total_bytes": total_bytes, "label_counts": label_counts}
     version = compute_dir_version(base)
     return entries, summary, version
 
