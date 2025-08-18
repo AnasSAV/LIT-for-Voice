@@ -132,6 +132,7 @@ Endpoints to verify:
 curl http://localhost:8000/
 curl http://localhost:8000/health
 curl http://localhost:8000/datasets
+curl http://localhost:8000/datasets/summary
 ```
 
 Datasets are discovered under `Backend/data/`. If you already downloaded them there, the `/datasets` endpoints will reflect them.
@@ -206,6 +207,7 @@ pytest -q
   - `REDIS_URL` (default: `redis://localhost:6379/0`)
   - `SESSION_COOKIE_NAME` (default: `sid`)
   - `SESSION_TTL_SECONDS` (default: `86400`)
+  - `DATASET_CACHE_TTL_SECONDS` (default: `86400`)
   - `COOKIE_SECURE` (default: `False`)
   - `COOKIE_SAMESITE` (default: `lax`)
   - `COOKIE_DOMAIN` (default: empty)
@@ -217,6 +219,28 @@ pytest -q
     ```
     VITE_API_BASE=http://localhost:8000
     ```
+
+## Dataset manifest caching
+
+The backend caches static dataset metadata in Redis to speed up browsing:
+
+- Redis keys per dataset id:
+  - `dataset:{id}:manifest` – JSON list with per-file entries: `id`, `relpath`, `filename`, `size`, `duration`, `label`, `h` (stable hash)
+  - `dataset:{id}:summary` – JSON summary: `total`, `total_bytes`, and `label_counts`
+  - `dataset:{id}:version` – snapshot hash of directory contents used for invalidation
+- Cache expiration: controlled by `DATASET_CACHE_TTL_SECONDS`.
+- Versioning: if the on-disk version differs, the manifest is rebuilt automatically.
+
+Related endpoints:
+
+- `GET /datasets/files?limit=&offset=` – paginated view backed by the cached manifest
+- `GET /datasets/summary` – returns the cached summary for the active (or specified) dataset
+- `POST /datasets/reindex` – force a rebuild; body: `{ "id": "ravdess_subset" | "ravdess_full" | "common_voice_en" }`
+
+Results caching:
+
+- `GET /results/{model}/{h}` and `POST /results/{model}/{h}` operate on a per-sample cache.
+- `POST /results/{model}/batch` – fetch multiple results in one call by providing an array of `h` values.
 
 ## Contributing
 

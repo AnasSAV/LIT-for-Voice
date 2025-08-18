@@ -1,26 +1,34 @@
 import pytest
-from httpx import AsyncClient
+import httpx
 
-# Make app importable
 from app.main import app
 from app.core import redis as redis_module
 
 @pytest.fixture(autouse=True, scope="function")
 async def redis_cleanup():
-    """Ensure a clean Redis database before and after each test.
-
-    Requires a Redis server available at app.core.settings.REDIS_URL
-    (default redis://localhost:6379/0). Start via docker-compose before tests.
-    """
-    # Flush before
-    await redis_module.redis.flushall()
+    if redis_module.redis:
+        try:
+            await redis_module.redis.aclose()
+        except (RuntimeError, AttributeError):
+            pass
+    
+    redis_module.reset_client()
     try:
+        await redis_module.redis.ping()
+        await redis_module.redis.flushall()
         yield
     finally:
-        # Flush after
-        await redis_module.redis.flushall()
+        try:
+            if redis_module.redis:
+                await redis_module.redis.flushall()
+                await redis_module.redis.aclose()
+        except RuntimeError:
+            pass
+        finally:
+            redis_module.reset_client()
 
 @pytest.fixture
 async def client():
-    async with AsyncClient(app=app, base_url="http://test", follow_redirects=True) as ac:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test", follow_redirects=True) as ac:
         yield ac

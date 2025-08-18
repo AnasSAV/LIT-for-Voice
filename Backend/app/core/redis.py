@@ -1,9 +1,45 @@
-import json, uuid
-from typing import Any
+import asyncio
+import json
+import uuid
+from typing import Any, Optional
 from .settings import settings
 
-from redis.asyncio import from_url
-redis = from_url(settings.REDIS_URL, decode_responses=True)
+from redis.asyncio import Redis, from_url
+from redis.exceptions import RedisError
+
+# Initialize with None - will be created on first use
+_redis: Optional[Redis] = None
+
+def get_redis() -> Redis:
+    """Get the Redis client instance, creating it if necessary."""
+    global _redis
+    if _redis is None:
+        _redis = from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_keepalive=True,
+            retry_on_timeout=True
+        )
+    return _redis
+
+def reset_client() -> None:
+    """Reset the Redis client, closing any existing connection.
+    
+    This is particularly important in tests where the event loop may be recreated.
+    """
+    global _redis
+    if _redis is not None:
+        try:
+            # Schedule the close operation in the background
+            asyncio.create_task(_redis.aclose())
+        except (RuntimeError, RedisError, AttributeError):
+            # Ignore errors during cleanup or if aclose() is not available
+            pass
+    _redis = None
+
+# For backward compatibility
+redis = get_redis()
 
 def k_sess(sid: str) -> str:  return f"sess:{sid}"
 def k_queue(sid: str) -> str: return f"{k_sess(sid)}:queue"
