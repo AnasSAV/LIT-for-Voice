@@ -168,6 +168,32 @@ async def get_dataset_file(
     return FileResponse(path=str(abs_path), media_type="audio/wav", filename=abs_path.name)
 
 
+@router.get("/datasets/summary")
+async def dataset_summary(req: Request, id: Optional[str] = Query(None)):
+    """
+    Return cached summary for the active dataset, or a specified dataset id.
+    Summary includes at least: total, total_bytes (and future label_counts).
+    """
+    ds_id = id
+    if not ds_id:
+        sid = req.state.sid
+        ds_id = await redis.hget(k_meta(sid), "active_dataset")
+        if not ds_id:
+            default_id = _default_dataset_id()
+            if default_id:
+                ds_id = default_id
+                await redis.hset(k_meta(sid), mapping={"active_dataset": ds_id})
+            else:
+                return {"active": None, "summary": {"total": 0, "total_bytes": 0}}
+
+    base = _dataset_path_for_id(ds_id)
+    if not base.exists():
+        return {"active": ds_id, "summary": {"total": 0, "total_bytes": 0}}
+
+    _, summary = await get_or_build_manifest(ds_id, base)
+    return {"active": ds_id, "summary": summary}
+
+
 @router.post("/datasets/reindex")
 async def reindex_dataset(payload: dict = Body(...)):
     """
