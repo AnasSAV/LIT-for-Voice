@@ -222,6 +222,8 @@ pytest -q
 
 ## API Endpoints and Caching
 
+For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.md`.
+
 ### Dataset Browsing
 
 #### List Dataset Files
@@ -240,10 +242,16 @@ pytest -q
           "size": 12345,
           "duration": 1.23,
           "label": "emotion_label",
-          "h": "unique_hash"
+          "h": "unique_hash",
+          "meta": {
+            "emotion": "happy",
+            "actor": "16",
+            "gender": "female"
+          }
         }
       ],
-      "total": 100
+      "total": 100,
+      "active": "ravdess_subset"
     }
     ```
   - Uses Redis caching with automatic invalidation when dataset changes
@@ -256,7 +264,8 @@ pytest -q
     {
       "total": 100,
       "total_bytes": 12345678,
-      "label_counts": {"happy": 30, "sad": 20, "neutral": 50}
+      "label_counts": {"happy": 30, "sad": 20, "neutral": 50},
+      "meta_constants": {"modality": "audio-only", "vocal_channel": "speech"}
     }
     ```
 
@@ -277,7 +286,7 @@ pytest -q
 - `POST /results/{model}/batch`
   - Body: `{"hashes": ["h1", "h2", ...]}`
   - Fetches multiple results in one request
-  - Returns: `{"results": {"h1": {...}, "h2": {...}}}`
+  - Returns: `{"ok": true, "payloads": {"h1": {...}, "h2": {...}}}`
 
 ### Caching Behavior
 
