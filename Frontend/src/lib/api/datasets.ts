@@ -10,6 +10,9 @@ export type DatasetFile = {
   filename: string;
   relpath: string;
   size: number;
+  duration: number;
+  label: string;
+  h: string;
 };
 
 export const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? "http://localhost:8000";
