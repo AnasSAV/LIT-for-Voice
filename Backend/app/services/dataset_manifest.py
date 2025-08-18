@@ -5,6 +5,7 @@ import contextlib
 from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
 import wave
+import csv
 
 from ..core.redis import (
     redis,
@@ -76,6 +77,52 @@ def _parse_label_from_filename(filename: str) -> Optional[str]:
     return None
 
 
+def _load_metadata_csv(base: Path) -> Dict[str, Dict[str, Any]]:
+    """
+    Load optional dataset-level metadata from a CSV residing in `base`.
+    We look for the first file matching '*_metadata.csv'. Expected to contain
+    at least a 'filename' column. Returns mapping: filename -> row dict.
+    """
+    mapping: Dict[str, Dict[str, Any]] = {}
+    try:
+        for p in sorted(base.glob("*_metadata.csv")):
+            with p.open("r", encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # Common column names: 'filename' | 'file' | 'name'
+                    key = (row.get("filename") or row.get("file") or row.get("name") or "").strip()
+                    if key:
+                        mapping[key] = row
+            break  # only the first match is used
+    except Exception:
+        # Metadata is optional; silently ignore issues
+        pass
+    return mapping
+
+
+def _metadata_constants(rows: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Return columns whose values are identical (and non-empty) for all rows."""
+    if not rows:
+        return {}
+    keys: set = set()
+    for r in rows.values():
+        keys.update(r.keys())
+    constants: Dict[str, Any] = {}
+    for k in keys:
+        # collect values; if any missing/empty, not a constant
+        vals = []
+        complete = True
+        for r in rows.values():
+            v = r.get(k)
+            if v in (None, ""):
+                complete = False
+                break
+            vals.append(v)
+        if complete and len(set(vals)) == 1:
+            constants[k] = vals[0]
+    return constants
+
+
 def compute_dir_version(base: Path) -> str:
     """
     Build a content snapshot hash based on relpath, size, mtime for all wav files.
@@ -84,6 +131,14 @@ def compute_dir_version(base: Path) -> str:
         return "empty"
     records: List[Tuple[str, int, int]] = []
     for p in sorted(base.rglob("*.wav")):
+        try:
+            st = p.stat()
+            rel = _posix_rel(base, p)
+            records.append((rel, int(st.st_size), int(st.st_mtime)))
+        except Exception:
+            continue
+    # Also include metadata CSV files so cache invalidates when they change
+    for p in sorted(base.glob("*_metadata.csv")):
         try:
             st = p.stat()
             rel = _posix_rel(base, p)
@@ -110,6 +165,12 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
     total_bytes = 0
     label_counts: Dict[str, int] = {}
 
+    # Load optional dataset metadata to enrich entries
+    metadata_by_filename = _load_metadata_csv(base)
+    meta_consts = _metadata_constants(metadata_by_filename)
+    # Prune duplicates from per-entry meta; also drop duplicate 'filename'
+    drop_meta_keys = set(meta_consts.keys()) | {"filename"}
+
     for p in sorted(base.rglob("*.wav")):
         try:
             st = p.stat()
@@ -125,19 +186,30 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
         total_bytes += size
         if label:
             label_counts[label] = label_counts.get(label, 0) + 1
-        entries.append(
-            {
-                "id": rel,  # stable row id
-                "relpath": rel,
-                "filename": p.name,
-                "size": size,
-                "duration": duration,
-                "label": label,
-                "h": h,
-            }
-        )
+        entry: Dict[str, Any] = {
+            "id": rel,  # stable row id
+            "relpath": rel,
+            "filename": p.name,
+            "size": size,
+            "duration": duration,
+            "label": label,
+            "h": h,
+        }
+        # Attach CSV metadata if available for this filename
+        meta_row = metadata_by_filename.get(p.name)
+        if meta_row:
+            filtered = {k: v for k, v in meta_row.items() if k not in drop_meta_keys}
+            if filtered:
+                entry["meta"] = filtered
+        entries.append(entry)
 
-    summary = {"total": len(entries), "total_bytes": total_bytes, "label_counts": label_counts}
+    summary = {
+        "total": len(entries),
+        "total_bytes": total_bytes,
+        "label_counts": label_counts,
+    }
+    if meta_consts:
+        summary["meta_constants"] = meta_consts
     version = compute_dir_version(base)
     return entries, summary, version
 

@@ -127,6 +127,7 @@ async def list_dataset_files(req: Request, limit: int = 100, offset: int = 0):
             "duration": e.get("duration"),
             "label": e.get("label"),
             "h": e.get("h"),
+            "meta": e.get("meta"),
         })
 
     return {"total": total, "files": items, "active": active}
