@@ -220,27 +220,79 @@ pytest -q
     VITE_API_BASE=http://localhost:8000
     ```
 
-## Dataset manifest caching
+## API Endpoints and Caching
 
-The backend caches static dataset metadata in Redis to speed up browsing:
+### Dataset Browsing
 
-- Redis keys per dataset id:
-  - `dataset:{id}:manifest` – JSON list with per-file entries: `id`, `relpath`, `filename`, `size`, `duration`, `label`, `h` (stable hash)
-  - `dataset:{id}:summary` – JSON summary: `total`, `total_bytes`, and `label_counts`
-  - `dataset:{id}:version` – snapshot hash of directory contents used for invalidation
-- Cache expiration: controlled by `DATASET_CACHE_TTL_SECONDS`.
-- Versioning: if the on-disk version differs, the manifest is rebuilt automatically.
+#### List Dataset Files
+- `GET /datasets/files`
+  - Query Params:
+    - `limit`: Number of files to return (default: 50)
+    - `offset`: Pagination offset (default: 0)
+  - Response: 
+    ```json
+    {
+      "files": [
+        {
+          "id": "unique_id",
+          "filename": "audio.wav",
+          "relpath": "path/to/audio.wav",
+          "size": 12345,
+          "duration": 1.23,
+          "label": "emotion_label",
+          "h": "unique_hash"
+        }
+      ],
+      "total": 100
+    }
+    ```
+  - Uses Redis caching with automatic invalidation when dataset changes
 
-Related endpoints:
+#### Dataset Summary
+- `GET /datasets/summary`
+  - Returns dataset statistics
+  - Response:
+    ```json
+    {
+      "total": 100,
+      "total_bytes": 12345678,
+      "label_counts": {"happy": 30, "sad": 20, "neutral": 50}
+    }
+    ```
 
-- `GET /datasets/files?limit=&offset=` – paginated view backed by the cached manifest
-- `GET /datasets/summary` – returns the cached summary for the active (or specified) dataset
-- `POST /datasets/reindex` – force a rebuild; body: `{ "id": "ravdess_subset" | "ravdess_full" | "common_voice_en" }`
+#### Rebuild Dataset Index
+- `POST /datasets/reindex`
+  - Body: `{"id": "dataset_id"}`
+  - Forces a rebuild of the dataset manifest
+  - Returns: `{"ok": true}` on success
 
-Results caching:
+### Results Caching
 
-- `GET /results/{model}/{h}` and `POST /results/{model}/{h}` operate on a per-sample cache.
-- `POST /results/{model}/batch` – fetch multiple results in one call by providing an array of `h` values.
+#### Get Single Result
+- `GET /results/{model}/{h}`
+  - Fetches a single cached result
+  - `h` is the unique hash from the dataset file entry
+
+#### Batch Results
+- `POST /results/{model}/batch`
+  - Body: `{"hashes": ["h1", "h2", ...]}`
+  - Fetches multiple results in one request
+  - Returns: `{"results": {"h1": {...}, "h2": {...}}}`
+
+### Caching Behavior
+
+- **Manifest Caching**:
+  - Redis keys:
+    - `dataset:{id}:manifest`: File metadata
+    - `dataset:{id}:summary`: Dataset statistics
+    - `dataset:{id}:version`: Content hash for invalidation
+  - Auto-rebuilds when files change
+  - TTL controlled by `DATASET_CACHE_TTL_SECONDS`
+
+- **Result Caching**:
+  - Key: `result:{model}:{h}`
+  - Persistent until explicitly cleared or expired
+  - Batch API reduces round-trips for multiple predictions
 
 ## Contributing
 
