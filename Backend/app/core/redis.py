@@ -9,6 +9,9 @@ def k_sess(sid: str) -> str:  return f"sess:{sid}"
 def k_queue(sid: str) -> str: return f"{k_sess(sid)}:queue"
 def k_meta(sid: str) -> str:  return f"{k_sess(sid)}:meta"
 def k_result(model: str, h: str) -> str: return f"result:{model}:{h}"
+def k_ds_manifest(ds_id: str) -> str: return f"dataset:{ds_id}:manifest"
+def k_ds_summary(ds_id: str) -> str:  return f"dataset:{ds_id}:summary"
+def k_ds_version(ds_id: str) -> str:  return f"dataset:{ds_id}:version"
 
 async def ensure_session(sid: str | None) -> str:
     if not sid: sid = uuid.uuid4().hex
