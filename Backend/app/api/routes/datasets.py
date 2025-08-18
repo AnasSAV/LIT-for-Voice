@@ -166,3 +166,22 @@ async def get_dataset_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(path=str(abs_path), media_type="audio/wav", filename=abs_path.name)
+
+
+@router.post("/datasets/reindex")
+async def reindex_dataset(payload: dict = Body(...)):
+    """
+    Force a manifest rebuild for a given dataset id. Dev/admin utility.
+    Payload: {"id": "ravdess_subset" | "ravdess_full" | "common_voice_en"}
+    """
+    ds_id = payload.get("id")
+    valid_ids = {d["id"] for d in _available_datasets()}
+    if ds_id not in valid_ids:
+        return {"ok": False, "error": "Unknown dataset id", "valid": sorted(list(valid_ids))}
+
+    base = _dataset_path_for_id(ds_id)
+    if not base.exists():
+        return {"ok": False, "error": "Dataset path not found", "id": ds_id}
+
+    entries, summary = await get_or_build_manifest(ds_id, base, force=True)
+    return {"ok": True, "id": ds_id, "total": summary.get("total", len(entries))}
