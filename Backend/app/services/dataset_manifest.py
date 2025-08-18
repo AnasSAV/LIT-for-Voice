@@ -12,6 +12,7 @@ from ..core.redis import (
     k_ds_summary,
     k_ds_version,
 )
+from ..core.settings import settings
 
 # Public API
 # - compute_dir_version(base)
@@ -46,8 +47,32 @@ def _safe_duration_wav(p: Path) -> Optional[float]:
 
 
 def _parse_label_from_filename(filename: str) -> Optional[str]:
-    # Placeholder: extend for dataset-specific labeling (e.g., RAVDESS mapping)
-    # Return None if not derivable
+    """
+    Parse ground-truth label from filename when possible.
+    - Supports RAVDESS pattern: MM-VC-EM-IT-ST-RP-AC.wav
+      EM (emotion) codes:
+        01 neutral, 02 calm, 03 happy, 04 sad, 05 angry,
+        06 fearful, 07 disgust, 08 surprised
+    Returns the emotion string when recognized; else None.
+    """
+    name = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    stem = name
+    if "." in name:
+        stem = name[: name.rfind(".")]
+    parts = stem.split("-")
+    if len(parts) == 7 and all(p.isdigit() for p in parts):
+        emotion_code = parts[2]
+        em_map = {
+            "01": "neutral",
+            "02": "calm",
+            "03": "happy",
+            "04": "sad",
+            "05": "angry",
+            "06": "fearful",
+            "07": "disgust",
+            "08": "surprised",
+        }
+        return em_map.get(emotion_code)
     return None
 
 
@@ -117,7 +142,7 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
 async def get_or_build_manifest(
     ds_id: str,
     base: Path,
-    ttl: int = 24 * 60 * 60,
+    ttl: Optional[int] = None,
     force: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
@@ -148,10 +173,11 @@ async def get_or_build_manifest(
     entries, summary, version = await _scan_dataset(base, ds_id)
 
     # Store in Redis with TTL
+    effective_ttl = ttl if ttl is not None else settings.DATASET_CACHE_TTL_SECONDS
     pipe = redis.pipeline()
-    pipe.set(k_ds_manifest(ds_id), json.dumps(entries), ex=ttl)
-    pipe.set(k_ds_summary(ds_id), json.dumps(summary), ex=ttl)
-    pipe.set(k_ds_version(ds_id), version, ex=ttl)
+    pipe.set(k_ds_manifest(ds_id), json.dumps(entries), ex=effective_ttl)
+    pipe.set(k_ds_summary(ds_id), json.dumps(summary), ex=effective_ttl)
+    pipe.set(k_ds_version(ds_id), version, ex=effective_ttl)
     await pipe.execute()
 
     return entries, summary
