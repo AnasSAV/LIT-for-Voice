@@ -22,7 +22,11 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
-  prediction?:string
+  prediction?: {
+    text?: string;
+    label?: string;
+    confidence?: number;
+  };
 }
 
 interface AudioDatasetPanelProps {
@@ -140,7 +144,7 @@ export const AudioDatasetPanel = ({
         </div>
       </div>
       
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-auto">
         <Card className="h-full rounded-none border-0">
           <CardContent className="p-0 h-full">
             <AudioDataTable 

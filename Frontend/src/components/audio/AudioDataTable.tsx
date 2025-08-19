@@ -47,6 +47,8 @@ interface AudioData {
   duration: number;
   file_path?: string;
   size?: number;
+  // Optional metadata from backend (RAVDESS: emotion, intensity, statement, repetition, actor, gender)
+  meta?: Record<string, string>;
 }
 
 interface ApiData {
@@ -74,9 +76,11 @@ async function fetchRows(): Promise<AudioData[]> {
     relpath: f.relpath,
     predictedTranscript: "",
     predictedLabel: "",
-    groundTruthLabel: "",
+    groundTruthLabel: f.label || f.meta?.emotion || "",
     confidence: 0,
-    duration: 0,
+    duration: f.duration || 0,
+    size: f.size,
+    meta: f.meta,
   }));
 }
 
@@ -244,7 +248,7 @@ export const AudioDataTable = ({
         },
       },
     ],
-    [playingId]
+    [playingId, togglePlay]
   );
 
   // Initialize table
@@ -273,7 +277,7 @@ export const AudioDataTable = ({
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
+                <TableHead key={header.id} className="py-2">
                   {header.isPlaceholder
                     ? null
                     : flexRender(
@@ -293,12 +297,12 @@ export const AudioDataTable = ({
                 data-state={selectedRow === row.original.id ? "selected" : undefined}
                 onClick={() => onRowSelect(row.original.id)}
                 className={cn(
-                  "cursor-pointer hover:bg-muted/50",
+                  "cursor-pointer hover:bg-muted/50 h-9",
                   selectedRow === row.original.id && "bg-muted"
                 )}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
+                  <TableCell key={cell.id} className="py-1">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}

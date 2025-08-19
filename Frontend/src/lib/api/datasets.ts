@@ -13,9 +13,12 @@ export type DatasetFile = {
   duration: number;
   label: string;
   h: string;
+  meta?: Record<string, string>;
 };
 
-export const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? "http://localhost:8000";
+// Avoid `any` by using a typed cast to an object with only the env we need
+const envBase = (import.meta as unknown as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE;
+export const API_BASE = envBase ?? "http://localhost:8000";
 
 export async function listDatasets(): Promise<Dataset[]> {
   const res = await fetch(`${API_BASE}/datasets`, { credentials: "include" });
@@ -43,7 +46,10 @@ export async function setActiveDataset(id: string): Promise<void> {
     try {
       const j = await res.json();
       detail = j?.error || JSON.stringify(j);
-    } catch {}
+    } catch (_e) {
+      // Ignore JSON parse errors when the body isn't JSON
+      void _e;
+    }
     throw new Error(`Failed to set active dataset: ${res.status} ${detail}`);
   }
 }
