@@ -14,8 +14,16 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const onReadyRef = useRef<typeof onReady>(onReady);
+  const onProgressRef = useRef<typeof onProgress>(onProgress);
 
-  // Initialize WaveSurfer instance
+  // Keep latest callbacks without retriggering init
+  useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
+  useEffect(() => { onProgressRef.current = onProgress; }, [onProgress]);
+
+  // Initialize WaveSurfer instance (run once)
   useEffect(() => {
     if (!waveformRef.current) return;
     
@@ -42,22 +50,24 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
       console.log('WaveSurfer ready, duration:', wavesurfer.getDuration());
       setIsLoading(false);
       setError(null);
-      if (onReady) {
-        onReady(wavesurfer);
+      if (onReadyRef.current) {
+        onReadyRef.current(wavesurfer);
       }
     });
 
     wavesurfer.on('audioprocess', (currentTime) => {
-      if (onProgress) {
-        onProgress(currentTime, wavesurfer.getDuration());
+      if (onProgressRef.current) {
+        onProgressRef.current(currentTime, wavesurfer.getDuration());
       }
     });
 
-    wavesurfer.on('interaction' as any, () => {
-      if (onProgress) {
+    // 'interaction' event isn't typed in wavesurfer.js types
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (wavesurfer as any).on('interaction', () => {
+      if (onProgressRef.current) {
         const currentTime = wavesurfer.getCurrentTime();
         const duration = wavesurfer.getDuration();
-        onProgress(currentTime, duration || 0);
+        onProgressRef.current(currentTime, duration || 0);
       }
     });
 
@@ -81,8 +91,13 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
         wavesurferRef.current.destroy();
         wavesurferRef.current = null;
       }
+      // Revoke any remaining object URL to avoid memory leaks
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
     };
-  }, []); // Only run once when component mounts
+  }, []);
 
   // Handle audio URL changes
   useEffect(() => {
@@ -91,51 +106,38 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
       return;
     }
 
-    console.log('Loading audio URL:', audioUrl);
+    console.log('Fetching audio with credentials:', audioUrl);
     setIsLoading(true);
     setError(null);
-    
-    // First, test if the URL is accessible
-    fetch(audioUrl, { method: 'HEAD' })
-      .then(response => {
-        console.log('Audio URL HEAD response:', response.status, response.statusText);
+
+    // Revoke any previous object URL before creating a new one
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
+    fetch(audioUrl, { method: 'GET', credentials: 'include' })
+      .then(async (response) => {
         if (!response.ok) {
           throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
         }
-        
-        // If HEAD request succeeds, load with WaveSurfer
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
         try {
-          wavesurferRef.current?.load(audioUrl);
+          wavesurferRef.current?.load(url);
         } catch (err) {
           console.error('WaveSurfer load error:', err);
-          setError(`WaveSurfer failed to load: ${err.message}`);
+          setError(`WaveSurfer failed to load: ${(err as Error).message}`);
           setIsLoading(false);
         }
       })
-      .catch(err => {
-        console.error('Audio URL accessibility test failed:', err);
+      .catch((err) => {
+        console.error('Failed to fetch audio:', err);
         setError(`Cannot access audio file: ${err.message}`);
         setIsLoading(false);
-        
-        // Try with GET request as fallback
-        fetch(audioUrl, { method: 'GET' })
-          .then(response => {
-            console.log('Audio URL GET fallback response:', response.status);
-            if (response.ok) {
-              setError('File accessible but WaveSurfer may have issues with CORS or format');
-              // Try loading anyway
-              try {
-                wavesurferRef.current?.load(audioUrl);
-              } catch (wsErr) {
-                setError(`WaveSurfer error: ${wsErr.message}`);
-              }
-            }
-          })
-          .catch(() => {
-            setError('Audio file completely inaccessible');
-          });
       });
-  }, [audioUrl]);
+  }, [audioUrl, reloadTick]);
 
   // Handle play/pause state
   useEffect(() => {
@@ -183,9 +185,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
                     onClick={() => {
                       setError(null);
                       setIsLoading(true);
-                      if (wavesurferRef.current && audioUrl) {
-                        wavesurferRef.current.load(audioUrl);
-                      }
+                      setReloadTick((t) => t + 1);
                     }}
                     className="px-2 py-1 bg-primary text-primary-foreground rounded text-xs hover:bg-primary/80"
                   >

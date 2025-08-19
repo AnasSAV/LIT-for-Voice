@@ -27,6 +27,8 @@ interface UploadedFile {
     label?: string;
     confidence?: number;
   };
+  label?: string;
+  dataset_id?: string | null;
 }
 
 interface AudioDatasetPanelProps {

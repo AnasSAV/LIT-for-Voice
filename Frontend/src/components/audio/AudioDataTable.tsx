@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -29,6 +29,8 @@ interface UploadedFile {
     label?: string;
     confidence?: number;
   };
+  label?: string;
+  dataset_id?: string | null;
 }
 
 interface AudioData {
@@ -68,9 +70,9 @@ interface AudioDataTableProps {
   onFilePlay?: (file: UploadedFile) => void;
 }
 
-async function fetchRows(): Promise<AudioData[]> {
-  const { files } = await listDatasetFiles(200, 0);
-  return files.map((f) => ({
+async function fetchRowsWithActive(): Promise<{ rows: AudioData[]; active: string | null }> {
+  const { files, active } = await listDatasetFiles(200, 0);
+  const rows = files.map((f) => ({
     id: f.id,
     filename: f.filename,
     relpath: f.relpath,
@@ -82,6 +84,7 @@ async function fetchRows(): Promise<AudioData[]> {
     size: f.size,
     meta: f.meta,
   }));
+  return { rows, active };
 }
 
 export const AudioDataTable = ({
@@ -96,6 +99,8 @@ export const AudioDataTable = ({
   const [loading, setLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
+  const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
   const columnHelper = createColumnHelper<AudioData>();
 
   // Load data from API on component mount
@@ -104,8 +109,11 @@ export const AudioDataTable = ({
     const load = async () => {
       setLoading(true);
       try {
-        const rows = await fetchRows();
-        if (mounted) setData(rows);
+        const { rows, active } = await fetchRowsWithActive();
+        if (mounted) {
+          setData(rows);
+          setActiveDatasetId(active);
+        }
       } catch (e) {
         console.warn("Failed to load dataset files", e);
         if (mounted) setData([]);
@@ -125,11 +133,15 @@ export const AudioDataTable = ({
       if (audioEl) {
         audioEl.pause();
       }
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+        audioObjectUrlRef.current = null;
+      }
     };
   }, [audioEl]);
 
   // Toggle audio playback for a row
-  const togglePlay = useCallback((row: AudioData) => {
+  const togglePlay = useCallback(async (row: AudioData) => {
     try {
       // If clicking the currently playing row, toggle pause
       if (playingId === row.id && audioEl) {
@@ -148,8 +160,20 @@ export const AudioDataTable = ({
         audioEl.pause();
       }
 
-      const src = datasetFileUrl(row.relpath);
-      const el = new Audio(src);
+      // Build URL and fetch with credentials to ensure cookies/session are sent
+      const src = datasetFileUrl(row.relpath, activeDatasetId ?? undefined);
+      if (audioObjectUrlRef.current) {
+        URL.revokeObjectURL(audioObjectUrlRef.current);
+        audioObjectUrlRef.current = null;
+      }
+      const resp = await fetch(src, { credentials: "include" });
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch audio: ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const objUrl = URL.createObjectURL(blob);
+      audioObjectUrlRef.current = objUrl;
+      const el = new Audio(objUrl);
       el.addEventListener("ended", () => setPlayingId(null));
       setAudioEl(el);
       setPlayingId(row.id);
@@ -157,7 +181,7 @@ export const AudioDataTable = ({
     } catch (e) {
       console.warn("Failed to play audio", e);
     }
-  }, [playingId, audioEl]);
+  }, [playingId, audioEl, activeDatasetId]);
 
   // Combine API data with uploaded files
   const tableData = useMemo(() => {
@@ -192,6 +216,22 @@ export const AudioDataTable = ({
               className="h-6 w-6 p-0"
               onClick={(e) => {
                 e.stopPropagation();
+                // Ensure selection and right panel update when playing via button
+                onRowSelect(info.row.original.id);
+                if (onFilePlay) {
+                  onFilePlay({
+                    file_id: info.row.original.id,
+                    filename: info.row.original.filename,
+                    file_path: info.row.original.relpath,
+                    message: "dataset",
+                    size: info.row.original.size,
+                    duration: info.row.original.duration,
+                    sample_rate: undefined,
+                    prediction: info.row.original.prediction,
+                    label: info.row.original.groundTruthLabel,
+                    dataset_id: activeDatasetId,
+                  });
+                }
                 togglePlay(info.row.original);
               }}
               aria-label={playingId === info.row.original.id ? "Pause" : "Play"}
@@ -248,7 +288,7 @@ export const AudioDataTable = ({
         },
       },
     ],
-    [playingId, togglePlay]
+    [playingId, togglePlay, onRowSelect, onFilePlay, activeDatasetId]
   );
 
   // Initialize table
@@ -295,7 +335,25 @@ export const AudioDataTable = ({
               <TableRow
                 key={row.id}
                 data-state={selectedRow === row.original.id ? "selected" : undefined}
-                onClick={() => onRowSelect(row.original.id)}
+                onClick={() => {
+                  onRowSelect(row.original.id);
+                  if (onFilePlay) {
+                    onFilePlay({
+                      file_id: row.original.id,
+                      filename: row.original.filename,
+                      file_path: row.original.relpath,
+                      message: "dataset",
+                      size: row.original.size,
+                      duration: row.original.duration,
+                      sample_rate: undefined,
+                      prediction: row.original.prediction,
+                      // carry cached GT label for the editor panel
+                      // (AudioDataTable derives this from backend label/meta)
+                      label: row.original.groundTruthLabel,
+                      dataset_id: activeDatasetId,
+                    });
+                  }
+                }}
                 className={cn(
                   "cursor-pointer hover:bg-muted/50 h-9",
                   selectedRow === row.original.id && "bg-muted"

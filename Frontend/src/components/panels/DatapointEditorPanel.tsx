@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +7,7 @@ import { AudioPlayer } from "../audio/AudioPlayer";
 import { WaveformViewer } from "../audio/WaveformViewer";
 import { Play, Pause, RotateCcw, Trash2, Plus } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
+import { datasetFileUrl } from "@/lib/api/datasets";
 
 interface UploadedFile {
   file_id: string;
@@ -16,6 +17,13 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
+  label?: string;
+  dataset_id?: string | null;
+  prediction?: {
+    text?: string;
+    label?: string;
+    confidence?: number;
+  };
 }
 
 interface DatapointEditorPanelProps {
@@ -28,14 +36,39 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const handleReady = useCallback((wavesurfer: WaveSurfer) => {
+    console.log('WaveformViewer ready callback in DatapointEditorPanel');
+    wavesurferRef.current = wavesurfer;
+    const d = wavesurfer.getDuration();
+    console.log('Duration from WaveSurfer:', d);
+    setDuration(d);
+  }, []);
+  const handleProgress = useCallback((time: number, dur: number) => {
+    setCurrentTime(time);
+    setDuration(dur);
+  }, []);
 
-  const audioUrl = selectedFile ? `http://localhost:8000/upload/file/${selectedFile.file_id}` : undefined;
+  const audioUrl = useMemo(() => {
+    if (!selectedFile) return undefined;
+    // If coming from dataset table, use dataset file endpoint; otherwise use upload endpoint
+    if (selectedFile.message === "dataset") {
+      return datasetFileUrl(selectedFile.file_path, selectedFile.dataset_id ?? undefined);
+    }
+    return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+  }, [selectedFile]);
 
   // Debug logging for selectedFile and audioUrl
   useEffect(() => {
     console.log('DatapointEditorPanel - selectedFile changed:', selectedFile);
     console.log('DatapointEditorPanel - audioUrl:', audioUrl);
   }, [selectedFile, audioUrl]);
+
+  // When a new file with a cached label is selected, reflect it in the selector
+  useEffect(() => {
+    if (selectedFile?.label) {
+      setSelectedLabel(selectedFile.label);
+    }
+  }, [selectedFile?.label]);
 
   // Reset playback when file changes
   useEffect(() => {
@@ -74,6 +107,12 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
               <span className="text-muted-foreground">Sample Rate:</span>
               <span className="ml-2">{selectedFile?.sample_rate ? `${(selectedFile.sample_rate / 1000).toFixed(1)}kHz` : "N/A"}</span>
             </div>
+            {selectedFile?.label && (
+              <div className="text-xs">
+                <span className="text-muted-foreground">Ground Truth:</span>
+                <Badge variant="outline" className="ml-2 text-xs">{selectedFile.label}</Badge>
+              </div>
+            )}
             {selectedFile?.size && (
               <div className="text-xs">
                 <span className="text-muted-foreground">Size:</span>
@@ -92,29 +131,27 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
             <WaveformViewer 
               audioUrl={audioUrl}
               isPlaying={isPlaying}
-              onReady={(wavesurfer) => {
-                console.log('WaveformViewer ready callback in DatapointEditorPanel');
-                wavesurferRef.current = wavesurfer;
-                const duration = wavesurfer.getDuration();
-                console.log('Duration from WaveSurfer:', duration);
-                setDuration(duration);
-              }}
-              onProgress={(time, dur) => {
-                setCurrentTime(time);
-                setDuration(dur);
-              }}
+              onReady={handleReady}
+              onProgress={handleProgress}
             />
             <AudioPlayer 
               isPlaying={isPlaying}
               onPlayPause={() => {
-                setIsPlaying(!isPlaying);
-                if (wavesurferRef.current) {
-                  if (isPlaying) {
-                    wavesurferRef.current.pause();
-                  } else {
-                    wavesurferRef.current.play();
+                setIsPlaying((prev) => {
+                  const next = !prev;
+                  if (wavesurferRef.current) {
+                    try {
+                      if (next) {
+                        wavesurferRef.current.play();
+                      } else {
+                        wavesurferRef.current.pause();
+                      }
+                    } catch (e) {
+                      console.error('Play/pause error:', e);
+                    }
                   }
-                }
+                  return next;
+                });
               }}
               currentTime={currentTime}
               duration={duration}
@@ -143,7 +180,13 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
                 Predicted Label
               </label>
               <Badge variant="outline" className="text-xs">
-                neutral (0.87)
+                {selectedFile?.prediction?.label
+                  ? `${selectedFile.prediction.label}${
+                      typeof selectedFile.prediction.confidence === 'number'
+                        ? ` (${selectedFile.prediction.confidence.toFixed(2)})`
+                        : ''
+                    }`
+                  : 'N/A'}
               </Badge>
             </div>
             

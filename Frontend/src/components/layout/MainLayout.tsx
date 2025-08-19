@@ -14,6 +14,13 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
+  label?: string;
+  prediction?: {
+    text?: string;
+    label?: string;
+    confidence?: number;
+  };
+  dataset_id?: string | null;
 }
 
 export const MainLayout = () => {
