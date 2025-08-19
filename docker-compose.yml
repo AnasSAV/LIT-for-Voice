@@ -1,0 +1,18 @@
+services:
+  redis:
+    image: redis:7.2-alpine
+    command: redis-server --save 900 1 --save 300 10 --save 60 10000 --appendonly no
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  redis_data:

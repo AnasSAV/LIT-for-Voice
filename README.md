@@ -1,83 +1,245 @@
-# LIT for Voice - Learning Interpretability Tool for Audio Models
+# 🎤 LIT for Voice - Learning Interpretability Tool for Audio Models
 
-## Introduction
+<div align="center">
+  <p>
+    <a href="#">
+      <img width="300" src="Frontend/public/lit_web.png" alt="LIT for Voice">
+    </a>
+  </p>
+  <p>
+    <a href="#">
+      <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+    </a>
+    <a href="#">
+      <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python 3.9+">
+    </a>
+    <a href="#">
+      <img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen" alt="Node.js">
+    </a>
+  </p>
+</div>
 
-Interpreting how deep learning models make decisions is crucial, especially in high-stakes applications like speech recognition, emotion detection, and speaker identification. While the Learning Interpretability Tool (LIT) enables exploration of text and tabular models, there's a lack of equivalent tools for voice-based models. Voice data poses additional challenges due to its temporal nature and multi-modal representations (e.g., waveform, spectrogram).
+## 🎯 Introduction
 
-This project aims to extend the interpretability paradigm to audio, empowering researchers and developers to analyze and debug speech models with greater transparency. LIT for Voice provides an interactive web-based interface for exploring audio models through various visualization techniques, attention mechanisms, and perturbation analyses.
+LIT for Voice is an open-source toolkit designed to bring interpretability to audio machine learning models. In the rapidly evolving field of speech and audio processing, understanding model decisions is as crucial as model performance. This tool provides an interactive, web-based interface to explore, analyze, and interpret audio models with unprecedented clarity.
 
-## Features
+### Why LIT for Voice?
 
-- **Audio Data Management**: Upload and manage audio datasets with metadata
-- **Waveform Visualization**: Interactive waveform viewer with playback controls
-- **Model Prediction Analysis**: Examine model predictions and confidence scores
-- **Attention Visualization**: Explore attention patterns in transformer-based audio models
-- **Embedding Analysis**: Visualize high-dimensional audio embeddings in 2D/3D space
-- **Saliency Mapping**: Identify important regions in audio input using gradient-based methods
-- **Perturbation Tools**: Apply various audio perturbations to test model robustness
-- **Interactive Dashboard**: Comprehensive interface for exploring model behavior
+- **Temporal Understanding**: Audio data's sequential nature requires specialized visualization and analysis tools
+- **Multi-modal Analysis**: Simultaneously view waveforms, spectrograms, and model internals
+- **Model Debugging**: Identify failure modes and biases in audio models
+- **Research Acceleration**: Speed up model development with intuitive visual feedback
 
-## Tech Stack
+## ✨ Features
 
-**Frontend:**
+### 🔍 Model Analysis
 
-- React 18 + TypeScript + Vite
-- Tailwind CSS + shadcn/ui components (Radix UI)
-- TanStack Query for state management and API calls
-- Plotly.js and Recharts for data visualization
-- WaveSurfer.js for audio waveform visualization
-- React Router for navigation
-- Vite with hot module replacement
+- **Prediction Inspection**: Dive into model outputs with confidence scores and alternative predictions
+- **Attention Visualization**: Explore self-attention patterns in transformer architectures
+- **Saliency Maps**: Identify which parts of the audio most influence model decisions
 
-**Backend:**
+### 🎧 Audio Tools
 
-- FastAPI + Python
-- Redis for session management and queue operations
-- PyTorch for ML model inference
-- Librosa for audio processing
-- Pydantic for data validation
-- pytest for testing
+- **Interactive Waveform**: Zoom, pan, and play audio with synchronized visualizations
+- **Multi-format Support**: Load WAV, MP3, and other common audio formats
+- **Audio Augmentation**: Apply various transformations to test model robustness
 
-## Project Structure
+### 📊 Visualization
+
+- **Embedding Projections**: Visualize high-dimensional audio representations in 2D/3D space
+- **Time-aligned Views**: Correlate model behavior with specific audio segments
+- **Custom Layouts**: Arrange and save analysis views for different workflows
+
+### 🛠️ Technical Features
+
+- **Model-Agnostic**: Works with any PyTorch-based audio model
+- **Real-time Interaction**: Immediate feedback on model behavior
+- **Extensible Architecture**: Easily add new analysis methods and visualizations
+
+## 🚀 Tech Stack
+
+### Frontend
+
+| Technology               | Purpose                                   |
+| ------------------------ | ----------------------------------------- |
+| React 18 + TypeScript    | Core UI framework with type safety        |
+| Vite                     | Fast development server and build tool    |
+| Tailwind CSS + shadcn/ui | Styling and accessible components         |
+| TanStack Query           | Server state management and data fetching |
+| WaveSurfer.js            | Audio waveform visualization and playback |
+| Plotly.js & Recharts     | Interactive data visualizations           |
+| React Router             | Client-side routing                       |
+| Zod                      | Runtime type validation                   |
+
+### Backend
+
+| Technology | Purpose                                 |
+| ---------- | --------------------------------------- |
+| FastAPI    | High-performance API framework          |
+| PyTorch    | Deep learning model inference           |
+| Librosa    | Audio feature extraction and processing |
+| Redis      | Caching and job queue                   |
+| Pydantic   | Data validation and settings management |
+| SQLAlchemy | Database ORM                            |
+| pytest     | Testing framework                       |
+
+## 📁 Project Structure
 
 ```
 LIT-for-Voice/
 ├── Frontend/                    # React TypeScript frontend
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── analysis/        # Perturbation and analysis tools
-│   │   │   ├── audio/          # Audio-related components
-│   │   │   ├── layout/         # Layout components (MainLayout, Toolbar)
-│   │   │   ├── panels/         # Main dashboard panels
-│   │   │   ├── ui/             # Reusable shadcn/ui components
-│   │   │   └── visualization/  # Data visualization components
+│   │   ├── components/         # Reusable UI components
+│   │   │   ├── analysis/       # Model analysis tools
+│   │   │   ├── audio/          # Audio visualization components
+│   │   │   ├── layout/         # Layout components
+│   │   │   ├── panels/         # Main application panels
+│   │   │   └── ui/             # Base UI components
 │   │   ├── hooks/              # Custom React hooks
 │   │   ├── lib/                # Utility functions
-│   │   └── pages/              # Page components
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── tailwind.config.ts
-├── Backend/                     # FastAPI Python backend
+│   │   │   └── api/            # API client and types
+│   │   └── pages/              # Application routes
+│   └── public/                 # Static assets
+│
+├── Backend/                     # FastAPI backend
 │   ├── app/
-│   │   ├── api/
-│   │   │   └── routes/         # API route handlers
-│   │   │       ├── session.py   # Session management
-│   │   │       ├── results.py   # Results caching
-│   │   │       ├── health.py    # Health checks
-│   │   │       └── datasets.py  # Dataset browsing & file serving
-│   │   ├── core/               # Core functionality
-│   │   │   ├── redis.py        # Redis client
-│   │   │   ├── session.py      # Session middleware
-│   │   │   └── settings.py     # App settings
+│   │   ├── api/                # API endpoints
+│   │   ├── core/               # Core application logic
+│   │   ├── models/             # Database models
 │   │   ├── services/           # Business logic
-│   │   │   └── queue_service.py # Queue management
-│   │   └── main.py             # FastAPI application
-│   ├── tests/                  # Backend tests
-│   ├── requirements.txt
-│   ├── docker-compose.yml
-│   └── pytest.ini
-├── README.md
+│   │   └── utils/              # Utility functions
+│   ├── data/                   # Dataset storage
+│   ├── tests/                  # Test suite
+│   └── scripts/                # Utility scripts
+│
+└── docs/                       # Documentation
+    ├── api/                    # API documentation
+    └── guides/                 # User and developer guides
 ```
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Python 3.9+
+- Redis
+- FFmpeg
+
+### Installation
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/yourusername/LIT-for-Voice.git
+   cd LIT-for-Voice
+   ```
+
+2. **Set up the backend**
+
+   ```cmd
+   :: Create and activate virtual environment (Windows cmd)
+   cd Backend
+   python -m venv .venv
+   .venv\Scripts\activate
+   python -m pip install --upgrade pip
+
+   # Install dependencies
+   pip install -r requirements.txt
+   ```
+
+   Or with PowerShell:
+
+   ```powershell
+   cd Backend
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+
+3. **Set up the frontend**
+
+   ```bash
+   cd Frontend
+   npm install
+   ```
+
+4. **Optional: Configure environment variables (.env)**
+   The backend reads environment variables and a local `.env` (via Pydantic Settings). You generally don't need a `.env` for local dev. To override defaults, create `Backend/.env` with, for example:
+   ```env
+   # Backend/.env
+   REDIS_URL=redis://localhost:6379/0
+   ```
+
+### Running the Application
+
+1. **Start Redis**
+
+   ```bash
+   # Using Docker Compose (recommended) - run from repo root
+   docker compose up -d
+
+   # Or start your local Redis service manually
+   # Linux/macOS:
+   #   redis-server
+   # Windows (service/WSL/Docker Desktop):
+   #   Use Docker Compose above or install Redis for Windows
+   ```
+
+2. **Start the backend server**
+
+   ```bash
+   cd Backend
+   uvicorn app.main:app --reload
+   ```
+
+3. **Start the frontend development server**
+
+   ```bash
+   cd Frontend
+   npm run dev
+   ```
+
+4. **Access the application**
+   Open your browser and navigate to `http://localhost:3000`
+
+### Docker: Redis only
+
+A minimal `docker-compose.yml` is provided at the repo root to run Redis with RDB snapshots (AOF disabled):
+
+```bash
+# Start Redis (detached)
+docker compose up -d
+
+# Stop services
+docker compose down
+
+# Stop and remove data volume
+docker compose down -v
+```
+
+Set `REDIS_URL` accordingly:
+
+- Backend outside Docker: `REDIS_URL=redis://localhost:6379/0`
+- If you later add the backend as a Compose service: `redis://redis:6379/0`
+
+## 📚 Documentation
+
+For detailed documentation, please visit our [documentation site](https://your-docs-site.com).
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📬 Contact
+
+For questions or feedback, please open an issue or contact [your-email@example.com](mailto:your-email@example.com).
+
 
 ## How to Run (Windows)
 
@@ -93,7 +255,7 @@ Run these in a terminal from the `Backend/` directory.
 python -m venv .venv
 .\.venv\Scripts\activate
 python -m pip install --upgrade pip
-```
+````
 
 2. Install dependencies
 
@@ -105,7 +267,7 @@ Note: `torch` is a large dependency. Ensure your Python version is supported and
 
 3. Start Redis
 
-- Using Docker (recommended): ensure Docker Desktop is running, then from `Backend/`:
+- Using Docker (recommended): ensure Docker Desktop is running, then from the repository root:
 
 ```cmd
 docker compose up -d
@@ -161,7 +323,7 @@ VITE_API_BASE=http://<your-backend-host>:<port>
 npm run dev
 ```
 
-Vite will serve the app at `http://localhost:8080`. The backend CORS in `Backend/app/main.py` already allows `http://localhost:8080` and `http://localhost:5173`.
+Vite will serve the app at `http://localhost:5173` by default. The backend CORS in `Backend/app/main.py` already allows `http://localhost:5173`.
 
 ### 3) Run tests (optional)
 
@@ -211,7 +373,6 @@ pytest -q
   - `COOKIE_SECURE` (default: `False`)
   - `COOKIE_SAMESITE` (default: `lax`)
   - `COOKIE_DOMAIN` (default: empty)
-  
 
 - **Frontend API base URL** is defined in `Frontend/src/lib/api/datasets.ts`:
   - Defaults to `http://localhost:8000`.
@@ -227,11 +388,12 @@ For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.
 ### Dataset Browsing
 
 #### List Dataset Files
+
 - `GET /datasets/files`
   - Query Params:
     - `limit`: Number of files to return (default: 50)
     - `offset`: Pagination offset (default: 0)
-  - Response: 
+  - Response:
     ```json
     {
       "files": [
@@ -257,6 +419,7 @@ For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.
   - Uses Redis caching with automatic invalidation when dataset changes
 
 #### Dataset Summary
+
 - `GET /datasets/summary`
   - Returns dataset statistics
   - Response:
@@ -264,12 +427,13 @@ For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.
     {
       "total": 100,
       "total_bytes": 12345678,
-      "label_counts": {"happy": 30, "sad": 20, "neutral": 50},
-      "meta_constants": {"modality": "audio-only", "vocal_channel": "speech"}
+      "label_counts": { "happy": 30, "sad": 20, "neutral": 50 },
+      "meta_constants": { "modality": "audio-only", "vocal_channel": "speech" }
     }
     ```
 
 #### Rebuild Dataset Index
+
 - `POST /datasets/reindex`
   - Body: `{"id": "dataset_id"}`
   - Forces a rebuild of the dataset manifest
@@ -278,11 +442,13 @@ For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.
 ### Results Caching
 
 #### Get Single Result
+
 - `GET /results/{model}/{h}`
   - Fetches a single cached result
   - `h` is the unique hash from the dataset file entry
 
 #### Batch Results
+
 - `POST /results/{model}/batch`
   - Body: `{"hashes": ["h1", "h2", ...]}`
   - Fetches multiple results in one request
@@ -291,6 +457,7 @@ For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.
 ### Caching Behavior
 
 - **Manifest Caching**:
+
   - Redis keys:
     - `dataset:{id}:manifest`: File metadata
     - `dataset:{id}:summary`: Dataset statistics

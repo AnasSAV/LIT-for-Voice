@@ -15,6 +15,5 @@ python-dotenv==1.0.0
 pandas==2.2.3
 numpy==1.26.4
 kaggle>=1.7.4.5
-fakeredis==2.23.2
 transformers>=4.30.0
 soundfile>=0.12.0
