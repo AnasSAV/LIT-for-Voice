@@ -11,14 +11,48 @@ import { Badge } from "@/components/ui/badge";
 import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
 import { listDatasets, getActiveDataset, setActiveDataset } from "@/lib/api/datasets";
 
-export const Toolbar = () => {
-  const [model, setModel] = useState("whisper-base");
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
+interface ToolbarProps {
+  apiData: any;
+  setApiData: (data: any) => void;
+  selectedFile?: UploadedFile | null;
+  uploadedFiles?: UploadedFile[];
+  onFileSelect?: (file: UploadedFile) => void;
+  model: string;
+  setModel: (model: string) => void;
+}
+
+const modelDatasetMap: Record<string, string[]> = {
+  "whisper-base": ["common-voice", "custom"],
+  "whisper-large": ["common-voice", "custom"],
+  "wav2vec2": ["ravdess", "custom"],
+};
+
+export const Toolbar = ({
+  apiData,
+  setApiData,
+  selectedFile,
+  uploadedFiles = [],
+  onFileSelect,
+  model,
+  setModel,
+}: ToolbarProps) => {
   // Dataset UI value is one of: "ravdess" | "common-voice" | "custom"
   const [dataset, setDataset] = useState("ravdess");
   const [hasRavdessSubset, setHasRavdessSubset] = useState(false);
   const [hasRavdessFull, setHasRavdessFull] = useState(false);
   const [hasCommonVoice, setHasCommonVoice] = useState(false);
 
+  // Load available datasets on component mount
   useEffect(() => {
     (async () => {
       try {
@@ -41,25 +75,115 @@ export const Toolbar = () => {
     })();
   }, []);
 
-const onModelChange = async (value: string) => {
-  setModel(value);
+  const onModelChange = async (value: string) => {
+    setModel(value);
   console.log("Model selected:", value);
 
   try {
     const res = await fetch(`http://localhost:8000/inferences/run?model=${value}`);
+=======
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
+interface ToolbarProps {
+  apiData: any;
+  setApiData: (data: any) => void;
+  selectedFile?: UploadedFile | null;
+  uploadedFiles?: UploadedFile[];
+  onFileSelect?: (file: UploadedFile) => void;
+  model: string;
+  setModel: (model: string) => void; // important for lifting state
+}
+const modelDatasetMap: Record<string, string[]> = {
+  "whisper-base": ["common-voice", "custom"],
+  "whisper-large": ["common-voice", "custom"],
+  "wav2vec2": ["ravdess", "custom"],
+};
+
+const defaultDatasetForModel: Record<string, string> = {
+  "whisper-base": "common-voice",
+  "whisper-large": "common-voice",
+  "wav2vec2": "ravdess",
+};
+
+;
+
+export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect,model,setModel}: ToolbarProps) => {
+  const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
+
+let abortController: AbortController | null = null;
+const onModelChange = async (value: string) => {
+  setModel(value);
+    if (abortController) {
+    abortController.abort();
+  }
+  abortController = new AbortController();
+  
+  // Update dataset based on model
+  const allowedDatasets = modelDatasetMap[value] || ["custom"];
+  const defaultDataset = defaultDatasetForModel[value] || "custom";
+
+  if (!allowedDatasets.includes(dataset)) {
+    setDataset(defaultDataset);
+  }
+
+  console.log("Model selected:", value);
+
+  try {
+    let url = `http://localhost:8000/inferences/run?model=${value}`;
+    
+    // If there's a selected file, include it in the API call
+    if (selectedFile) {
+      url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
+      console.log("Using uploaded file:", selectedFile.filename);
+    } else {
+      console.log("Using default sample file");
+    }
+    
+    const res = await fetch(url);
+>>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
     if (!res.ok) {
       throw new Error(`API error: ${res.status}`);
     }
     const data = await res.json();
+<<<<<<< HEAD
+=======
+    setApiData(data);
+>>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
     console.log("API response:", data);
   } catch (error) {
     console.error("Failed to run inference:", error);
   }
 };
 
+<<<<<<< HEAD
   const onDatasetChange = async (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
+    
+    // Handle dataset selection based on the UI value
+    try {
+      if (value === "ravdess") {
+        // Default to subset if available, otherwise use full
+        const targetDataset = hasRavdessSubset ? "ravdess_subset" : "ravdess_full";
+        await setActiveDataset(targetDataset);
+      } else if (value === "common-voice") {
+        await setActiveDataset("common_voice_en");
+      } else if (value === "custom") {
+        // Handle custom dataset selection
+        // This could be extended to show a file picker or other UI
+        console.log("Custom dataset selected");
+      }
+    } catch (e) {
+      console.error("Failed to set active dataset", e);
+    }
 
     try {
       if (value === "ravdess") {
@@ -81,6 +205,14 @@ const onModelChange = async (value: string) => {
 
   // Dataset options are independent of model
   const availableDatasetOptions = ["ravdess", "common-voice", "custom"];
+=======
+  const onDatasetChange = (value: string) => {
+    setDataset(value);
+    console.log("Dataset selected:", value);
+  };
+
+  // Get datasets allowed for current model
+  const allowedDatasets = modelDatasetMap[model] || ["custom"];
 
   return (
     <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
@@ -115,7 +247,11 @@ const onModelChange = async (value: string) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+<<<<<<< HEAD
                 {availableDatasetOptions.map((ds) => {
+=======
+                {allowedDatasets.map((ds) => {
+>>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
                   let label = ds;
                   if (ds === "common-voice") label = "Common Voice";
                   else if (ds === "ravdess") label = "RAVDESS";
@@ -129,6 +265,32 @@ const onModelChange = async (value: string) => {
               </SelectContent>
             </Select>
           </div>
+
+          {uploadedFiles && uploadedFiles.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">File:</span>
+              <Select 
+                value={selectedFile?.file_id || ""} 
+                onValueChange={(fileId) => {
+                  const file = uploadedFiles.find(f => f.file_id === fileId);
+                  if (file && onFileSelect) {
+                    onFileSelect(file);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-48 h-8">
+                  <SelectValue placeholder="Select uploaded file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uploadedFiles.map((file) => (
+                    <SelectItem key={file.file_id} value={file.file_id}>
+                      {file.filename}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -154,6 +316,28 @@ const onModelChange = async (value: string) => {
           Export
         </Button>
 
+<<<<<<< HEAD
+=======
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-8"
+          onClick={async () => {
+            try {
+              const response = await fetch('http://localhost:8000/upload/test');
+              const data = await response.json();
+              console.log('Backend test:', data);
+              alert(`Backend is ${response.ok ? 'working' : 'not working'}: ${JSON.stringify(data)}`);
+            } catch (error) {
+              console.error('Backend test failed:', error);
+              alert(`Backend test failed: ${error.message}`);
+            }
+          }}
+        >
+          Test Backend
+        </Button>
+
+>>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
         <Button variant="outline" size="sm" className="h-8">
           <Settings className="h-4 w-4" />
         </Button>
