@@ -156,6 +156,7 @@ export const AudioDatasetPanel = ({
               searchQuery={searchQuery}
               apiData={apiData}
               uploadedFiles={uploadedFiles}
+              model={model}
               onFilePlay={(file) => {
                 console.log('AudioDatasetPanel - File selected for play:', file);
                 console.log('AudioDatasetPanel - onFileSelect callback exists:', !!onFileSelect);

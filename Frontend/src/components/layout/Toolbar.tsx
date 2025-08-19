@@ -62,9 +62,11 @@ export const Toolbar = ({
   setModel,
 }: ToolbarProps) => {
   // Dataset UI value is one of: "ravdess" | "common-voice" | "custom"
-  const [dataset, setDataset] = useState("ravdess");
+  const [dataset, setDataset] = useState(() => {
+    const allowed = (model in modelDatasetMap ? modelDatasetMap[model] : ["custom"]) as string[];
+    return allowed[0] ?? "custom";
+  });
   const [hasRavdessSubset, setHasRavdessSubset] = useState(false);
-  const [hasRavdessFull, setHasRavdessFull] = useState(false);
   const [hasCommonVoice, setHasCommonVoice] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -73,17 +75,43 @@ export const Toolbar = ({
     const loadDatasets = async () => {
       try {
         const datasets = await listDatasets() as DatasetInfo[];
-        setHasRavdessSubset(!!datasets.find(d => d.id === "ravdess_subset" && d.available));
-        setHasRavdessFull(!!datasets.find(d => d.id === "ravdess_full" && d.available));
-        setHasCommonVoice(!!datasets.find(d => d.id === "common_voice_en" && d.available));
+        const hasSubset = !!datasets.find(d => d.id === "ravdess_subset" && d.available);
+        const hasCv = !!datasets.find(d => d.id === "common_voice_en" && d.available);
+        setHasRavdessSubset(hasSubset);
+        setHasCommonVoice(hasCv);
 
         const active = await getActiveDataset();
-        if (active === "ravdess_subset" || active === "ravdess_full") {
-          setDataset("ravdess");
-        } else if (active === "common_voice_en") {
-          setDataset("common-voice");
-        } else if (active) {
-          setDataset("custom");
+        const activeUi = active === "ravdess_subset"
+          ? "ravdess"
+          : active === "common_voice_en"
+            ? "common-voice"
+            : active
+              ? "custom"
+              : null;
+
+        const allowed = (model in modelDatasetMap ? modelDatasetMap[model] : ["custom"]) as string[];
+        if (activeUi && allowed.includes(activeUi)) {
+          setDataset(activeUi);
+          // Broadcast current dataset to listeners
+          window.dispatchEvent(new CustomEvent("dataset-changed", { detail: { uiDataset: activeUi } }));
+        } else {
+          // Active dataset not compatible with current model; switch to a valid default
+          const target = allowed[0] ?? "custom";
+          setDataset(target);
+          try {
+            if (target === "ravdess") {
+              if (hasSubset) {
+                await setActiveDataset("ravdess_subset");
+              }
+            } else if (target === "common-voice") {
+              if (hasCv) await setActiveDataset("common_voice_en");
+            } else {
+              // custom: leave backend active as-is
+            }
+            window.dispatchEvent(new CustomEvent("dataset-changed", { detail: { uiDataset: target } }));
+          } catch (e) {
+            console.error("Failed to set dataset on init", e);
+          }
         }
       } catch (e) {
         console.warn("Dataset API not available", e);
@@ -91,11 +119,30 @@ export const Toolbar = ({
     };
 
     loadDatasets();
-  }, []);
+  }, [model]);
 
   const onModelChange = async (value: string) => {
     setModel(value);
     console.log("Model selected:", value);
+    // Ensure dataset matches the selected model
+    const allowed = (value in modelDatasetMap ? modelDatasetMap[value] : ["custom"]) as string[];
+    if (!allowed.includes(dataset)) {
+      const target = allowed[0] ?? "custom";
+      setDataset(target);
+      try {
+        if (target === "ravdess") {
+          if (hasRavdessSubset) await setActiveDataset("ravdess_subset");
+        } else if (target === "common-voice") {
+          if (hasCommonVoice) await setActiveDataset("common_voice_en");
+        } else {
+          // custom: leave backend active as-is
+        }
+        // Notify listeners
+        window.dispatchEvent(new CustomEvent("dataset-changed", { detail: { uiDataset: target } }));
+      } catch (e) {
+        console.error("Failed to switch dataset for model", e);
+      }
+    }
     
     // Abort any ongoing requests
     if (abortControllerRef.current) {
@@ -145,9 +192,10 @@ export const Toolbar = ({
     
     try {
       if (value === "ravdess") {
-        // Default to subset if available, otherwise use full
-        const targetDataset = hasRavdessSubset ? "ravdess_subset" : "ravdess_full";
-        await setActiveDataset(targetDataset);
+        // Only use subset
+        if (hasRavdessSubset) {
+          await setActiveDataset("ravdess_subset");
+        }
       } else if (value === "common-voice") {
         await setActiveDataset("common_voice_en");
       } else if (value === "custom") {
@@ -156,7 +204,7 @@ export const Toolbar = ({
       }
       
       // Notify listeners to reload dataset files for any change
-      window.dispatchEvent(new Event("dataset-changed"));
+      window.dispatchEvent(new CustomEvent("dataset-changed", { detail: { uiDataset: value } }));
     } catch (e) {
       console.error("Failed to set active dataset", e);
     }

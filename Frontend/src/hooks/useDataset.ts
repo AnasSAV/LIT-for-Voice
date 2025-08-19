@@ -36,7 +36,17 @@ export function useDataset(): UseDatasetReturn {
   }, [selectedFile]);
 
   useEffect(() => {
+    // Initial load
     loadFiles();
+
+    // Refresh when the active dataset changes (emitted by Toolbar)
+    const handler = () => {
+      loadFiles();
+    };
+    window.addEventListener('dataset-changed', handler);
+    return () => {
+      window.removeEventListener('dataset-changed', handler);
+    };
   }, [loadFiles]);
 
   const selectFile = useCallback((file: DatasetFile | null) => {

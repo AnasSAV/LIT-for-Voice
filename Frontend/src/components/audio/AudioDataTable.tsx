@@ -69,6 +69,7 @@ interface AudioDataTableProps {
   apiData: ApiData | null;
   uploadedFiles?: UploadedFile[];
   onFilePlay?: (file: UploadedFile) => void;
+  model?: string | null;
 }
 
 async function fetchRowsWithActive(): Promise<{ rows: AudioData[]; active: string | null }> {
@@ -95,21 +96,37 @@ export const AudioDataTable = ({
   apiData,
   uploadedFiles = [],
   onFilePlay,
+  model,
 }: AudioDataTableProps) => {
   const [data, setData] = useState<AudioData[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
+  const [uiDataset, setUiDataset] = useState<string | null>(null); // 'ravdess' | 'common-voice' | 'custom'
   const columnHelper = createColumnHelper<AudioData>();
 
-  // Load data from API on component mount
+  // Load data from API on component mount and when dataset changes
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       setLoading(true);
       try {
+        // If UI dataset is custom, do not render any server dataset
+        if (uiDataset === 'custom') {
+          if (mounted) {
+            setData([]);
+            setActiveDatasetId(null);
+          }
+          return;
+        }
         const { rows, active } = await fetchRowsWithActive();
         if (mounted) {
-          setData(rows);
+          // Gate RAVDESS visibility: only show when model is wav2vec2 (subset only)
+          const isRavdessActive = active === "ravdess_subset";
+          if (isRavdessActive && model !== "wav2vec2") {
+            setData([]);
+          } else {
+            setData(rows);
+          }
           setActiveDatasetId(active);
         }
       } catch (e) {
@@ -122,14 +139,21 @@ export const AudioDataTable = ({
 
     load();
 
-    const onChanged = () => load();
-    window.addEventListener("dataset-changed", onChanged);
+    const onChanged = (ev: Event) => {
+      // Update UI dataset hint from toolbar if provided
+      const detail = (ev as CustomEvent).detail as { uiDataset?: string } | undefined;
+      if (detail && typeof detail.uiDataset === 'string') {
+        setUiDataset(detail.uiDataset);
+      }
+      load();
+    };
+    window.addEventListener("dataset-changed", onChanged as EventListener);
     
     return () => {
       mounted = false;
-      window.removeEventListener("dataset-changed", onChanged);
+      window.removeEventListener("dataset-changed", onChanged as EventListener);
     };
-  }, []);
+  }, [model, uiDataset]);
 
   // Combine API data with uploaded files
   const tableData = useMemo(() => {
