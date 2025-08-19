@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Select,
   SelectContent,
@@ -21,9 +21,24 @@ interface UploadedFile {
   sample_rate?: number;
 }
 
+// Define a more specific type for the API response if possible
+// For now, we'll use a generic type that matches the expected structure
+interface ApiData {
+  transcription?: string;
+  error?: string;
+  // Add other expected fields from your API response
+  [key: string]: unknown; // This is needed for dynamic properties
+}
+
+interface DatasetInfo {
+  id: string;
+  available: boolean;
+  [key: string]: unknown;
+}
+
 interface ToolbarProps {
-  apiData: any;
-  setApiData: (data: any) => void;
+  apiData: ApiData | null;
+  setApiData: (data: ApiData | null) => void;
   selectedFile?: UploadedFile | null;
   uploadedFiles?: UploadedFile[];
   onFileSelect?: (file: UploadedFile) => void;
@@ -51,15 +66,16 @@ export const Toolbar = ({
   const [hasRavdessSubset, setHasRavdessSubset] = useState(false);
   const [hasRavdessFull, setHasRavdessFull] = useState(false);
   const [hasCommonVoice, setHasCommonVoice] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load available datasets on component mount
   useEffect(() => {
-    (async () => {
+    const loadDatasets = async () => {
       try {
-        const ds = await listDatasets();
-        setHasRavdessSubset(!!ds.find((d) => d.id === "ravdess_subset" && d.available));
-        setHasRavdessFull(!!ds.find((d) => d.id === "ravdess_full" && d.available));
-        setHasCommonVoice(!!ds.find((d) => d.id === "common_voice_en" && d.available));
+        const datasets = await listDatasets() as DatasetInfo[];
+        setHasRavdessSubset(!!datasets.find(d => d.id === "ravdess_subset" && d.available));
+        setHasRavdessFull(!!datasets.find(d => d.id === "ravdess_full" && d.available));
+        setHasCommonVoice(!!datasets.find(d => d.id === "common_voice_en" && d.available));
 
         const active = await getActiveDataset();
         if (active === "ravdess_subset" || active === "ravdess_full") {
@@ -72,103 +88,61 @@ export const Toolbar = ({
       } catch (e) {
         console.warn("Dataset API not available", e);
       }
-    })();
+    };
+
+    loadDatasets();
   }, []);
 
   const onModelChange = async (value: string) => {
     setModel(value);
-  console.log("Model selected:", value);
-
-  try {
-    const res = await fetch(`http://localhost:8000/inferences/run?model=${value}`);
-=======
-interface UploadedFile {
-  file_id: string;
-  filename: string;
-  file_path: string;
-  message: string;
-  size?: number;
-  duration?: number;
-  sample_rate?: number;
-}
-
-interface ToolbarProps {
-  apiData: any;
-  setApiData: (data: any) => void;
-  selectedFile?: UploadedFile | null;
-  uploadedFiles?: UploadedFile[];
-  onFileSelect?: (file: UploadedFile) => void;
-  model: string;
-  setModel: (model: string) => void; // important for lifting state
-}
-const modelDatasetMap: Record<string, string[]> = {
-  "whisper-base": ["common-voice", "custom"],
-  "whisper-large": ["common-voice", "custom"],
-  "wav2vec2": ["ravdess", "custom"],
-};
-
-const defaultDatasetForModel: Record<string, string> = {
-  "whisper-base": "common-voice",
-  "whisper-large": "common-voice",
-  "wav2vec2": "ravdess",
-};
-
-;
-
-export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect,model,setModel}: ToolbarProps) => {
-  const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
-
-let abortController: AbortController | null = null;
-const onModelChange = async (value: string) => {
-  setModel(value);
-    if (abortController) {
-    abortController.abort();
-  }
-  abortController = new AbortController();
-  
-  // Update dataset based on model
-  const allowedDatasets = modelDatasetMap[value] || ["custom"];
-  const defaultDataset = defaultDatasetForModel[value] || "custom";
-
-  if (!allowedDatasets.includes(dataset)) {
-    setDataset(defaultDataset);
-  }
-
-  console.log("Model selected:", value);
-
-  try {
-    let url = `http://localhost:8000/inferences/run?model=${value}`;
+    console.log("Model selected:", value);
     
-    // If there's a selected file, include it in the API call
-    if (selectedFile) {
-      url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
-      console.log("Using uploaded file:", selectedFile.filename);
-    } else {
-      console.log("Using default sample file");
+    // Abort any ongoing requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
     
-    const res = await fetch(url);
->>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
+    // Create a new abort controller for this request
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    
+    try {
+      // Reset API data when model changes
+      setApiData(null);
+      
+      // If there's a selected file, run inference with the new model
+      if (selectedFile) {
+        const params = new URLSearchParams({
+          model: value,
+          filename: selectedFile.filename
+        });
+        
+        const url = `http://localhost:8000/api/transcribe?${params.toString()}`;
+        const response = await fetch(url, {
+          signal: controller.signal
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+        
+        const data: ApiData = await response.json();
+        setApiData(data);
+        console.log("API response:", data);
+      }
+    } catch (error) {
+      // Don't log aborted requests as errors
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error("Failed to run inference:", error);
+        // Optionally update UI to show error to user
+      }
     }
-    const data = await res.json();
-<<<<<<< HEAD
-=======
-    setApiData(data);
->>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
-    console.log("API response:", data);
-  } catch (error) {
-    console.error("Failed to run inference:", error);
-  }
-};
+  };
 
-<<<<<<< HEAD
   const onDatasetChange = async (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
     
-    // Handle dataset selection based on the UI value
     try {
       if (value === "ravdess") {
         // Default to subset if available, otherwise use full
@@ -178,42 +152,19 @@ const onModelChange = async (value: string) => {
         await setActiveDataset("common_voice_en");
       } else if (value === "custom") {
         // Handle custom dataset selection
-        // This could be extended to show a file picker or other UI
         console.log("Custom dataset selected");
       }
-    } catch (e) {
-      console.error("Failed to set active dataset", e);
-    }
-
-    try {
-      if (value === "ravdess") {
-        const id = hasRavdessSubset ? "ravdess_subset" : hasRavdessFull ? "ravdess_full" : "ravdess_subset";
-        await setActiveDataset(id);
-      } else if (value === "common-voice") {
-        // Set Common Voice even if not installed; backend will return empty lists
-        await setActiveDataset("common_voice_en");
-      } else {
-        // For custom, we currently don't persist a specific id
-        // Clear selection by setting to a non-existing id could be added in backend if needed
-      }
+      
       // Notify listeners to reload dataset files for any change
       window.dispatchEvent(new Event("dataset-changed"));
     } catch (e) {
-      console.error("Failed to set active dataset:", e);
+      console.error("Failed to set active dataset", e);
     }
   };
 
-  // Dataset options are independent of model
-  const availableDatasetOptions = ["ravdess", "common-voice", "custom"];
-=======
-  const onDatasetChange = (value: string) => {
-    setDataset(value);
-    console.log("Dataset selected:", value);
-  };
-
-  // Get datasets allowed for current model
-  const allowedDatasets = modelDatasetMap[model] || ["custom"];
-
+  // Get datasets allowed for current model with type safety
+  const allowedDatasets = (model in modelDatasetMap ? modelDatasetMap[model] : ["custom"]) as string[];
+  
   return (
     <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
       {/* Left side: Model and Dataset selectors */}
@@ -247,11 +198,7 @@ const onModelChange = async (value: string) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-<<<<<<< HEAD
-                {availableDatasetOptions.map((ds) => {
-=======
                 {allowedDatasets.map((ds) => {
->>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
                   let label = ds;
                   if (ds === "common-voice") label = "Common Voice";
                   else if (ds === "ravdess") label = "RAVDESS";
@@ -272,7 +219,7 @@ const onModelChange = async (value: string) => {
               <Select 
                 value={selectedFile?.file_id || ""} 
                 onValueChange={(fileId) => {
-                  const file = uploadedFiles.find(f => f.file_id === fileId);
+                  const file = (uploadedFiles || []).find((f: UploadedFile) => f.file_id === fileId);
                   if (file && onFileSelect) {
                     onFileSelect(file);
                   }
@@ -282,7 +229,7 @@ const onModelChange = async (value: string) => {
                   <SelectValue placeholder="Select uploaded file" />
                 </SelectTrigger>
                 <SelectContent>
-                  {uploadedFiles.map((file) => (
+                  {uploadedFiles.map((file: UploadedFile) => (
                     <SelectItem key={file.file_id} value={file.file_id}>
                       {file.filename}
                     </SelectItem>
@@ -316,8 +263,6 @@ const onModelChange = async (value: string) => {
           Export
         </Button>
 
-<<<<<<< HEAD
-=======
         <Button 
           variant="outline" 
           size="sm" 
@@ -329,15 +274,15 @@ const onModelChange = async (value: string) => {
               console.log('Backend test:', data);
               alert(`Backend is ${response.ok ? 'working' : 'not working'}: ${JSON.stringify(data)}`);
             } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
               console.error('Backend test failed:', error);
-              alert(`Backend test failed: ${error.message}`);
+              alert(`Backend test failed: ${errorMessage}`);
             }
           }}
         >
           Test Backend
         </Button>
 
->>>>>>> f6a55f1124ca672be22712f60d706bedafdb4de7
         <Button variant="outline" size="sm" className="h-8">
           <Settings className="h-4 w-4" />
         </Button>
