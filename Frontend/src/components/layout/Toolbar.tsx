@@ -26,8 +26,9 @@ interface ToolbarProps {
   selectedFile?: UploadedFile | null;
   uploadedFiles?: UploadedFile[];
   onFileSelect?: (file: UploadedFile) => void;
+  model: string;
+  setModel: (model: string) => void; // important for lifting state
 }
-
 const modelDatasetMap: Record<string, string[]> = {
   "whisper-base": ["common-voice", "custom"],
   "whisper-large": ["common-voice", "custom"],
@@ -40,13 +41,19 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect}: ToolbarProps) => {
-  const [model, setModel] = useState("Select");
+;
+
+export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect,model,setModel}: ToolbarProps) => {
   const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
 
+let abortController: AbortController | null = null;
 const onModelChange = async (value: string) => {
   setModel(value);
-
+    if (abortController) {
+    abortController.abort();
+  }
+  abortController = new AbortController();
+  
   // Update dataset based on model
   const allowedDatasets = modelDatasetMap[value] || ["custom"];
   const defaultDataset = defaultDatasetForModel[value] || "custom";

@@ -15,6 +15,7 @@ MODEL_FUNCTIONS = {
 
 @router.get("/inferences/run")
 async def run_inference(model: str, file_path: str = Query(None, description="Path to uploaded audio file")):
+    print("calling infer api")
     func = MODEL_FUNCTIONS.get(model)
 
     if not func:
@@ -37,5 +38,4 @@ async def run_inference(model: str, file_path: str = Query(None, description="Pa
         else:
             prediction = await asyncio.to_thread(func)  # Sync function with default file in thread pool
 
-    print(prediction)
-    return {"prediction": prediction}
+    return prediction

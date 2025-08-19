@@ -33,13 +33,14 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
         chunk_length_s=chunk_length_s,
         batch_size=batch_size,
     )
-    return result
+    
+    return result["text"]
 
-def transcribe_whisper_large(audio_file_path="sample1.wav"):
+def transcribe_whisper_large(audio_file_path):
     model_id = "openai/whisper-large-v3"
     return transcribe_whisper(model_id, audio_file_path)
 
-def transcribe_whisper_base(audio_file_path="sample1.wav"):
+def transcribe_whisper_base(audio_file_path):
     model_id = "openai/whisper-base"
     return transcribe_whisper(model_id, audio_file_path)
 
@@ -61,7 +62,7 @@ def predict_emotion_wave2vec(audio_path):
         print("id2label keys:", list(model.config.id2label.keys()))
     return emotion
 
-def wave2vec(audio_file_path="sample2.mp3"):
+def wave2vec(audio_file_path):
     emotion = predict_emotion_wave2vec(audio_file_path)
     return emotion
 
