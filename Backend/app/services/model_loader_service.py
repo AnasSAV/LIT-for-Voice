@@ -55,16 +55,24 @@ def predict_emotion_wave2vec(audio_path):
     with torch.no_grad():
         outputs = model(inputs.input_values)
         predictions = torch.nn.functional.softmax(outputs.logits.mean(dim=1), dim=-1)  # Average over sequence length
-        predicted_label = torch.argmax(predictions, dim=-1)
-        emotion = model.config.id2label[predicted_label.item()]
-        print("Logits shape:", outputs.logits.shape)
-        print("num_labels in config:", model.config.num_labels)
-        print("id2label keys:", list(model.config.id2label.keys()))
-    return emotion
+        predicted_label_idx = torch.argmax(predictions, dim=-1).item()
+        emotion = model.config.id2label[predicted_label_idx]
+        # Build per-class probability mapping
+        probs_tensor = predictions[0]
+        id2label = model.config.id2label
+        probs = {id2label[i]: float(probs_tensor[i].item()) for i in range(probs_tensor.shape[0])}
+        confidence = float(probs[id2label[predicted_label_idx]])
+    return {
+        "label": emotion,
+        "confidence": confidence,
+        "probs": probs,
+        "model_id": "r-f/wav2vec-english-speech-emotion-recognition",
+        "params": {},
+    }
 
 def wave2vec(audio_file_path):
-    emotion = predict_emotion_wave2vec(audio_file_path)
-    return emotion
+    # Returns a structured dict with label/confidence/probs
+    return predict_emotion_wave2vec(audio_file_path)
 
 
 
