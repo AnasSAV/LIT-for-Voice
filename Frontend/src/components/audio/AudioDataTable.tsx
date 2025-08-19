@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -12,8 +12,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, ChevronLeft, ChevronRight } from "lucide-react";
-import { listDatasetFiles, datasetFileUrl } from "@/lib/api/datasets";
+import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { listDatasetFiles } from "@/lib/api/datasets";
 import { cn } from "@/lib/utils";
 
 interface UploadedFile {
@@ -31,6 +31,7 @@ interface UploadedFile {
   };
   label?: string;
   dataset_id?: string | null;
+  autoplay?: boolean;
 }
 
 interface AudioData {
@@ -97,10 +98,7 @@ export const AudioDataTable = ({
 }: AudioDataTableProps) => {
   const [data, setData] = useState<AudioData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
-  const audioObjectUrlRef = useRef<string | null>(null);
   const columnHelper = createColumnHelper<AudioData>();
 
   // Load data from API on component mount
@@ -130,58 +128,8 @@ export const AudioDataTable = ({
     return () => {
       mounted = false;
       window.removeEventListener("dataset-changed", onChanged);
-      if (audioEl) {
-        audioEl.pause();
-      }
-      if (audioObjectUrlRef.current) {
-        URL.revokeObjectURL(audioObjectUrlRef.current);
-        audioObjectUrlRef.current = null;
-      }
     };
-  }, [audioEl]);
-
-  // Toggle audio playback for a row
-  const togglePlay = useCallback(async (row: AudioData) => {
-    try {
-      // If clicking the currently playing row, toggle pause
-      if (playingId === row.id && audioEl) {
-        if (!audioEl.paused) {
-          audioEl.pause();
-          setPlayingId(null);
-        } else {
-          audioEl.play();
-          setPlayingId(row.id);
-        }
-        return;
-      }
-
-      // Stop any previous audio
-      if (audioEl) {
-        audioEl.pause();
-      }
-
-      // Build URL and fetch with credentials to ensure cookies/session are sent
-      const src = datasetFileUrl(row.relpath, activeDatasetId ?? undefined);
-      if (audioObjectUrlRef.current) {
-        URL.revokeObjectURL(audioObjectUrlRef.current);
-        audioObjectUrlRef.current = null;
-      }
-      const resp = await fetch(src, { credentials: "include" });
-      if (!resp.ok) {
-        throw new Error(`Failed to fetch audio: ${resp.status}`);
-      }
-      const blob = await resp.blob();
-      const objUrl = URL.createObjectURL(blob);
-      audioObjectUrlRef.current = objUrl;
-      const el = new Audio(objUrl);
-      el.addEventListener("ended", () => setPlayingId(null));
-      setAudioEl(el);
-      setPlayingId(row.id);
-      void el.play();
-    } catch (e) {
-      console.warn("Failed to play audio", e);
-    }
-  }, [playingId, audioEl, activeDatasetId]);
+  }, []);
 
   // Combine API data with uploaded files
   const tableData = useMemo(() => {
@@ -230,17 +178,13 @@ export const AudioDataTable = ({
                     prediction: info.row.original.prediction,
                     label: info.row.original.groundTruthLabel,
                     dataset_id: activeDatasetId,
+                    autoplay: true,
                   });
                 }
-                togglePlay(info.row.original);
               }}
-              aria-label={playingId === info.row.original.id ? "Pause" : "Play"}
+              aria-label={"Play"}
             >
-              {playingId === info.row.original.id ? (
-                <Pause className="h-3 w-3" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
+              <Play className="h-3 w-3" />
             </Button>
             <span className="font-mono text-xs">{info.getValue() as string}</span>
           </div>
@@ -288,7 +232,7 @@ export const AudioDataTable = ({
         },
       },
     ],
-    [playingId, togglePlay, onRowSelect, onFilePlay, activeDatasetId]
+    [onRowSelect, onFilePlay, activeDatasetId]
   );
 
   // Initialize table

@@ -24,6 +24,7 @@ interface UploadedFile {
     label?: string;
     confidence?: number;
   };
+  autoplay?: boolean;
 }
 
 interface DatapointEditorPanelProps {
@@ -36,12 +37,27 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const autoplayNextRef = useRef(false);
+  const listenersAttachedRef = useRef(false);
   const handleReady = useCallback((wavesurfer: WaveSurfer) => {
     console.log('WaveformViewer ready callback in DatapointEditorPanel');
     wavesurferRef.current = wavesurfer;
     const d = wavesurfer.getDuration();
     console.log('Duration from WaveSurfer:', d);
     setDuration(d);
+    // Sync UI with WaveSurfer events (attach once)
+    if (!listenersAttachedRef.current) {
+      wavesurfer.on('play', () => setIsPlaying(true));
+      wavesurfer.on('pause', () => setIsPlaying(false));
+      wavesurfer.on('finish', () => setIsPlaying(false));
+      listenersAttachedRef.current = true;
+    }
+
+    // If the selection requested autoplay, start now
+    if (autoplayNextRef.current) {
+      autoplayNextRef.current = false;
+      setIsPlaying(true);
+    }
   }, []);
   const handleProgress = useCallback((time: number, dur: number) => {
     setCurrentTime(time);
@@ -81,6 +97,18 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
       wavesurferRef.current.stop();
     }
   }, [selectedFile?.file_id]);
+
+  // Track autoplay requests on selection changes (even if same file_id)
+  useEffect(() => {
+    autoplayNextRef.current = !!selectedFile?.autoplay;
+    if (selectedFile?.autoplay) {
+      // If already loaded, play immediately
+      if (wavesurferRef.current) {
+        setIsPlaying(true);
+        autoplayNextRef.current = false;
+      }
+    }
+  }, [selectedFile]);
   
   return (
     <div className="h-full panel-background border-l panel-border flex flex-col">

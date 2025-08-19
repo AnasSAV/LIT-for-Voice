@@ -21,6 +21,7 @@ interface UploadedFile {
     confidence?: number;
   };
   dataset_id?: string | null;
+  autoplay?: boolean;
 }
 
 export const MainLayout = () => {

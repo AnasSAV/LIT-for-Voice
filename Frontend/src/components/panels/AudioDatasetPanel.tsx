@@ -29,6 +29,7 @@ interface UploadedFile {
   };
   label?: string;
   dataset_id?: string | null;
+  autoplay?: boolean;
 }
 
 interface AudioDatasetPanelProps {
