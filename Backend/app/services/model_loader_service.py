@@ -65,15 +65,33 @@ def transcribe_whisper_base(audio_file_path):
     return transcribe_whisper(model_id, audio_file_path)
 
 
-feature_extractor = AutoFeatureExtractor.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
-emotion_model = AutoModelForAudioClassification.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
+# Lazy cache for wav2vec2 emotion model
+_emotion_feature_extractor = None
+_emotion_model = None
+_emotion_lock = threading.Lock()
+
+def get_emotion_components():
+    global _emotion_feature_extractor, _emotion_model
+    if _emotion_feature_extractor is not None and _emotion_model is not None:
+        return _emotion_feature_extractor, _emotion_model
+    with _emotion_lock:
+        if _emotion_feature_extractor is not None and _emotion_model is not None:
+            return _emotion_feature_extractor, _emotion_model
+        model_id = "r-f/wav2vec-english-speech-emotion-recognition"
+        _emotion_feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        _emotion_model = AutoModelForAudioClassification.from_pretrained(model_id).to(_device)
+        _emotion_model.eval()
+        return _emotion_feature_extractor, _emotion_model
 
 def predict_emotion_wave2vec(audio_path):
+    feature_extractor, emotion_model = get_emotion_components()
     audio, rate = librosa.load(audio_path, sr=16000)
     inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
-    
+    # Move inputs to model device
+    inputs = {k: v.to(_device) for k, v in inputs.items()}
+
     with torch.no_grad():
-        outputs = emotion_model(inputs.input_values)
+        outputs = emotion_model(inputs["input_values"])
         logits = outputs.logits[0]  # shape: (num_labels,)
         probs_tensor = torch.nn.functional.softmax(logits, dim=-1)
         predicted_label_idx = int(torch.argmax(probs_tensor).item())
