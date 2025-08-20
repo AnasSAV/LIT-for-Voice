@@ -318,38 +318,80 @@ export const AudioDataTable = ({
           </div>
         ),
       },
-      {
+    ];
+
+    const isWhisper = (model || "").toLowerCase().includes("whisper");
+    const isWav2Vec2 = model === "wav2vec2";
+
+    // For Whisper models: show Predicted Transcript column
+    if (isWhisper) {
+      cols.push({
         accessorKey: "predictedTranscript",
         header: "Predicted Transcript",
         cell: (info) => (
           <span className="text-xs">{info.getValue() as string}</span>
         ),
-      },
-    ];
+      });
+    }
 
-    const isWhisper = (model || "").toLowerCase().includes("whisper");
     if (!isWhisper) {
       cols.push({
         accessorKey: "predictedLabel",
         header: "Predicted Label",
         cell: (info) => (
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="default" className="text-xs">
             {loadingById[info.row.original.id] ? "…" : (info.getValue() as string || "N/A")}
           </Badge>
         ),
       });
     }
 
+    // Ground Truth always before static metadata
+    cols.push({
+      accessorKey: "groundTruthLabel",
+      header: "Ground Truth",
+      cell: (info) => (
+        <Badge variant="secondary" className="text-xs">
+          {info.getValue() as string || "N/A"}
+        </Badge>
+      ),
+    });
+
+    // For wav2vec2: show static metadata columns: Intensity, Gender, Actor (placed between Ground Truth and Confidence)
+    if (isWav2Vec2) {
+      cols.push(
+        {
+          id: "meta_intensity",
+          header: "Intensity",
+          cell: (info) => (
+            <Badge variant="outline" className="text-xs">
+              {(info.row.original.meta?.intensity as string) || "N/A"}
+            </Badge>
+          ),
+        },
+        {
+          id: "meta_gender",
+          header: "Gender",
+          cell: (info) => (
+            <Badge variant="outline" className="text-xs">
+              {(info.row.original.meta?.gender as string) || "N/A"}
+            </Badge>
+          ),
+        },
+        {
+          id: "meta_actor",
+          header: "Actor",
+          cell: (info) => (
+            <Badge variant="outline" className="text-xs">
+              {(info.row.original.meta?.actor as string) || "N/A"}
+            </Badge>
+          ),
+        },
+      );
+    }
+
+    // Confidence and Duration last
     cols.push(
-      {
-        accessorKey: "groundTruthLabel",
-        header: "Ground Truth",
-        cell: (info) => (
-          <Badge variant="outline" className="text-xs">
-            {info.getValue() as string || "N/A"}
-          </Badge>
-        ),
-      },
       {
         accessorKey: "confidence",
         header: "Confidence",
