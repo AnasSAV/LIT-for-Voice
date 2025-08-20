@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 import inspect
 import asyncio
 from pathlib import Path
@@ -108,3 +108,38 @@ async def run_inference(
             pass
 
     return prediction
+
+
+@router.post("/inferences/flush")
+async def flush_models(payload: dict = Body(None)):
+    """
+    Flush cached models to free RAM/VRAM.
+    Payload (optional): {"model": "whisper-base" | "whisper-large" | "wav2vec2" | "all"}
+    If omitted or "all", unloads all cached models.
+    """
+    try:
+        target = None
+        if isinstance(payload, dict):
+            target = payload.get("model")
+
+        # Map UI/route model names to HF ids where needed
+        if target in (None, "all"):
+            summary = unload_all_models()
+            return {"ok": True, "scope": "all", "summary": summary}
+
+        if target == "whisper-base":
+            cnt = unload_asr_model("openai/whisper-base")
+            return {"ok": True, "scope": target, "asr_removed": cnt}
+        if target == "whisper-large" or target == "whisper-large-v3":
+            cnt = unload_asr_model("openai/whisper-large-v3")
+            return {"ok": True, "scope": target, "asr_removed": cnt}
+        if target == "wav2vec2":
+            removed = unload_emotion_model()
+            return {"ok": True, "scope": target, "emotion_removed": removed}
+
+        raise HTTPException(status_code=400, detail=f"Unknown model scope: {target}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Avoid leaking internal errors
+        raise HTTPException(status_code=500, detail=str(e))

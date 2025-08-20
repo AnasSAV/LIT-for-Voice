@@ -14,6 +14,12 @@ export interface InferenceResponse {
   [key: string]: unknown;
 }
 
+export type FlushScope = 'all' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3' | 'wav2vec2';
+export type FlushResponse =
+  | { ok: boolean; scope: 'all'; summary: { asr_removed: number; emotion_removed: boolean } }
+  | { ok: boolean; scope: 'whisper-base' | 'whisper-large' | 'whisper-large-v3'; asr_removed: number }
+  | { ok: boolean; scope: 'wav2vec2'; emotion_removed: boolean };
+
 // Per-model concurrency limiter
 type Limiter = { active: number; queue: Array<() => void>; max: number };
 const limiters: Record<string, Limiter> = {};
@@ -81,4 +87,23 @@ export async function runInference(model: string, params: RunInferenceParams): P
   } finally {
     release(model);
   }
+}
+
+export async function flushModels(model?: FlushScope): Promise<FlushResponse> {
+  const payload = { model: model ?? 'all' };
+  const res = await fetch(`${API_BASE}/inferences/flush`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const j = await res.json();
+      detail = j?.detail || JSON.stringify(j);
+    } catch (_e) { void _e; /* ignore parse error */ }
+    throw new Error(`Flush failed: ${res.status} ${detail}`);
+  }
+  return await res.json() as FlushResponse;
 }

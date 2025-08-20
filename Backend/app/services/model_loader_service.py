@@ -4,6 +4,7 @@ import librosa
 import numpy as np
 import threading
 from collections import defaultdict
+import gc
 
 # Global device/dtype for this process
 _device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -120,3 +121,91 @@ def predict_emotion_wave2vec(audio_path):
 def wave2vec(audio_file_path):
     # Returns a structured dict with label/confidence/probs
     return predict_emotion_wave2vec(audio_file_path)
+
+
+# ------------------------------
+# Unload helpers (manual flush)
+# ------------------------------
+
+def unload_asr_model(model_id: str | None = None) -> int:
+    """
+    Unload a specific Whisper pipeline by HF model id (e.g., "openai/whisper-base"),
+    or unload all ASR pipelines if model_id is None. Returns the number of pipelines
+    removed from cache. If running on CUDA, empties the CUDA cache.
+    """
+    removed = 0
+    global _asr_pipelines
+    if model_id is None:
+        # Unload all
+        ids = list(_asr_pipelines.keys())
+        for mid in ids:
+            lock = _asr_locks[mid]
+            with lock:
+                pipe = _asr_pipelines.pop(mid, None)
+                if pipe is not None:
+                    try:
+                        # Move underlying model to CPU to release VRAM faster
+                        if hasattr(pipe, "model") and hasattr(pipe.model, "to"):
+                            pipe.model.to("cpu")
+                    except Exception:
+                        pass
+                    del pipe
+                    removed += 1
+    else:
+        lock = _asr_locks[model_id]
+        with lock:
+            pipe = _asr_pipelines.pop(model_id, None)
+            if pipe is not None:
+                try:
+                    if hasattr(pipe, "model") and hasattr(pipe.model, "to"):
+                        pipe.model.to("cpu")
+                except Exception:
+                    pass
+                del pipe
+                removed = 1
+
+    # Encourage memory release
+    if torch.cuda.is_available():
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+    gc.collect()
+    return removed
+
+
+def unload_emotion_model() -> bool:
+    """
+    Unload the wav2vec2 emotion model/components from cache.
+    Returns True if anything was removed.
+    """
+    global _emotion_feature_extractor, _emotion_model
+    removed = False
+    with _emotion_lock:
+        if _emotion_model is not None:
+            try:
+                _emotion_model.to("cpu")
+            except Exception:
+                pass
+            _emotion_model = None
+            removed = True
+        if _emotion_feature_extractor is not None:
+            _emotion_feature_extractor = None
+            removed = True
+
+    if torch.cuda.is_available():
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+    gc.collect()
+    return removed
+
+
+def unload_all_models() -> dict:
+    """
+    Unload all cached models (ASR pipelines and emotion model). Returns a summary dict.
+    """
+    asr_removed = unload_asr_model(None)
+    emo_removed = unload_emotion_model()
+    return {"asr_removed": asr_removed, "emotion_removed": emo_removed}

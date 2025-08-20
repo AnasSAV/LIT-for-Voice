@@ -313,7 +313,7 @@ VITE_API_BASE=http://<your-backend-host>:<port>
 npm run dev
 ```
 
-Vite will serve the app at `http://localhost:5173` by default. The backend CORS in `Backend/app/main.py` already allows `http://localhost:5173`.
+Vite is configured to serve the app at `http://localhost:8080` (see `Frontend/vite.config.ts`). The backend CORS in `Backend/app/main.py` allows `http://localhost:8080` and `http://localhost:5173`.
 
 ### 3) Run tests (optional)
 
@@ -393,6 +393,7 @@ For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.
           "relpath": "path/to/audio.wav",
           "size": 12345,
           "duration": 1.23,
+          "sample_rate": 16000,
           "label": "emotion_label",
           "h": "unique_hash",
           "meta": {

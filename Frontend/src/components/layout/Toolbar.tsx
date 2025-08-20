@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
 import { listDatasets, getActiveDataset, setActiveDataset, API_BASE } from "@/lib/api/datasets";
+import { flushModels } from "@/lib/api/inferences";
 
 interface UploadedFile {
   file_id: string;
@@ -337,6 +338,27 @@ export const Toolbar = ({
           }}
         >
           Test Backend
+        </Button>
+
+        <Button
+          variant="destructive"
+          size="sm"
+          className="h-8"
+          onClick={async () => {
+            const scope = model as 'whisper-base' | 'whisper-large' | 'wav2vec2';
+            const confirmed = window.confirm(`Flush cached model(s)? This frees RAM/VRAM.\nScope: ${scope}`);
+            if (!confirmed) return;
+            try {
+              const result = await flushModels(scope);
+              console.log('Flushed models:', result);
+              alert(`Flushed: ${JSON.stringify(result)}`);
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              alert(`Flush failed: ${msg}`);
+            }
+          }}
+        >
+          Flush Model
         </Button>
 
         <Button variant="outline" size="sm" className="h-8">

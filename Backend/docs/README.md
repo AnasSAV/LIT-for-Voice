@@ -37,6 +37,7 @@ Produced by `Backend/app/services/dataset_manifest.py` `_scan_dataset()` and ret
   "relpath": "03-01-01-01-01-01-03.wav",
   "size": 379588,
   "duration": 3.43677083333333,
+  "sample_rate": 16000,
   "label": "neutral",
   "h": "f7fb16169ec10e42c6437a268d7cf99756170f62",
   "meta": {
@@ -54,6 +55,7 @@ Notes:
 - `id` currently equals `relpath` and is a convenient UI row key.
 - `h` is a fast, deterministic hash of `(relpath, size, mtime)` used to join with results cache. It is not content-invariant.
 - `meta` contains per-file CSV fields, with redundant constants and duplicate `filename` removed (see below).
+- `sample_rate` is provided when the WAV header contains it (top-level convenience; not part of `meta`).
 
 ## Summary Schema (dataset summary)
 
