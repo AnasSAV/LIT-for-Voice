@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import { listDatasetFiles } from "@/lib/api/datasets";
 import { cn } from "@/lib/utils";
+import { runInference } from "@/lib/api/inferences";
+import { toast } from "sonner";
 
 interface UploadedFile {
   file_id: string;
@@ -28,6 +30,7 @@ interface UploadedFile {
     text?: string;
     label?: string;
     confidence?: number;
+    probs?: Record<string, number>;
   };
   label?: string;
   dataset_id?: string | null;
@@ -44,6 +47,7 @@ interface AudioData {
     text?: string;
     label?: string;
     confidence?: number;
+    probs?: Record<string, number>;
   };
   groundTruthLabel: string;
   confidence: number;
@@ -52,6 +56,9 @@ interface AudioData {
   size?: number;
   // Optional metadata from backend (RAVDESS: emotion, intensity, statement, repetition, actor, gender)
   meta?: Record<string, string>;
+  // Dataset-only helpers
+  hash?: string;
+  dataset_id?: string | null;
 }
 
 interface ApiData {
@@ -85,6 +92,8 @@ async function fetchRowsWithActive(): Promise<{ rows: AudioData[]; active: strin
     duration: f.duration || 0,
     size: f.size,
     meta: f.meta,
+    hash: f.h,
+    dataset_id: active,
   }));
   return { rows, active };
 }
@@ -103,6 +112,11 @@ export const AudioDataTable = ({
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
   const [uiDataset, setUiDataset] = useState<string | null>(null); // 'ravdess' | 'common-voice' | 'custom'
   const columnHelper = createColumnHelper<AudioData>();
+  const [loadingById, setLoadingById] = useState<Record<string, boolean>>({});
+  const loadingByIdRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    loadingByIdRef.current = loadingById;
+  }, [loadingById]);
 
   // Load data from API on component mount and when dataset changes
   useEffect(() => {
@@ -155,6 +169,54 @@ export const AudioDataTable = ({
     };
   }, [model, uiDataset]);
 
+  // Trigger prediction for a specific row (sequential per click, max 2 in-flight globally via API helper)
+  const handlePredict = useCallback(async (row: AudioData) => {
+    if (model !== "wav2vec2") return;
+    const id = row.id;
+    if (loadingByIdRef.current[id]) return;
+    // Build params: prefer dataset caching (ds_id + h)
+    const params: { ds_id?: string | null; h?: string; file_path?: string } = {};
+    if (row.hash && activeDatasetId) {
+      params.ds_id = activeDatasetId;
+      params.h = row.hash;
+    } else if (row.file_path) {
+      params.file_path = row.file_path;
+    } else {
+      return;
+    }
+
+    setLoadingById((prev) => ({ ...prev, [id]: true }));
+    try {
+      const res = await runInference("wav2vec2", params);
+      const label = (res && res.label) ? String(res.label) : "";
+      const confidence = typeof res?.confidence === "number" ? Number(res.confidence) : 0;
+      setData((prev) => prev.map((r) => (
+        r.id === id
+          ? {
+              ...r,
+              predictedLabel: label,
+              confidence,
+              prediction: { ...(r.prediction || {}), label, confidence, probs: res?.probs },
+            }
+          : r
+      )));
+    } catch (e: unknown) {
+      console.warn("Prediction failed", e);
+      let message = "Prediction failed";
+      if (e instanceof Error) {
+        message = e.message;
+      } else if (typeof e === "string") {
+        message = e;
+      } else if (e && typeof e === "object" && "message" in e) {
+        const maybe = (e as { message?: unknown }).message;
+        if (typeof maybe === "string") message = maybe;
+      }
+      toast.error(message);
+    } finally {
+      setLoadingById((prev) => ({ ...prev, [id]: false }));
+    }
+  }, [model, activeDatasetId]);
+
   // Combine API data with uploaded files
   const tableData = useMemo(() => {
     const uploadedData = (uploadedFiles || []).map((file) => ({
@@ -205,6 +267,8 @@ export const AudioDataTable = ({
                     autoplay: true,
                   });
                 }
+                // Trigger prediction for wav2vec2 one-by-one (API helper limits to 2 concurrent)
+                void handlePredict(info.row.original);
               }}
               aria-label={"Play"}
             >
@@ -226,7 +290,7 @@ export const AudioDataTable = ({
         header: "Predicted Label",
         cell: (info) => (
           <Badge variant="outline" className="text-xs">
-            {info.getValue() as string || "N/A"}
+            {loadingById[info.row.original.id] ? "…" : (info.getValue() as string || "N/A")}
           </Badge>
         ),
       },
@@ -244,7 +308,8 @@ export const AudioDataTable = ({
         header: "Confidence",
         cell: (info) => {
           const value = info.getValue() as number;
-          return <span className="text-xs">{(value * 100).toFixed(1)}%</span>;
+          const isLoadingRow = !!loadingById[info.row.original.id];
+          return <span className="text-xs">{isLoadingRow ? "…" : (value * 100).toFixed(1) + "%"}</span>;
         },
       },
       {
@@ -256,7 +321,7 @@ export const AudioDataTable = ({
         },
       },
     ],
-    [onRowSelect, onFilePlay, activeDatasetId]
+    [onRowSelect, onFilePlay, activeDatasetId, loadingById, handlePredict]
   );
 
   // Initialize table
@@ -321,6 +386,8 @@ export const AudioDataTable = ({
                       dataset_id: activeDatasetId,
                     });
                   }
+                  // Also trigger prediction when selecting a row
+                  void handlePredict(row.original);
                 }}
                 className={cn(
                   "cursor-pointer hover:bg-muted/50 h-9",
