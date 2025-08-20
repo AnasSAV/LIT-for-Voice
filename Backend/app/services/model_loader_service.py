@@ -45,23 +45,23 @@ def transcribe_whisper_base(audio_file_path):
     return transcribe_whisper(model_id, audio_file_path)
 
 
-feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
-model = Wav2Vec2ForCTC.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
+feature_extractor = AutoFeatureExtractor.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
+emotion_model = AutoModelForAudioClassification.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
 
 def predict_emotion_wave2vec(audio_path):
     audio, rate = librosa.load(audio_path, sr=16000)
     inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
     
     with torch.no_grad():
-        outputs = model(inputs.input_values)
-        predictions = torch.nn.functional.softmax(outputs.logits.mean(dim=1), dim=-1)  # Average over sequence length
-        predicted_label_idx = torch.argmax(predictions, dim=-1).item()
-        emotion = model.config.id2label[predicted_label_idx]
+        outputs = emotion_model(inputs.input_values)
+        logits = outputs.logits[0]  # shape: (num_labels,)
+        probs_tensor = torch.nn.functional.softmax(logits, dim=-1)
+        predicted_label_idx = int(torch.argmax(probs_tensor).item())
+        id2label = emotion_model.config.id2label
+        emotion = id2label[predicted_label_idx]
         # Build per-class probability mapping
-        probs_tensor = predictions[0]
-        id2label = model.config.id2label
         probs = {id2label[i]: float(probs_tensor[i].item()) for i in range(probs_tensor.shape[0])}
-        confidence = float(probs[id2label[predicted_label_idx]])
+        confidence = float(probs[emotion])
     return {
         "label": emotion,
         "confidence": confidence,
@@ -73,6 +73,3 @@ def predict_emotion_wave2vec(audio_path):
 def wave2vec(audio_file_path):
     # Returns a structured dict with label/confidence/probs
     return predict_emotion_wave2vec(audio_file_path)
-
-
-
