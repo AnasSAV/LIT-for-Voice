@@ -35,6 +35,7 @@ interface UploadedFile {
   label?: string;
   dataset_id?: string | null;
   autoplay?: boolean;
+  meta?: Record<string, string>;
 }
 
 interface AudioData {
@@ -52,6 +53,7 @@ interface AudioData {
   groundTruthLabel: string;
   confidence: number;
   duration: number;
+  sample_rate?: number;
   file_path?: string;
   size?: number;
   // Optional metadata from backend (RAVDESS: emotion, intensity, statement, repetition, actor, gender)
@@ -90,6 +92,7 @@ async function fetchRowsWithActive(): Promise<{ rows: AudioData[]; active: strin
     groundTruthLabel: f.label || f.meta?.emotion || "",
     confidence: 0,
     duration: f.duration || 0,
+    sample_rate: f.sample_rate,
     size: f.size,
     meta: f.meta,
     hash: f.h,
@@ -259,7 +262,7 @@ export const AudioDataTable = ({
 
   // Combine API data with uploaded files
   const tableData = useMemo(() => {
-    const uploadedData = (uploadedFiles || []).map((file) => ({
+    const uploadedData: AudioData[] = (uploadedFiles || []).map((file) => ({
       id: file.file_id,
       filename: file.filename,
       relpath: file.file_path,
@@ -269,8 +272,12 @@ export const AudioDataTable = ({
       groundTruthLabel: "",
       confidence: file.prediction?.confidence || 0,
       duration: file.duration || 0,
+      sample_rate: file.sample_rate,
       file_path: file.file_path,
       size: file.size,
+      meta: file.meta,
+      hash: undefined,
+      dataset_id: null,
     }));
 
     return [...data, ...uploadedData];
@@ -291,24 +298,26 @@ export const AudioDataTable = ({
               onClick={(e) => {
                 e.stopPropagation();
                 // Ensure selection and right panel update when playing via button
-                onRowSelect(info.row.original.id);
+                const orig = info.row.original as AudioData;
+                onRowSelect(orig.id);
                 if (onFilePlay) {
                   onFilePlay({
-                    file_id: info.row.original.id,
-                    filename: info.row.original.filename,
-                    file_path: info.row.original.relpath,
+                    file_id: orig.id,
+                    filename: orig.filename,
+                    file_path: orig.relpath,
                     message: "dataset",
-                    size: info.row.original.size,
-                    duration: info.row.original.duration,
-                    sample_rate: undefined,
-                    prediction: info.row.original.prediction,
-                    label: info.row.original.groundTruthLabel,
+                    size: orig.size,
+                    duration: orig.duration,
+                    sample_rate: orig.sample_rate,
+                    prediction: orig.prediction,
+                    label: orig.groundTruthLabel,
                     dataset_id: activeDatasetId,
                     autoplay: true,
+                    meta: orig.meta,
                   });
                 }
                 // Trigger prediction for current model
-                void handlePredict(info.row.original);
+                void handlePredict(orig);
               }}
               aria-label={"Play"}
             >
@@ -328,9 +337,14 @@ export const AudioDataTable = ({
       cols.push({
         accessorKey: "predictedTranscript",
         header: "Predicted Transcript",
-        cell: (info) => (
-          <span className="text-xs">{info.getValue() as string}</span>
-        ),
+        cell: (info) => {
+          const text = (info.getValue() as string) || "N/A";
+          return (
+            <p className="inline-block max-w-full whitespace-pre-wrap break-words rounded-2xl bg-muted px-3 py-1.5 text-xs leading-snug text-foreground shadow-sm">
+              {text}
+            </p>
+          );
+        },
       });
     }
 
@@ -350,11 +364,24 @@ export const AudioDataTable = ({
     cols.push({
       accessorKey: "groundTruthLabel",
       header: "Ground Truth",
-      cell: (info) => (
-        <Badge variant="secondary" className="text-xs">
-          {info.getValue() as string || "N/A"}
-        </Badge>
-      ),
+      cell: (info) => {
+        const orig = info.row.original;
+        const gt = isWhisper
+          ? ((orig.meta?.text as string) || (orig.meta?.statement as string) || "N/A")
+          : ((info.getValue() as string) || "N/A");
+        if (isWhisper) {
+          return (
+            <Badge variant="outline" className="text-xs rounded-full px-3 py-1 normal-case font-normal">
+              {gt}
+            </Badge>
+          );
+        }
+        return (
+          <Badge variant="secondary" className="text-xs">
+            {gt}
+          </Badge>
+        );
+      },
     });
 
     // For wav2vec2: show static metadata columns: Intensity, Gender, Actor (placed between Ground Truth and Confidence)
@@ -481,25 +508,27 @@ export const AudioDataTable = ({
                 key={row.id}
                 data-state={selectedRow === row.original.id ? "selected" : undefined}
                 onClick={() => {
-                  onRowSelect(row.original.id);
+                  const orig = row.original as AudioData;
+                  onRowSelect(orig.id);
                   if (onFilePlay) {
                     onFilePlay({
-                      file_id: row.original.id,
-                      filename: row.original.filename,
-                      file_path: row.original.relpath,
+                      file_id: orig.id,
+                      filename: orig.filename,
+                      file_path: orig.relpath,
                       message: "dataset",
-                      size: row.original.size,
-                      duration: row.original.duration,
-                      sample_rate: undefined,
-                      prediction: row.original.prediction,
+                      size: orig.size,
+                      duration: orig.duration,
+                      sample_rate: orig.sample_rate,
+                      prediction: orig.prediction,
                       // carry cached GT label for the editor panel
                       // (AudioDataTable derives this from backend label/meta)
-                      label: row.original.groundTruthLabel,
+                      label: orig.groundTruthLabel,
                       dataset_id: activeDatasetId,
+                      meta: orig.meta,
                     });
                   }
                   // Also trigger prediction when selecting a row
-                  void handlePredict(row.original);
+                  void handlePredict(orig);
                 }}
                 className={cn(
                   "cursor-pointer hover:bg-muted/50 h-9",

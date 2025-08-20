@@ -22,6 +22,7 @@ interface UploadedFile {
   };
   dataset_id?: string | null;
   autoplay?: boolean;
+  meta?: Record<string, string>;
 }
 
 export const MainLayout = () => {
@@ -88,7 +89,7 @@ export const MainLayout = () => {
           
           {/* Right Panel: Audio Player & Label Editor */}
           <Panel defaultSize={25} minSize={20}>
-            <DatapointEditorPanel selectedFile={selectedFile} />
+            <DatapointEditorPanel selectedFile={selectedFile} model={model} />
           </Panel>
         </PanelGroup>
       </div>

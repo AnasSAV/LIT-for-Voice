@@ -115,6 +115,7 @@ async def list_dataset_files(req: Request, limit: int = 100, offset: int = 0):
             "relpath": e.get("relpath"),
             "size": e.get("size"),
             "duration": e.get("duration"),
+            "sample_rate": e.get("sample_rate"),
             "label": e.get("label"),
             "h": e.get("h"),
             "meta": e.get("meta"),

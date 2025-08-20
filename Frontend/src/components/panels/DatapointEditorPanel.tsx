@@ -25,13 +25,16 @@ interface UploadedFile {
     confidence?: number;
   };
   autoplay?: boolean;
+  // Optional dataset metadata (e.g., RAVDESS)
+  meta?: Record<string, string>;
 }
 
 interface DatapointEditorPanelProps {
   selectedFile?: UploadedFile | null;
+  model?: string | null;
 }
 
-export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps) => {
+export const DatapointEditorPanel = ({ selectedFile, model }: DatapointEditorPanelProps) => {
   const [selectedLabel, setSelectedLabel] = useState<string>("neutral");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -63,6 +66,11 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
     setCurrentTime(time);
     setDuration(dur);
   }, []);
+
+  // Pretty-print metadata keys (dataset-agnostic)
+  const prettyLabel = useCallback((k: string) =>
+    k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+  []);
 
   const audioUrl = useMemo(() => {
     if (!selectedFile) return undefined;
@@ -109,6 +117,14 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
       }
     }
   }, [selectedFile]);
+
+  // Whisper-specific rendering helpers
+  const isWhisper = (model ?? "").toLowerCase().startsWith("whisper");
+  const predictedText = selectedFile?.prediction?.text || "";
+  const groundTruthText =
+    (selectedFile?.meta?.text as string) ||
+    (selectedFile?.meta?.statement as string) ||
+    "";
   
   return (
     <div className="h-full panel-background border-l panel-border flex flex-col">
@@ -124,27 +140,83 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="text-xs">
-              <span className="text-muted-foreground">File:</span>
-              <span className="ml-2 font-mono">{selectedFile?.filename || "No file selected"}</span>
-            </div>
-            <div className="text-xs">
-              <span className="text-muted-foreground">Duration:</span>
-              <span className="ml-2">{selectedFile?.duration ? `${selectedFile.duration.toFixed(1)}s` : "N/A"}</span>
-            </div>
-            <div className="text-xs">
               <span className="text-muted-foreground">Sample Rate:</span>
               <span className="ml-2">{selectedFile?.sample_rate ? `${(selectedFile.sample_rate / 1000).toFixed(1)}kHz` : "N/A"}</span>
             </div>
-            {selectedFile?.label && (
-              <div className="text-xs">
-                <span className="text-muted-foreground">Ground Truth:</span>
-                <Badge variant="outline" className="ml-2 text-xs">{selectedFile.label}</Badge>
-              </div>
-            )}
             {selectedFile?.size && (
               <div className="text-xs">
                 <span className="text-muted-foreground">Size:</span>
                 <span className="ml-2">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+            )}
+
+            {/* Dataset Metadata */}
+            {selectedFile?.meta && (
+              <div className="pt-1 space-y-1">
+                {selectedFile.meta.statement && (
+                  <div className="text-xs">
+                    <span className="text-muted-foreground">Statement:</span>
+                    <span className="ml-2">{selectedFile.meta.statement}</span>
+                  </div>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  {selectedFile.meta.modality && (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Modality:</span>
+                      <Badge variant="outline" className="ml-2 text-xs">{selectedFile.meta.modality}</Badge>
+                    </div>
+                  )}
+                  {selectedFile.meta.vocal_channel && (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Vocal Channel:</span>
+                      <Badge variant="outline" className="ml-2 text-xs">{selectedFile.meta.vocal_channel}</Badge>
+                    </div>
+                  )}
+                </div>
+
+                {/* Render remaining metadata keys dynamically (dataset-aware) */}
+                {(() => {
+                  const shown = new Set([
+                    "statement",
+                    "text",
+                    "intensity",
+                    "gender",
+                    "actor",
+                    "modality",
+                    "vocal_channel",
+                    "filename",
+                    "duration",
+                    "emotion",
+                  ]);
+                  // Dataset-aware blacklist
+                  const dsId = selectedFile.dataset_id ?? null;
+                  const blacklist = new Set<string>();
+                  // Common Voice specific UI fields we don't want in the right panel
+                  if (dsId === "common_voice_en_dev") {
+                    blacklist.add("up_votes");
+                    blacklist.add("down_votes");
+                  }
+                  if (dsId === "ravdess_subset") {
+                    blacklist.add("repetition");
+                  }
+
+                  const rest = Object.entries(selectedFile.meta)
+                    .filter(([k, v]) => !shown.has(k)
+                      && !blacklist.has(k)
+                      && v != null
+                      && String(v).length > 0);
+                  if (rest.length === 0) return null;
+                  return (
+                    <div className="pt-1 space-y-1">
+                      {rest.map(([k, v]) => (
+                        <div className="text-xs" key={k}>
+                          <span className="text-muted-foreground">{prettyLabel(k)}:</span>
+                          <Badge variant="outline" className="ml-2 text-xs">{String(v)}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </CardContent>
@@ -266,15 +338,27 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
             <div className="text-xs space-y-2">
               <div>
                 <span className="text-muted-foreground">Predicted:</span>
-                <p className="mt-1 p-2 bg-muted rounded text-foreground">
-                  "The quick brown fox jumps over the lazy dog"
-                </p>
+                {isWhisper ? (
+                  <p className="mt-1 inline-block max-w-full whitespace-pre-wrap break-words rounded-2xl bg-muted px-3 py-2 text-sm leading-snug text-foreground shadow-sm">
+                    {predictedText || "N/A"}
+                  </p>
+                ) : (
+                  <p className="mt-1 p-2 bg-muted rounded text-foreground">
+                    {predictedText || "N/A"}
+                  </p>
+                )}
               </div>
               <div>
                 <span className="text-muted-foreground">Ground Truth:</span>
-                <p className="mt-1 p-2 bg-muted rounded text-foreground">
-                  "The quick brown fox jumps over the lazy dog"
-                </p>
+                {isWhisper ? (
+                  <Badge variant="outline" className="mt-1 text-xs rounded-full px-3 py-1 whitespace-pre-wrap break-words normal-case font-normal">
+                    {groundTruthText || "N/A"}
+                  </Badge>
+                ) : (
+                  <p className="mt-1 p-2 bg-muted rounded text-foreground">
+                    {groundTruthText || "N/A"}
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>

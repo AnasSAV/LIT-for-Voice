@@ -15,6 +15,12 @@ from ..core.redis import (
 )
 from ..core.settings import settings
 
+# Optional dependency for MP3 header parsing
+try:  # pragma: no cover - optional import guard
+    from mutagen.mp3 import MP3  # type: ignore
+except Exception:  # pragma: no cover
+    MP3 = None  # type: ignore
+
 # Public API
 # - compute_dir_version(base)
 # - get_or_build_manifest(ds_id, base, ttl=86400, force=False)
@@ -36,15 +42,34 @@ def _compute_file_hash(relpath: str, size: int, mtime: int) -> str:
     return h.hexdigest()
 
 
-def _safe_duration_wav(p: Path) -> Optional[float]:
-    # Compute duration for standard PCM WAV files using stdlib
+def _safe_wav_info(p: Path) -> Tuple[Optional[float], Optional[int]]:
+    """
+    Compute (duration, sample_rate) for standard PCM WAV files using stdlib.
+    Returns (None, None) on failure.
+    """
     with contextlib.suppress(Exception):
         with wave.open(str(p), "rb") as wf:
             framerate = wf.getframerate() or 0
             nframes = wf.getnframes() or 0
-            if framerate > 0:
-                return float(nframes) / float(framerate)
-    return None
+            dur = float(nframes) / float(framerate) if framerate > 0 else None
+            return dur, int(framerate) if framerate > 0 else None
+    return None, None
+
+
+def _safe_mp3_info(p: Path) -> Tuple[Optional[float], Optional[int]]:
+    """
+    Compute (duration, sample_rate) for MP3 files using mutagen (no decoding).
+    Returns (None, None) if mutagen is unavailable or parsing fails.
+    """
+    if MP3 is None:
+        return None, None
+    with contextlib.suppress(Exception):
+        info = MP3(str(p)).info  # type: ignore[attr-defined]
+        sr = getattr(info, "sample_rate", None)
+        length = getattr(info, "length", None)
+        dur = float(length) if length else None
+        return dur, int(sr) if sr else None
+    return None, None
 
 
 def _parse_label_from_filename(filename: str) -> Optional[str]:
@@ -196,10 +221,13 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
         rel = _posix_rel(base, p)
         size = int(st.st_size)
         mtime = int(st.st_mtime)
-        # Duration: WAV via wave, MP3 from metadata if provided
+        # Duration and sample rate
         duration: Optional[float] = None
+        sample_rate: Optional[int] = None
         if p.suffix.lower() == ".wav":
-            duration = await asyncio.to_thread(_safe_duration_wav, p)
+            duration, sample_rate = await asyncio.to_thread(_safe_wav_info, p)
+        elif p.suffix.lower() == ".mp3":
+            duration, sample_rate = await asyncio.to_thread(_safe_mp3_info, p)
         # Determine label
         label: Optional[str] = _parse_label_from_filename(p.name)
         h = _compute_file_hash(rel, size, mtime)
@@ -213,6 +241,7 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
             "filename": p.name,
             "size": size,
             "duration": duration,
+            "sample_rate": sample_rate,
             "label": label,
             "h": h,
         }
@@ -230,6 +259,13 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
                     duration = float(dur_val)
                 except Exception:
                     pass
+            # Optional sample rate supplied by metadata (Hz)
+            sr_val = meta_row.get("sample_rate")
+            if sample_rate is None and sr_val not in (None, ""):
+                try:
+                    sample_rate = int(float(sr_val))
+                except Exception:
+                    pass
             filtered = {k: v for k, v in meta_row.items() if k not in drop_meta_keys}
             if filtered:
                 entry["meta"] = filtered
@@ -238,6 +274,9 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
         safe_label = label or ""
         entry["duration"] = safe_duration
         entry["label"] = safe_label
+        # sample_rate may remain None (e.g., MP3 without metadata). Keep as-is for frontend to show N/A.
+        if sample_rate is not None:
+            entry["sample_rate"] = int(sample_rate)
         entries.append(entry)
 
     summary = {

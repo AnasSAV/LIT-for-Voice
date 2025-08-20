@@ -11,6 +11,7 @@ export type DatasetFile = {
   relpath: string;
   size: number;
   duration: number;
+  sample_rate?: number;
   label: string;
   h: string;
   meta?: Record<string, string>;
