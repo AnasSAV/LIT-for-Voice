@@ -117,6 +117,8 @@ export const AudioDataTable = ({
   useEffect(() => {
     loadingByIdRef.current = loadingById;
   }, [loadingById]);
+  // Controlled pagination so we can react to page changes
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 });
 
   // Load data from API on component mount and when dataset changes
   useEffect(() => {
@@ -142,6 +144,8 @@ export const AudioDataTable = ({
             setData(rows);
           }
           setActiveDatasetId(active);
+          // Reset to first page on dataset change
+          setPagination((prev) => ({ ...prev, pageIndex: 0 }));
         }
       } catch (e) {
         console.warn("Failed to load dataset files", e);
@@ -216,6 +220,8 @@ export const AudioDataTable = ({
       setLoadingById((prev) => ({ ...prev, [id]: false }));
     }
   }, [model, activeDatasetId]);
+
+  
 
   // Combine API data with uploaded files
   const tableData = useMemo(() => {
@@ -334,14 +340,30 @@ export const AudioDataTable = ({
     getFilteredRowModel: getFilteredRowModel(),
     state: {
       globalFilter: searchQuery,
+      pagination,
     },
     onGlobalFilterChange: () => {},
-    initialState: {
-      pagination: {
-        pageSize: 20,
-      },
-    },
+    onPaginationChange: setPagination,
   });
+
+  // Preload predictions for the currently visible page rows (only for wav2vec2)
+  const preloadVisiblePage = useCallback(() => {
+    if (model !== "wav2vec2") return;
+    const rows = table.getRowModel().rows;
+    for (const r of rows) {
+      const orig = r.original as AudioData;
+      if (!orig) continue;
+      if (loadingByIdRef.current[orig.id]) continue;
+      // Skip if we already have a label with non-empty value
+      if (orig.predictedLabel && orig.predictedLabel.trim().length > 0) continue;
+      void handlePredict(orig);
+    }
+  }, [model, handlePredict, table]);
+
+  // Run preload when page, size, search, dataset, or model changes
+  useEffect(() => {
+    preloadVisiblePage();
+  }, [preloadVisiblePage, pagination.pageIndex, pagination.pageSize, searchQuery, activeDatasetId, tableData]);
 
   return (
     <div className="rounded-md border">

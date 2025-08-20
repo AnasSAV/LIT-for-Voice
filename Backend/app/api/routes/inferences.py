@@ -3,6 +3,7 @@ import inspect
 import asyncio
 from pathlib import Path
 from app.services.model_loader_service import *
+from app.services.dataset_manifest import get_or_build_manifest
 import hashlib
 import json
 from app.core.redis import get_result, cache_result
@@ -44,7 +45,31 @@ async def run_inference(
     if not func:
         raise HTTPException(status_code=400, detail=f"Invalid model: {model}")
 
-    # If file_path is provided, check if it exists
+    # If dataset id and hash provided but no file_path, resolve absolute file path via manifest
+    if (not file_path) and ds_id and h:
+        # Resolve dataset base directory (mirror logic from datasets router)
+        backend_root = Path(__file__).resolve().parents[3]
+        data_root = backend_root / "data"
+        if ds_id == "ravdess_full":
+            base = data_root / "raw" / "ravdess_full"
+        elif ds_id == "ravdess_subset":
+            base = data_root / "dev" / "ravdess_subset"
+        elif ds_id == "common_voice_en":
+            base = data_root / "raw" / "common_voice_en"
+        else:
+            base = Path("")
+        if not base.exists():
+            raise HTTPException(status_code=404, detail=f"Dataset path not found for id: {ds_id}")
+        entries, _ = await get_or_build_manifest(ds_id, base)
+        match = next((e for e in entries if e.get("h") == h), None)
+        if not match:
+            raise HTTPException(status_code=404, detail="File hash not found in dataset manifest")
+        abs_path = (base / match.get("relpath", "")).resolve()
+        if not abs_path.exists():
+            raise HTTPException(status_code=404, detail="Resolved audio file not found on disk")
+        file_path = str(abs_path)
+
+    # If file_path is provided (either directly or resolved), check if it exists
     if file_path:
         if not Path(file_path).exists():
             raise HTTPException(status_code=404, detail=f"Audio file not found: {file_path}")

@@ -40,7 +40,21 @@ export function useDatasetPredictions({
 
   const getPrediction = (file: DatasetFile): PredictionResult | null => {
     if (!predictions?.results) return null;
-    return predictions.results[file.h] ?? null;
+    const res = predictions.results[file.h] ?? null;
+    if (!res) return null;
+    // Alias backend 'probs' -> 'probabilities' for UI consumers (e.g., PredictionPanel)
+    const r = res as unknown as { [k: string]: unknown };
+    if (
+      r &&
+      typeof r === 'object' &&
+      !('probabilities' in r) &&
+      'probs' in r &&
+      typeof r['probs'] === 'object' &&
+      r['probs'] !== null
+    ) {
+      return { ...r, probabilities: r['probs'] } as PredictionResult;
+    }
+    return res;
   };
 
   return {

@@ -6,39 +6,65 @@ export type RunInferenceParams = {
   file_path?: string;
 };
 
-// Simple concurrency limiter (max 2 concurrent requests)
-const MAX_CONCURRENCY = 2;
-let active = 0;
-const queue: Array<() => void> = [];
+export interface InferenceResponse {
+  label?: string;
+  confidence?: number;
+  probs?: Record<string, number>;
+  text?: string;
+  [key: string]: unknown;
+}
 
-function acquire(): Promise<void> {
+// Per-model concurrency limiter
+type Limiter = { active: number; queue: Array<() => void>; max: number };
+const limiters: Record<string, Limiter> = {};
+
+function getMaxForModel(model: string): number {
+  // Whisper large can be very memory-heavy; run strictly serially
+  if (model === 'whisper-large' || model === 'whisper-large-v3' || model === 'openai/whisper-large-v3') return 1;
+  // Default: allow small parallelism
+  return 2;
+}
+
+function getLimiter(model: string): Limiter {
+  if (!limiters[model]) {
+    limiters[model] = { active: 0, queue: [], max: getMaxForModel(model) };
+  }
+  return limiters[model];
+}
+
+function acquire(model: string): Promise<void> {
+  const limiter = getLimiter(model);
   return new Promise((resolve) => {
     const tryStart = () => {
-      if (active < MAX_CONCURRENCY) {
-        active += 1;
+      if (limiter.active < limiter.max) {
+        limiter.active += 1;
         resolve();
       } else {
-        queue.push(tryStart);
+        limiter.queue.push(tryStart);
       }
     };
     tryStart();
   });
 }
 
-function release() {
-  active = Math.max(0, active - 1);
-  const next = queue.shift();
+function release(model: string) {
+  const limiter = getLimiter(model);
+  limiter.active = Math.max(0, limiter.active - 1);
+  const next = limiter.queue.shift();
   if (next) next();
 }
 
-export async function runInference(model: string, params: RunInferenceParams): Promise<any> {
-  await acquire();
+export async function runInference(model: string, params: RunInferenceParams): Promise<InferenceResponse> {
+  await acquire(model);
   try {
     const url = new URL(`${API_BASE}/inferences/run`);
     url.searchParams.set('model', model);
     if (params.ds_id) url.searchParams.set('ds_id', String(params.ds_id));
     if (params.h) url.searchParams.set('h', String(params.h));
     if (params.file_path) url.searchParams.set('file_path', String(params.file_path));
+
+    // Lightweight debug log for visibility during development
+    console.log('[inferences] runInference', { model, params });
 
     const res = await fetch(url.toString(), { credentials: 'include' });
     if (!res.ok) {
@@ -51,8 +77,8 @@ export async function runInference(model: string, params: RunInferenceParams): P
       }
       throw new Error(`Inference failed: ${res.status} ${detail}`);
     }
-    return await res.json();
+    return await res.json() as InferenceResponse;
   } finally {
-    release();
+    release(model);
   }
 }
