@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
-import { listDatasets, getActiveDataset, setActiveDataset } from "@/lib/api/datasets";
+import { listDatasets, getActiveDataset, setActiveDataset, API_BASE } from "@/lib/api/datasets";
 
 interface UploadedFile {
   file_id: string;
@@ -76,14 +76,14 @@ export const Toolbar = ({
       try {
         const datasets = await listDatasets() as DatasetInfo[];
         const hasSubset = !!datasets.find(d => d.id === "ravdess_subset" && d.available);
-        const hasCv = !!datasets.find(d => d.id === "common_voice_en" && d.available);
+        const hasCv = !!datasets.find(d => d.id === "common_voice_en_dev" && d.available);
         setHasRavdessSubset(hasSubset);
         setHasCommonVoice(hasCv);
 
         const active = await getActiveDataset();
         const activeUi = active === "ravdess_subset"
           ? "ravdess"
-          : active === "common_voice_en"
+          : active === "common_voice_en_dev"
             ? "common-voice"
             : active
               ? "custom"
@@ -104,7 +104,7 @@ export const Toolbar = ({
                 await setActiveDataset("ravdess_subset");
               }
             } else if (target === "common-voice") {
-              if (hasCv) await setActiveDataset("common_voice_en");
+              if (hasCv) await setActiveDataset("common_voice_en_dev");
             } else {
               // custom: leave backend active as-is
             }
@@ -133,7 +133,7 @@ export const Toolbar = ({
         if (target === "ravdess") {
           if (hasRavdessSubset) await setActiveDataset("ravdess_subset");
         } else if (target === "common-voice") {
-          if (hasCommonVoice) await setActiveDataset("common_voice_en");
+          if (hasCommonVoice) await setActiveDataset("common_voice_en_dev");
         } else {
           // custom: leave backend active as-is
         }
@@ -156,24 +156,32 @@ export const Toolbar = ({
     try {
       // Reset API data when model changes
       setApiData(null);
-      
-      // If there's a selected file, run inference with the new model
-      if (selectedFile) {
-        const params = new URLSearchParams({
-          model: value,
-          filename: selectedFile.filename
+
+      // If there's a selected file, run inference with the new model via backend /inferences/run
+      if (selectedFile?.file_path) {
+        const url = new URL(`${API_BASE}/inferences/run`);
+        url.searchParams.set("model", value);
+        url.searchParams.set("file_path", selectedFile.file_path);
+
+        const response = await fetch(url.toString(), {
+          credentials: "include",
+          signal: controller.signal,
         });
-        
-        const url = `http://localhost:8000/api/transcribe?${params.toString()}`;
-        const response = await fetch(url, {
-          signal: controller.signal
-        });
-        
+
         if (!response.ok) {
-          throw new Error(`API error: ${response.status} ${response.statusText}`);
+          let detail = "";
+          try {
+            const j = await response.json();
+            detail = (j && typeof j === "object" && "detail" in j) ? (j as { detail?: string }).detail || "" : "";
+          } catch (e) {
+            // ignore JSON parse errors when response is not JSON
+          }
+          throw new Error(`API error: ${response.status} ${detail || response.statusText}`);
         }
-        
-        const data: ApiData = await response.json();
+
+        // Backend may return string (text) for Whisper or object for others
+        const raw = await response.json();
+        const data: ApiData = typeof raw === "string" ? { transcription: raw } : (raw as ApiData);
         setApiData(data);
         console.log("API response:", data);
       }
@@ -197,7 +205,7 @@ export const Toolbar = ({
           await setActiveDataset("ravdess_subset");
         }
       } else if (value === "common-voice") {
-        await setActiveDataset("common_voice_en");
+        await setActiveDataset("common_voice_en_dev");
       } else if (value === "custom") {
         // Handle custom dataset selection
         console.log("Custom dataset selected");

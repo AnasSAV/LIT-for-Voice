@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import { listDatasetFiles } from "@/lib/api/datasets";
 import { cn } from "@/lib/utils";
-import { runInference } from "@/lib/api/inferences";
+import { runInference, type InferenceResponse } from "@/lib/api/inferences";
 import { toast } from "sonner";
 
 interface UploadedFile {
@@ -114,6 +114,8 @@ export const AudioDataTable = ({
   const columnHelper = createColumnHelper<AudioData>();
   const [loadingById, setLoadingById] = useState<Record<string, boolean>>({});
   const loadingByIdRef = useRef<Record<string, boolean>>({});
+  // Track previously active dataset to decide when to reset pagination
+  const prevActiveDatasetRef = useRef<string | null>(null);
   useEffect(() => {
     loadingByIdRef.current = loadingById;
   }, [loadingById]);
@@ -143,9 +145,15 @@ export const AudioDataTable = ({
           } else {
             setData(rows);
           }
+          // Detect dataset change to avoid unwanted page resets during rerenders
+          const datasetChanged = prevActiveDatasetRef.current !== active;
           setActiveDatasetId(active);
-          // Reset to first page on dataset change
-          setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+          if (datasetChanged) {
+            // Remember new dataset id
+            prevActiveDatasetRef.current = active;
+            // Only reset to first page when dataset actually changes
+            setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+          }
         }
       } catch (e) {
         console.warn("Failed to load dataset files", e);
@@ -173,9 +181,9 @@ export const AudioDataTable = ({
     };
   }, [model, uiDataset]);
 
-  // Trigger prediction for a specific row (sequential per click, max 2 in-flight globally via API helper)
+  // Trigger prediction for a specific row (sequential per click, limited via API helper)
   const handlePredict = useCallback(async (row: AudioData) => {
-    if (model !== "wav2vec2") return;
+    if (!(model === "wav2vec2" || model === "whisper-base")) return;
     const id = row.id;
     if (loadingByIdRef.current[id]) return;
     // Build params: prefer dataset caching (ds_id + h)
@@ -191,19 +199,33 @@ export const AudioDataTable = ({
 
     setLoadingById((prev) => ({ ...prev, [id]: true }));
     try {
-      const res = await runInference("wav2vec2", params);
-      const label = (res && res.label) ? String(res.label) : "";
-      const confidence = typeof res?.confidence === "number" ? Number(res.confidence) : 0;
-      setData((prev) => prev.map((r) => (
-        r.id === id
-          ? {
-              ...r,
-              predictedLabel: label,
-              confidence,
-              prediction: { ...(r.prediction || {}), label, confidence, probs: res?.probs },
-            }
-          : r
-      )));
+      if (model === "wav2vec2") {
+        const res = await runInference("wav2vec2", params) as InferenceResponse;
+        const label = res?.label ? String(res.label) : "";
+        const confidence = typeof res?.confidence === "number" ? Number(res.confidence) : 0;
+        setData((prev) => prev.map((r) => (
+          r.id === id
+            ? {
+                ...r,
+                predictedLabel: label,
+                confidence,
+                prediction: { ...(r.prediction || {}), label, confidence, probs: res?.probs },
+              }
+            : r
+        )));
+      } else if (model === "whisper-base") {
+        const res = await runInference("whisper-base", params) as unknown;
+        const text = typeof res === "string" ? res : ((res as InferenceResponse)?.text ? String((res as InferenceResponse).text) : "");
+        setData((prev) => prev.map((r) => (
+          r.id === id
+            ? {
+                ...r,
+                predictedTranscript: text,
+                prediction: { ...(r.prediction || {}), text },
+              }
+            : r
+        )));
+      }
     } catch (e: unknown) {
       console.warn("Prediction failed", e);
       let message = "Prediction failed";
@@ -242,9 +264,9 @@ export const AudioDataTable = ({
     return [...data, ...uploadedData];
   }, [data, uploadedFiles]);
 
-  // Define table columns
-  const columns = useMemo<ColumnDef<AudioData>[]>(
-    () => [
+  // Define table columns (hide Predicted Label for Whisper models)
+  const columns = useMemo<ColumnDef<AudioData>[]>(() => {
+    const cols: ColumnDef<AudioData>[] = [
       {
         accessorKey: "filename",
         header: "Filename",
@@ -273,7 +295,7 @@ export const AudioDataTable = ({
                     autoplay: true,
                   });
                 }
-                // Trigger prediction for wav2vec2 one-by-one (API helper limits to 2 concurrent)
+                // Trigger prediction for current model
                 void handlePredict(info.row.original);
               }}
               aria-label={"Play"}
@@ -291,7 +313,11 @@ export const AudioDataTable = ({
           <span className="text-xs">{info.getValue() as string}</span>
         ),
       },
-      {
+    ];
+
+    const isWhisper = (model || "").toLowerCase().includes("whisper");
+    if (!isWhisper) {
+      cols.push({
         accessorKey: "predictedLabel",
         header: "Predicted Label",
         cell: (info) => (
@@ -299,7 +325,10 @@ export const AudioDataTable = ({
             {loadingById[info.row.original.id] ? "…" : (info.getValue() as string || "N/A")}
           </Badge>
         ),
-      },
+      });
+    }
+
+    cols.push(
       {
         accessorKey: "groundTruthLabel",
         header: "Ground Truth",
@@ -325,10 +354,11 @@ export const AudioDataTable = ({
           const value = info.getValue() as number;
           return <span className="text-xs">{value.toFixed(2)}s</span>;
         },
-      },
-    ],
-    [onRowSelect, onFilePlay, activeDatasetId, loadingById, handlePredict]
-  );
+      }
+    );
+
+    return cols;
+  }, [onRowSelect, onFilePlay, activeDatasetId, loadingById, handlePredict, model]);
 
   // Initialize table
   const table = useReactTable({
@@ -344,18 +374,24 @@ export const AudioDataTable = ({
     },
     onGlobalFilterChange: () => {},
     onPaginationChange: setPagination,
+    // Do not auto-reset to page 1 when data updates (e.g., inference results)
+    autoResetPageIndex: false,
   });
 
-  // Preload predictions for the currently visible page rows (only for wav2vec2)
+  // Preload predictions for the currently visible page rows (wav2vec2 and whisper-base)
   const preloadVisiblePage = useCallback(() => {
-    if (model !== "wav2vec2") return;
+    if (!(model === "wav2vec2" || model === "whisper-base")) return;
     const rows = table.getRowModel().rows;
     for (const r of rows) {
       const orig = r.original as AudioData;
       if (!orig) continue;
       if (loadingByIdRef.current[orig.id]) continue;
-      // Skip if we already have a label with non-empty value
-      if (orig.predictedLabel && orig.predictedLabel.trim().length > 0) continue;
+      // Skip if we already have a prediction for the active model
+      if (model === "wav2vec2") {
+        if (orig.predictedLabel && orig.predictedLabel.trim().length > 0) continue;
+      } else if (model === "whisper-base") {
+        if (orig.predictedTranscript && orig.predictedTranscript.trim().length > 0) continue;
+      }
       void handlePredict(orig);
     }
   }, [model, handlePredict, table]);

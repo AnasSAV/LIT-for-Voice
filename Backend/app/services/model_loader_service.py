@@ -85,13 +85,22 @@ def get_emotion_components():
 
 def predict_emotion_wave2vec(audio_path):
     feature_extractor, emotion_model = get_emotion_components()
-    audio, rate = librosa.load(audio_path, sr=16000)
-    inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
+    # Load mono audio at model's expected sampling rate
+    audio, rate = librosa.load(audio_path, sr=16000, mono=True)
+    # Feature extraction without padding for single clip; include attention mask
+    inputs = feature_extractor(
+        audio,
+        sampling_rate=rate,
+        return_tensors="pt",
+        padding=False,
+        return_attention_mask=True,
+    )
     # Move inputs to model device
     inputs = {k: v.to(_device) for k, v in inputs.items()}
 
     with torch.no_grad():
-        outputs = emotion_model(inputs["input_values"])
+        # Pass all inputs so attention_mask is respected
+        outputs = emotion_model(**inputs)
         logits = outputs.logits[0]  # shape: (num_labels,)
         probs_tensor = torch.nn.functional.softmax(logits, dim=-1)
         predicted_label_idx = int(torch.argmax(probs_tensor).item())
