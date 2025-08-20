@@ -183,7 +183,7 @@ export const AudioDataTable = ({
 
   // Trigger prediction for a specific row (sequential per click, limited via API helper)
   const handlePredict = useCallback(async (row: AudioData) => {
-    if (!(model === "wav2vec2" || model === "whisper-base")) return;
+    if (!(model === "wav2vec2" || model === "whisper-base" || model === "whisper-large")) return;
     const id = row.id;
     if (loadingByIdRef.current[id]) return;
     // Build params: prefer dataset caching (ds_id + h)
@@ -215,6 +215,18 @@ export const AudioDataTable = ({
         )));
       } else if (model === "whisper-base") {
         const res = await runInference("whisper-base", params) as unknown;
+        const text = typeof res === "string" ? res : ((res as InferenceResponse)?.text ? String((res as InferenceResponse).text) : "");
+        setData((prev) => prev.map((r) => (
+          r.id === id
+            ? {
+                ...r,
+                predictedTranscript: text,
+                prediction: { ...(r.prediction || {}), text },
+              }
+            : r
+        )));
+      } else if (model === "whisper-large") {
+        const res = await runInference("whisper-large", params) as unknown;
         const text = typeof res === "string" ? res : ((res as InferenceResponse)?.text ? String((res as InferenceResponse).text) : "");
         setData((prev) => prev.map((r) => (
           r.id === id
@@ -380,7 +392,7 @@ export const AudioDataTable = ({
 
   // Preload predictions for the currently visible page rows (wav2vec2 and whisper-base)
   const preloadVisiblePage = useCallback(() => {
-    if (!(model === "wav2vec2" || model === "whisper-base")) return;
+    if (!(model === "wav2vec2" || model === "whisper-base" || model === "whisper-large")) return;
     const rows = table.getRowModel().rows;
     for (const r of rows) {
       const orig = r.original as AudioData;
@@ -389,7 +401,7 @@ export const AudioDataTable = ({
       // Skip if we already have a prediction for the active model
       if (model === "wav2vec2") {
         if (orig.predictedLabel && orig.predictedLabel.trim().length > 0) continue;
-      } else if (model === "whisper-base") {
+      } else if (model === "whisper-base" || model === "whisper-large") {
         if (orig.predictedTranscript && orig.predictedTranscript.trim().length > 0) continue;
       }
       void handlePredict(orig);
