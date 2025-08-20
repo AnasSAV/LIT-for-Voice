@@ -8,9 +8,10 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
-import { listDatasets, getActiveDataset, setActiveDataset, API_BASE } from "@/lib/api/datasets";
-import { flushModels } from "@/lib/api/inferences";
+import { Settings, Upload, Download, Pin, Filter, Loader2, AlertTriangle } from "lucide-react";
+import { listDatasets, getActiveDataset, setActiveDataset } from "@/lib/api/datasets";
+import { flushModels, getCacheStatus, runInference } from "@/lib/api/inferences";
+import type { CacheStatus, InferenceResponse } from "@/lib/api/inferences";
 
 interface UploadedFile {
   file_id: string;
@@ -70,6 +71,10 @@ export const Toolbar = ({
   const [hasRavdessSubset, setHasRavdessSubset] = useState(false);
   const [hasCommonVoice, setHasCommonVoice] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
+  const [isFlushing, setIsFlushing] = useState(false);
+  const [reloadIn, setReloadIn] = useState<number>(0);
+  const [isModelLoading, setIsModelLoading] = useState(false);
 
   // Load available datasets on component mount
   useEffect(() => {
@@ -122,7 +127,60 @@ export const Toolbar = ({
     loadDatasets();
   }, [model]);
 
+  // Countdown for delayed reload indicator
+  useEffect(() => {
+    if (reloadIn <= 0) return;
+    const id = window.setInterval(() => {
+      setReloadIn((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [reloadIn]);
+
+  // Poll backend cache status to know how many models are resident
+  useEffect(() => {
+    let timer: number | undefined;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const s = await getCacheStatus();
+        if (!cancelled) setCacheStatus(s);
+      } catch (e) {
+        // ignore status errors in UI
+        void e;
+      } finally {
+        if (!cancelled) {
+          timer = window.setTimeout(tick, 4000);
+        }
+      }
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
+  // Subscribe to global inference loading events to reflect true loading state
+  useEffect(() => {
+    const onLoading = (e: Event) => {
+      const ce = e as CustomEvent<{ model: string; count: number; isLoading: boolean }>;
+      if (ce?.detail?.model === model) {
+        setIsModelLoading(Boolean(ce.detail.isLoading));
+      }
+    };
+    window.addEventListener("inference:loading", onLoading as EventListener);
+    return () => window.removeEventListener("inference:loading", onLoading as EventListener);
+  }, [model]);
+
   const onModelChange = async (value: string) => {
+    // If a delayed reload countdown is active, avoid triggering loads
+    if (reloadIn > 0) {
+      console.log("Deferring model change actions during reload countdown (hiding timer)");
+      // Hide the timer warning if user switches model during countdown
+      setReloadIn(0);
+      setModel(value);
+      return;
+    }
     setModel(value);
     console.log("Model selected:", value);
     // Ensure dataset matches the selected model
@@ -160,29 +218,12 @@ export const Toolbar = ({
 
       // If there's a selected file, run inference with the new model via backend /inferences/run
       if (selectedFile?.file_path) {
-        const url = new URL(`${API_BASE}/inferences/run`);
-        url.searchParams.set("model", value);
-        url.searchParams.set("file_path", selectedFile.file_path);
-
-        const response = await fetch(url.toString(), {
-          credentials: "include",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          let detail = "";
-          try {
-            const j = await response.json();
-            detail = (j && typeof j === "object" && "detail" in j) ? (j as { detail?: string }).detail || "" : "";
-          } catch (e) {
-            // ignore JSON parse errors when response is not JSON
-          }
-          throw new Error(`API error: ${response.status} ${detail || response.statusText}`);
-        }
-
-        // Backend may return string (text) for Whisper or object for others
-        const raw = await response.json();
-        const data: ApiData = typeof raw === "string" ? { transcription: raw } : (raw as ApiData);
+        const raw = await runInference(value, { file_path: selectedFile.file_path, signal: controller.signal });
+        const data: ApiData = typeof raw === "string"
+          ? { transcription: raw }
+          : ((raw as InferenceResponse)?.text
+              ? { transcription: String((raw as InferenceResponse).text), ...(raw as Record<string, unknown>) }
+              : (raw as ApiData));
         setApiData(data);
         console.log("API response:", data);
       }
@@ -270,6 +311,18 @@ export const Toolbar = ({
             </Select>
           </div>
 
+          {reloadIn > 0 && (
+            <div
+              className="flex items-center gap-2 rounded-full bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1 shadow-sm animate-pulse"
+              title="Models flushed. We will avoid auto-reloading briefly to free RAM/VRAM."
+            >
+              <AlertTriangle className="h-4 w-4" />
+              <span className="text-xs font-semibold tracking-wide">
+                Model will reload in {reloadIn}s
+              </span>
+            </div>
+          )}
+
           {uploadedFiles && uploadedFiles.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">File:</span>
@@ -340,26 +393,62 @@ export const Toolbar = ({
           Test Backend
         </Button>
 
-        <Button
-          variant="destructive"
-          size="sm"
-          className="h-8"
-          onClick={async () => {
-            const scope = model as 'whisper-base' | 'whisper-large' | 'wav2vec2';
-            const confirmed = window.confirm(`Flush cached model(s)? This frees RAM/VRAM.\nScope: ${scope}`);
-            if (!confirmed) return;
-            try {
-              const result = await flushModels(scope);
-              console.log('Flushed models:', result);
-              alert(`Flushed: ${JSON.stringify(result)}`);
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e);
-              alert(`Flush failed: ${msg}`);
-            }
-          }}
-        >
-          Flush Model
-        </Button>
+        {(() => {
+          const loadedCount = cacheStatus?.total_loaded ?? 0;
+          const isPlural = loadedCount > 1;
+          const baseLabel = `Flush Model${isPlural ? 's' : ''}`;
+          const label = isFlushing ? 'Flushing…' : isModelLoading ? 'Model loading…' : baseLabel;
+          const disabled = !model || isFlushing || isModelLoading || loadedCount === 0;
+          const title = !model
+            ? 'Select a model to enable flushing'
+            : isFlushing
+              ? 'Flush in progress...'
+              : isModelLoading
+                ? 'Model is loading; flushing is disabled'
+              : loadedCount === 0
+                ? 'No cached models to flush'
+                : undefined;
+          const busy = isFlushing || isModelLoading;
+          const colorClasses = isModelLoading
+            ? 'bg-green-600 hover:bg-green-600 text-white'
+            : isFlushing
+              ? 'bg-blue-600 hover:bg-blue-600 text-white'
+              : '';
+          const disabledClasses = disabled
+            ? `cursor-not-allowed ${busy ? '' : 'opacity-70'}`
+            : '';
+          return (
+            <Button
+              variant={busy ? "secondary" : "destructive"}
+              size="sm"
+              className={`h-8 ${colorClasses} ${disabledClasses}`}
+              disabled={disabled}
+              title={title}
+              onClick={async () => {
+                const scope = model as 'whisper-base' | 'whisper-large' | 'wav2vec2';
+                const confirmed = window.confirm(`Flush cached model(s)? This frees RAM/VRAM.\nScope: ${scope}`);
+                if (!confirmed) return;
+                setIsFlushing(true);
+                try {
+                  const result = await flushModels(scope);
+                  console.log('Flushed models:', result);
+                  // Refresh cache status after flush
+                  try { setCacheStatus(await getCacheStatus()); } catch (e) { void e; }
+                  // Start countdown to inform the user and prevent immediate reloads
+                  setReloadIn(12);
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  alert(`Flush failed: ${msg}`);
+                } finally {
+                  setIsFlushing(false);
+                }
+              }}
+            >
+              {(isFlushing || isModelLoading) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {label}
+            </Button>
+          );
+        })()}
 
         <Button variant="outline" size="sm" className="h-8">
           <Settings className="h-4 w-4" />

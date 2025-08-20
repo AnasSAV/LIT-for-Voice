@@ -143,3 +143,12 @@ async def flush_models(payload: dict = Body(None)):
     except Exception as e:
         # Avoid leaking internal errors
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/inferences/cache_status")
+async def cache_status():
+    try:
+        status = get_cache_status()
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

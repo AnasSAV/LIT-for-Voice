@@ -209,3 +209,28 @@ def unload_all_models() -> dict:
     asr_removed = unload_asr_model(None)
     emo_removed = unload_emotion_model()
     return {"asr_removed": asr_removed, "emotion_removed": emo_removed}
+
+
+def get_cache_status() -> dict:
+    """
+    Return a lightweight snapshot of the in-process model cache.
+    Example:
+      {
+        "device": "cuda:0" | "cpu",
+        "asr_loaded": ["openai/whisper-base", "openai/whisper-large-v3"],
+        "emotion_loaded": true,
+        "total_loaded": 3
+      }
+    """
+    try:
+        asr_ids = list(_asr_pipelines.keys())
+    except Exception:
+        asr_ids = []
+    emo_loaded = _emotion_model is not None
+    total = len(asr_ids) + (1 if emo_loaded else 0)
+    return {
+        "device": _device,
+        "asr_loaded": asr_ids,
+        "emotion_loaded": bool(emo_loaded),
+        "total_loaded": total,
+    }
