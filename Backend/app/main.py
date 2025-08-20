@@ -1,6 +1,8 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.session import SessionMiddleware
+from .services.model_loader_service import get_asr_pipeline, get_emotion_components
 from .api.routes import (
     session as session_routes,
     results as results_routes,
@@ -31,6 +33,28 @@ app.include_router(health_routes.router)
 app.include_router(datasets_routes.router)
 app.include_router(inferences_routes.router)
 app.include_router(upload_routes.router)
+
+@app.on_event("startup")
+async def warmup_models():
+    """Optionally warm up models on startup.
+    Set PRELOAD_MODELS to a comma-separated list, e.g.:
+    PRELOAD_MODELS=whisper-base,whisper-large,wav2vec2
+    """
+    raw = os.getenv("PRELOAD_MODELS", "").strip()
+    if not raw:
+        return
+    tokens = [t.strip() for t in raw.split(",") if t.strip()]
+    for t in tokens:
+        try:
+            if t in ("whisper-base", "openai/whisper-base"):
+                get_asr_pipeline("openai/whisper-base")
+            elif t in ("whisper-large", "openai/whisper-large-v3"):
+                get_asr_pipeline("openai/whisper-large-v3")
+            elif t in ("wav2vec2", "emotion", "wav2vec2-emotion"):
+                get_emotion_components()
+        except Exception:
+            # Warmup is best-effort; avoid failing app startup
+            pass
 
 @app.get("/")
 async def root():
