@@ -77,13 +77,14 @@ def _parse_label_from_filename(filename: str) -> Optional[str]:
     return None
 
 
-def _load_metadata_csv(base: Path) -> Dict[str, Dict[str, Any]]:
+def _load_metadata_csv(base: Path, ds_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """
     Load optional dataset-level metadata from a CSV residing in `base`.
     We look for the first file matching '*_metadata.csv'. Expected to contain
     at least a 'filename' column. Returns mapping: filename -> row dict.
     """
     mapping: Dict[str, Dict[str, Any]] = {}
+    # 1) Generic: first '*_metadata.csv' at base
     try:
         for p in sorted(base.glob("*_metadata.csv")):
             with p.open("r", encoding="utf-8", newline="") as f:
@@ -95,8 +96,10 @@ def _load_metadata_csv(base: Path) -> Dict[str, Dict[str, Any]]:
                         mapping[key] = row
             break  # only the first match is used
     except Exception:
-        # Metadata is optional; silently ignore issues
         pass
+
+    # 2) No dataset-specific handling; subsets should provide a '*_metadata.csv' at base
+
     return mapping
 
 
@@ -137,6 +140,14 @@ def compute_dir_version(base: Path) -> str:
             records.append((rel, int(st.st_size), int(st.st_mtime)))
         except Exception:
             continue
+    # Include mp3 files too so changes invalidate cache
+    for p in sorted(base.rglob("*.mp3")):
+        try:
+            st = p.stat()
+            rel = _posix_rel(base, p)
+            records.append((rel, int(st.st_size), int(st.st_mtime)))
+        except Exception:
+            continue
     # Also include metadata CSV files so cache invalidates when they change
     for p in sorted(base.glob("*_metadata.csv")):
         try:
@@ -145,6 +156,7 @@ def compute_dir_version(base: Path) -> str:
             records.append((rel, int(st.st_size), int(st.st_mtime)))
         except Exception:
             continue
+    # Note: Common Voice nested CSV is not considered; subsets should place metadata at base
     snap = hashlib.sha1()
     for rel, size, mtime in records:
         snap.update(rel.encode("utf-8"))
@@ -166,12 +178,17 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
     label_counts: Dict[str, int] = {}
 
     # Load optional dataset metadata to enrich entries
-    metadata_by_filename = _load_metadata_csv(base)
+    metadata_by_filename = _load_metadata_csv(base, ds_id)
     meta_consts = _metadata_constants(metadata_by_filename)
     # Prune duplicates from per-entry meta; also drop duplicate 'filename'
     drop_meta_keys = set(meta_consts.keys()) | {"filename"}
 
-    for p in sorted(base.rglob("*.wav")):
+    # Gather both WAV and MP3 files
+    audio_files: List[Path] = []
+    audio_files.extend(sorted(base.rglob("*.wav")))
+    audio_files.extend(sorted(base.rglob("*.mp3")))
+
+    for p in audio_files:
         try:
             st = p.stat()
         except Exception:
@@ -179,8 +196,12 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
         rel = _posix_rel(base, p)
         size = int(st.st_size)
         mtime = int(st.st_mtime)
-        duration = await asyncio.to_thread(_safe_duration_wav, p)
-        label = _parse_label_from_filename(p.name)
+        # Duration: WAV via wave, MP3 from metadata if provided
+        duration: Optional[float] = None
+        if p.suffix.lower() == ".wav":
+            duration = await asyncio.to_thread(_safe_duration_wav, p)
+        # Determine label
+        label: Optional[str] = _parse_label_from_filename(p.name)
         h = _compute_file_hash(rel, size, mtime)
 
         total_bytes += size
@@ -195,12 +216,28 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
             "label": label,
             "h": h,
         }
-        # Attach CSV metadata if available for this filename
-        meta_row = metadata_by_filename.get(p.name)
+        # Attach CSV metadata if available for this filename or relpath
+        meta_row = metadata_by_filename.get(p.name) or metadata_by_filename.get(rel)
         if meta_row:
+            # Generic mapping: prefer explicit 'label', else fallback to 'text'
+            if not label:
+                lbl = (meta_row.get("label") or meta_row.get("text") or "").strip()
+                label = lbl or None
+            # Optional duration supplied by metadata (seconds)
+            dur_val = meta_row.get("duration")
+            if duration is None and dur_val not in (None, ""):
+                try:
+                    duration = float(dur_val)
+                except Exception:
+                    pass
             filtered = {k: v for k, v in meta_row.items() if k not in drop_meta_keys}
             if filtered:
                 entry["meta"] = filtered
+        # Ensure entry fields reflect any updates from metadata and are typed for the frontend
+        safe_duration = float(duration) if duration is not None else 0.0
+        safe_label = label or ""
+        entry["duration"] = safe_duration
+        entry["label"] = safe_label
         entries.append(entry)
 
     summary = {

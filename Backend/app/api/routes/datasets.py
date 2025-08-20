@@ -11,19 +11,11 @@ router = APIRouter()
 # Resolve Backend root and data paths
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 DATA_ROOT = BACKEND_ROOT / "data"
-RAW_RAVDESS = DATA_ROOT / "raw" / "ravdess_full"
 DEV_RAVDESS = DATA_ROOT / "dev" / "ravdess_subset"
-COMMON_VOICE_EN = DATA_ROOT / "raw" / "common_voice_en"
-
+DEV_COMMON_VOICE_EN = DATA_ROOT / "dev" / "common_voice_en_dev"
 
 def _available_datasets():
     return [
-        {
-            "id": "ravdess_full",
-            "name": "RAVDESS (Full)",
-            "available": RAW_RAVDESS.exists(),
-            "path": str(RAW_RAVDESS),
-        },
         {
             "id": "ravdess_subset",
             "name": "RAVDESS (Subset)",
@@ -31,20 +23,20 @@ def _available_datasets():
             "path": str(DEV_RAVDESS),
         },
         {
-            "id": "common_voice_en",
-            "name": "Common Voice (en)",
-            "available": COMMON_VOICE_EN.exists(),
-            "path": str(COMMON_VOICE_EN),
+            "id": "common_voice_en_dev",
+            "name": "Common Voice (en) Dev Subset",
+            "available": DEV_COMMON_VOICE_EN.exists(),
+            "path": str(DEV_COMMON_VOICE_EN),
         },
     ]
 
 
 def _default_dataset_id() -> Optional[str]:
-    """Prefer a RAVDESS dataset by default if available."""
+    """Prefer a subset dataset by default if available."""
     if DEV_RAVDESS.exists():
         return "ravdess_subset"
-    if RAW_RAVDESS.exists():
-        return "ravdess_full"
+    if DEV_COMMON_VOICE_EN.exists():
+        return "common_voice_en_dev"
     return None
 
 
@@ -83,12 +75,10 @@ async def select_dataset(req: Request, payload: dict = Body(...)):
 
 
 def _dataset_path_for_id(ds_id: str) -> Path:
-    if ds_id == "ravdess_full":
-        return RAW_RAVDESS
     if ds_id == "ravdess_subset":
         return DEV_RAVDESS
-    if ds_id == "common_voice_en":
-        return COMMON_VOICE_EN
+    if ds_id == "common_voice_en_dev":
+        return DEV_COMMON_VOICE_EN
     return Path("")
 
 
@@ -137,7 +127,7 @@ async def list_dataset_files(req: Request, limit: int = 100, offset: int = 0):
 async def get_dataset_file(
     req: Request,
     relpath: str = Query(..., description="Relative path within the active dataset"),
-    id: Optional[str] = Query(None, description="Dataset id override: ravdess_subset or ravdess_full"),
+    id: Optional[str] = Query(None, description="Dataset id override: ravdess_subset or common_voice_en_dev"),
 ):
     # Determine dataset base dir
     ds_id = id
@@ -165,8 +155,16 @@ async def get_dataset_file(
 
     if not abs_path.exists() or not abs_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
+    # Serve a correct content type based on extension
+    ext = abs_path.suffix.lower()
+    if ext == ".mp3":
+        media_type = "audio/mpeg"
+    elif ext == ".wav":
+        media_type = "audio/wav"
+    else:
+        media_type = "application/octet-stream"
 
-    return FileResponse(path=str(abs_path), media_type="audio/wav", filename=abs_path.name)
+    return FileResponse(path=str(abs_path), media_type=media_type, filename=abs_path.name)
 
 
 @router.get("/datasets/summary")
@@ -199,7 +197,7 @@ async def dataset_summary(req: Request, id: Optional[str] = Query(None)):
 async def reindex_dataset(payload: dict = Body(...)):
     """
     Force a manifest rebuild for a given dataset id. Dev/admin utility.
-    Payload: {"id": "ravdess_subset" | "ravdess_full" | "common_voice_en"}
+    Payload: {"id": "ravdess_subset" | "common_voice_en_dev"}
     """
     ds_id = payload.get("id")
     valid_ids = {d["id"] for d in _available_datasets()}

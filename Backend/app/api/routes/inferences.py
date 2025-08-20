@@ -47,15 +47,13 @@ async def run_inference(
 
     # If dataset id and hash provided but no file_path, resolve absolute file path via manifest
     if (not file_path) and ds_id and h:
-        # Resolve dataset base directory (mirror logic from datasets router)
+        # Resolve dataset base directory (restricted to subset datasets)
         backend_root = Path(__file__).resolve().parents[3]
         data_root = backend_root / "data"
-        if ds_id == "ravdess_full":
-            base = data_root / "raw" / "ravdess_full"
-        elif ds_id == "ravdess_subset":
+        if ds_id == "ravdess_subset":
             base = data_root / "dev" / "ravdess_subset"
-        elif ds_id == "common_voice_en":
-            base = data_root / "raw" / "common_voice_en"
+        elif ds_id == "common_voice_en_dev":
+            base = data_root / "dev" / "common_voice_en_dev"
         else:
             base = Path("")
         if not base.exists():
