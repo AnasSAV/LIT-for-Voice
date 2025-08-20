@@ -371,6 +371,48 @@ pytest -q
     VITE_API_BASE=http://localhost:8000
     ```
 
+
+## Frontend Inference API and Global Loading Events
+
+- __Centralized API__: Use `runInference()` from `Frontend/src/lib/api/inferences.ts` for all calls to `/inferences/run`. It manages per-model concurrency and dispatches global loading events.
+- __Global events__: A `CustomEvent` named `inference:loading` is dispatched on `window` with `{ model, count, isLoading }` whenever inference starts/ends for a model.
+- __Return type__: `runInference()` returns `string | InferenceResponse` to support Whisper (raw text) and structured responses.
+
+Example usage:
+
+```ts
+import { runInference } from "@/lib/api/inferences";
+
+const controller = new AbortController();
+const res = await runInference("whisper-large", {
+  file_path: "/abs/path.wav",
+  signal: controller.signal,
+});
+// res: string | { text?: string; label?: string; confidence?: number; ... }
+```
+
+Subscribe to loading events (e.g., in `Frontend/src/components/layout/Toolbar.tsx`):
+
+```ts
+useEffect(() => {
+  const onLoading = (e: Event) => {
+    const ce = e as CustomEvent<{ model: string; count: number; isLoading: boolean }>; 
+    if (ce?.detail?.model === model) {
+      setIsModelLoading(!!ce.detail.isLoading);
+    }
+  };
+  window.addEventListener("inference:loading", onLoading as EventListener);
+  return () => window.removeEventListener("inference:loading", onLoading as EventListener);
+}, [model]);
+```
+
+Flush button UI states (in `Toolbar.tsx`):
+
+- __Model loading__: green background, spinner, label “Model loading…”, button disabled.
+- __Flushing__: blue background, spinner, label “Flushing…”, button disabled.
+
+Important: To ensure consistent global loading state, always call `runInference()` instead of `fetch()` directly.
+
 ## API Endpoints and Caching
 
 For a deeper dive into cache internals and Redis keys, see `Backend/docs/README.md`.
