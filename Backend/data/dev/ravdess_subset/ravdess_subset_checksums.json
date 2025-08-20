@@ -1,0 +1,1010 @@
+{
+  "03-01-01-01-01-01-16.wav": {
+    "md5": "247ba94f9c8cbcbb2d0026de5348f2fc",
+    "size": 418744,
+    "emotion": "neutral",
+    "actor": 16,
+    "gender": "female"
+  },
+  "03-01-01-01-01-01-06.wav": {
+    "md5": "422d93951c5a6135d2637e34d47113f6",
+    "size": 367496,
+    "emotion": "neutral",
+    "actor": 6,
+    "gender": "female"
+  },
+  "03-01-01-01-02-01-19.wav": {
+    "md5": "d7dcf81df39c168d9caa272af4a29fd6",
+    "size": 368422,
+    "emotion": "neutral",
+    "actor": 19,
+    "gender": "male"
+  },
+  "03-01-01-01-02-01-24.wav": {
+    "md5": "e883a851b5b7e6449979392ee180e3c3",
+    "size": 405338,
+    "emotion": "neutral",
+    "actor": 24,
+    "gender": "female"
+  },
+  "03-01-01-01-01-02-14.wav": {
+    "md5": "4b57e0a44b65c7ba2ecffac5bbff068f",
+    "size": 381282,
+    "emotion": "neutral",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-01-01-01-01-11.wav": {
+    "md5": "82a7d0c979b6a102e015a0aa29cdee63",
+    "size": 348136,
+    "emotion": "neutral",
+    "actor": 11,
+    "gender": "male"
+  },
+  "03-01-01-01-02-01-18.wav": {
+    "md5": "ec200cc4ebefd02b7b97fc4743ae0107",
+    "size": 392650,
+    "emotion": "neutral",
+    "actor": 18,
+    "gender": "female"
+  },
+  "03-01-01-01-02-02-12.wav": {
+    "md5": "7ba89690fb5ec3de43c23c24e6ae589b",
+    "size": 396512,
+    "emotion": "neutral",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-01-01-01-02-15.wav": {
+    "md5": "2a9c311756e06a2101e4a64ccb376eb6",
+    "size": 380306,
+    "emotion": "neutral",
+    "actor": 15,
+    "gender": "male"
+  },
+  "03-01-01-01-01-02-17.wav": {
+    "md5": "30793827dfce091941b4dbd331fb2f28",
+    "size": 386178,
+    "emotion": "neutral",
+    "actor": 17,
+    "gender": "male"
+  },
+  "03-01-01-01-01-02-02.wav": {
+    "md5": "db8721fc3764f4190694a9de1ef71dff",
+    "size": 406912,
+    "emotion": "neutral",
+    "actor": 2,
+    "gender": "female"
+  },
+  "03-01-01-01-02-01-13.wav": {
+    "md5": "3eeb337f86179e1047f051f0886ab6f8",
+    "size": 344040,
+    "emotion": "neutral",
+    "actor": 13,
+    "gender": "male"
+  },
+  "03-01-01-01-01-02-22.wav": {
+    "md5": "0d757c51ebe14582edcd30df376f0773",
+    "size": 388386,
+    "emotion": "neutral",
+    "actor": 22,
+    "gender": "female"
+  },
+  "03-01-01-01-01-02-07.wav": {
+    "md5": "749614bfc994011f8454659494639dc3",
+    "size": 414516,
+    "emotion": "neutral",
+    "actor": 7,
+    "gender": "male"
+  },
+  "03-01-01-01-01-02-10.wav": {
+    "md5": "cc142718db6e12932cd909aae0bf3b63",
+    "size": 428316,
+    "emotion": "neutral",
+    "actor": 10,
+    "gender": "female"
+  },
+  "03-01-01-01-01-01-03.wav": {
+    "md5": "f4fcfef1cba57c9509644f914d3f76ea",
+    "size": 379588,
+    "emotion": "neutral",
+    "actor": 3,
+    "gender": "male"
+  },
+  "03-01-01-01-01-01-23.wav": {
+    "md5": "db026f9f9daa92544e583fba670f39f8",
+    "size": 422306,
+    "emotion": "neutral",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-01-01-02-02-05.wav": {
+    "md5": "128947c242791a0d7f88c74772be8708",
+    "size": 395284,
+    "emotion": "neutral",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-02-02-02-01-15.wav": {
+    "md5": "cca56bca29fc787da6e5eece57bb3717",
+    "size": 428356,
+    "emotion": "calm",
+    "actor": 15,
+    "gender": "male"
+  },
+  "03-01-02-01-01-01-20.wav": {
+    "md5": "f6b8adc4e11ecd79eaa91ee1bb52b6f3",
+    "size": 409104,
+    "emotion": "calm",
+    "actor": 20,
+    "gender": "female"
+  },
+  "03-01-02-01-02-01-06.wav": {
+    "md5": "1fb6a6ab12a56c5e01f1681f356baf9b",
+    "size": 428550,
+    "emotion": "calm",
+    "actor": 6,
+    "gender": "female"
+  },
+  "03-01-02-02-01-02-09.wav": {
+    "md5": "a96a168140fc82ed08e61f8dd3aa480f",
+    "size": 377192,
+    "emotion": "calm",
+    "actor": 9,
+    "gender": "male"
+  },
+  "03-01-02-02-02-02-08.wav": {
+    "md5": "35b8f2a61447d53b045ca2a21d5156af",
+    "size": 402274,
+    "emotion": "calm",
+    "actor": 8,
+    "gender": "female"
+  },
+  "03-01-02-02-01-02-19.wav": {
+    "md5": "315de673ed1d06f4169fb4afbdef2c0f",
+    "size": 435702,
+    "emotion": "calm",
+    "actor": 19,
+    "gender": "male"
+  },
+  "03-01-02-02-02-01-16.wav": {
+    "md5": "222f54a35763d2a54235aac0a0311785",
+    "size": 425144,
+    "emotion": "calm",
+    "actor": 16,
+    "gender": "female"
+  },
+  "03-01-02-02-01-01-17.wav": {
+    "md5": "159c210561a77801399c70f0d983184f",
+    "size": 421420,
+    "emotion": "calm",
+    "actor": 17,
+    "gender": "male"
+  },
+  "03-01-02-01-01-01-14.wav": {
+    "md5": "89fddcdfa8e9bd48ea4b235d36415192",
+    "size": 419754,
+    "emotion": "calm",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-02-02-02-02-22.wav": {
+    "md5": "cf1bbe426c9147fdee8e7d310f4e8aec",
+    "size": 420418,
+    "emotion": "calm",
+    "actor": 22,
+    "gender": "female"
+  },
+  "03-01-02-01-02-01-02.wav": {
+    "md5": "a70b5e5947605771b7ed36435784a858",
+    "size": 429354,
+    "emotion": "calm",
+    "actor": 2,
+    "gender": "female"
+  },
+  "03-01-02-01-01-02-05.wav": {
+    "md5": "210e02c3bf969b8847acf36d5822de00",
+    "size": 443404,
+    "emotion": "calm",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-02-02-02-02-23.wav": {
+    "md5": "f85f112e915eceed76963e2517862442",
+    "size": 495996,
+    "emotion": "calm",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-02-01-01-02-11.wav": {
+    "md5": "269aa60782ad3875d21def298ae9fb31",
+    "size": 367540,
+    "emotion": "calm",
+    "actor": 11,
+    "gender": "male"
+  },
+  "03-01-02-01-02-01-01.wav": {
+    "md5": "d9b3808998049ab0e62024b8063fe0be",
+    "size": 396294,
+    "emotion": "calm",
+    "actor": 1,
+    "gender": "male"
+  },
+  "03-01-02-02-01-01-21.wav": {
+    "md5": "f8f83610b95857f341298b889f956edc",
+    "size": 443674,
+    "emotion": "calm",
+    "actor": 21,
+    "gender": "male"
+  },
+  "03-01-02-01-01-01-07.wav": {
+    "md5": "a54a74171ad6e7815a22dd53eafaa7c6",
+    "size": 381294,
+    "emotion": "calm",
+    "actor": 7,
+    "gender": "male"
+  },
+  "03-01-02-01-02-01-12.wav": {
+    "md5": "186c114ed3d024510a2260c3eca5edd4",
+    "size": 409326,
+    "emotion": "calm",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-03-01-02-02-10.wav": {
+    "md5": "77dc56e7aa46a1d5da529b70a1df365a",
+    "size": 380286,
+    "emotion": "happy",
+    "actor": 10,
+    "gender": "female"
+  },
+  "03-01-03-02-01-01-08.wav": {
+    "md5": "5a77f40da92032ac36f2d99a958a6fed",
+    "size": 399070,
+    "emotion": "happy",
+    "actor": 8,
+    "gender": "female"
+  },
+  "03-01-03-02-01-02-01.wav": {
+    "md5": "3ef432148a0974201641e3d3bcce8cee",
+    "size": 409108,
+    "emotion": "happy",
+    "actor": 1,
+    "gender": "male"
+  },
+  "03-01-03-02-01-02-14.wav": {
+    "md5": "b39e25a0565169996ff447e7b1ae11d2",
+    "size": 419754,
+    "emotion": "happy",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-03-01-02-01-06.wav": {
+    "md5": "80dad33fbca63cb2bf36a36291162933",
+    "size": 380552,
+    "emotion": "happy",
+    "actor": 6,
+    "gender": "female"
+  },
+  "03-01-03-02-01-01-02.wav": {
+    "md5": "2d891babec6c1882441a7d7f2ea5b908",
+    "size": 416542,
+    "emotion": "happy",
+    "actor": 2,
+    "gender": "female"
+  },
+  "03-01-03-02-01-01-18.wav": {
+    "md5": "2f4c13c7cc02822abdc025d75d179176",
+    "size": 421816,
+    "emotion": "happy",
+    "actor": 18,
+    "gender": "female"
+  },
+  "03-01-03-02-02-01-22.wav": {
+    "md5": "6fcf343c54872df35efa263b0d60667b",
+    "size": 410808,
+    "emotion": "happy",
+    "actor": 22,
+    "gender": "female"
+  },
+  "03-01-03-01-01-01-21.wav": {
+    "md5": "2e894d90d357aee130ee2327b08d3a1d",
+    "size": 427658,
+    "emotion": "happy",
+    "actor": 21,
+    "gender": "male"
+  },
+  "03-01-03-01-01-01-17.wav": {
+    "md5": "8e4e940aba548b618a5ba259fa3f77aa",
+    "size": 382982,
+    "emotion": "happy",
+    "actor": 17,
+    "gender": "male"
+  },
+  "03-01-03-01-02-02-23.wav": {
+    "md5": "b1668243cfb35e8fbaaac697b8936de3",
+    "size": 371072,
+    "emotion": "happy",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-03-01-01-01-20.wav": {
+    "md5": "d2b416cd04ae183d22ba8fb6e94dc2e2",
+    "size": 399490,
+    "emotion": "happy",
+    "actor": 20,
+    "gender": "female"
+  },
+  "03-01-03-01-02-01-12.wav": {
+    "md5": "ba8c6be9900d5ca5be624c407eab6bec",
+    "size": 383704,
+    "emotion": "happy",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-03-01-02-02-04.wav": {
+    "md5": "43e859ac94b4acbbfd6a732504e86d05",
+    "size": 387350,
+    "emotion": "happy",
+    "actor": 4,
+    "gender": "female"
+  },
+  "03-01-03-01-01-02-03.wav": {
+    "md5": "0cdb5bb2278c86e1311d56d84a419561",
+    "size": 395612,
+    "emotion": "happy",
+    "actor": 3,
+    "gender": "male"
+  },
+  "03-01-03-02-01-02-09.wav": {
+    "md5": "f36f5a58f0c28c562cf28e7ea1027b77",
+    "size": 447666,
+    "emotion": "happy",
+    "actor": 9,
+    "gender": "male"
+  },
+  "03-01-03-02-01-02-05.wav": {
+    "md5": "b65c4a53987341546188b126b1d6a0db",
+    "size": 420982,
+    "emotion": "happy",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-03-02-02-01-15.wav": {
+    "md5": "bdc58cbd182a6a83e678b32b0cc9db5c",
+    "size": 415552,
+    "emotion": "happy",
+    "actor": 15,
+    "gender": "male"
+  },
+  "03-01-04-01-01-02-16.wav": {
+    "md5": "a24331072e159cb6a85c23d73ebf68d2",
+    "size": 409142,
+    "emotion": "sad",
+    "actor": 16,
+    "gender": "female"
+  },
+  "03-01-04-02-02-02-05.wav": {
+    "md5": "4b49df2c8083d37a2899472b27e24915",
+    "size": 350502,
+    "emotion": "sad",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-04-01-02-01-02.wav": {
+    "md5": "a9bf933aa81d9137b43a5eb171c0292c",
+    "size": 419722,
+    "emotion": "sad",
+    "actor": 2,
+    "gender": "female"
+  },
+  "03-01-04-01-02-01-12.wav": {
+    "md5": "636daed4fac64df3b1b190c094cbef4e",
+    "size": 399728,
+    "emotion": "sad",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-04-02-02-02-08.wav": {
+    "md5": "3b4cbd9f420e8e721a804eaa0f7d51b9",
+    "size": 392670,
+    "emotion": "sad",
+    "actor": 8,
+    "gender": "female"
+  },
+  "03-01-04-01-02-01-18.wav": {
+    "md5": "617d2c9b9b4c35f8289e972a5b0edb20",
+    "size": 399276,
+    "emotion": "sad",
+    "actor": 18,
+    "gender": "female"
+  },
+  "03-01-04-02-01-01-19.wav": {
+    "md5": "7ac8ab9c1e5b23822e981cf3204f41f0",
+    "size": 432506,
+    "emotion": "sad",
+    "actor": 19,
+    "gender": "male"
+  },
+  "03-01-04-02-01-01-14.wav": {
+    "md5": "0b957844652b88df271c69cae3a03fd5",
+    "size": 432550,
+    "emotion": "sad",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-04-02-02-02-24.wav": {
+    "md5": "a3fb2c4e71e1b6f8f06cc86dc968198b",
+    "size": 504944,
+    "emotion": "sad",
+    "actor": 24,
+    "gender": "female"
+  },
+  "03-01-04-02-01-02-11.wav": {
+    "md5": "e987f4fe5d98ad9354ce213000f49fbd",
+    "size": 393176,
+    "emotion": "sad",
+    "actor": 11,
+    "gender": "male"
+  },
+  "03-01-04-01-01-01-23.wav": {
+    "md5": "e50ce911185aefc208a9ee731e7c1086",
+    "size": 403114,
+    "emotion": "sad",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-04-02-01-02-15.wav": {
+    "md5": "2b88bb3022eaf53d050ae427601f21ba",
+    "size": 377112,
+    "emotion": "sad",
+    "actor": 15,
+    "gender": "male"
+  },
+  "03-01-04-02-02-01-13.wav": {
+    "md5": "9b32437eb1d1d76016dc85d4deefd106",
+    "size": 379280,
+    "emotion": "sad",
+    "actor": 13,
+    "gender": "male"
+  },
+  "03-01-04-02-02-01-21.wav": {
+    "md5": "aefc45a2cff69e87553f891cdb538a1d",
+    "size": 469314,
+    "emotion": "sad",
+    "actor": 21,
+    "gender": "male"
+  },
+  "03-01-04-01-01-02-03.wav": {
+    "md5": "1efb1fcba57e33acd0622795a4d47e2a",
+    "size": 392404,
+    "emotion": "sad",
+    "actor": 3,
+    "gender": "male"
+  },
+  "03-01-04-02-01-01-07.wav": {
+    "md5": "f076df7c69f888f751d8a89966bfd3df",
+    "size": 427412,
+    "emotion": "sad",
+    "actor": 7,
+    "gender": "male"
+  },
+  "03-01-04-01-02-02-20.wav": {
+    "md5": "b52c13bdfde7167916e309d6cc96df01",
+    "size": 383472,
+    "emotion": "sad",
+    "actor": 20,
+    "gender": "female"
+  },
+  "03-01-04-02-02-01-10.wav": {
+    "md5": "b8e04d730d7c94e69d3996ccd332b364",
+    "size": 412328,
+    "emotion": "sad",
+    "actor": 10,
+    "gender": "female"
+  },
+  "03-01-05-02-02-01-05.wav": {
+    "md5": "7b9a810fc656fc69f7e83800f17acdcc",
+    "size": 398558,
+    "emotion": "angry",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-05-02-01-01-06.wav": {
+    "md5": "2a3ccaca90b852caa0274e313539c42a",
+    "size": 441364,
+    "emotion": "angry",
+    "actor": 6,
+    "gender": "female"
+  },
+  "03-01-05-02-02-02-09.wav": {
+    "md5": "62374760299689f8c45d61705fccf198",
+    "size": 428450,
+    "emotion": "angry",
+    "actor": 9,
+    "gender": "male"
+  },
+  "03-01-05-02-02-02-16.wav": {
+    "md5": "3d2ab682be09d12d274123f3c3d1d8bb",
+    "size": 450778,
+    "emotion": "angry",
+    "actor": 16,
+    "gender": "female"
+  },
+  "03-01-05-02-02-02-07.wav": {
+    "md5": "afd6372d63ba6b72d64617128b051601",
+    "size": 465850,
+    "emotion": "angry",
+    "actor": 7,
+    "gender": "male"
+  },
+  "03-01-05-02-01-02-19.wav": {
+    "md5": "ecf9f256dee2f12c85c1b4c97f737fd1",
+    "size": 509384,
+    "emotion": "angry",
+    "actor": 19,
+    "gender": "male"
+  },
+  "03-01-05-02-02-01-23.wav": {
+    "md5": "bf2abfd6be4eb2e9c2e71069f79fd7fd",
+    "size": 367878,
+    "emotion": "angry",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-05-01-02-02-12.wav": {
+    "md5": "b10bfd480afbd96082c385ae7a1fc5d2",
+    "size": 444574,
+    "emotion": "angry",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-05-01-02-02-14.wav": {
+    "md5": "99869f4c48a84740d2b162baf4115eae",
+    "size": 435754,
+    "emotion": "angry",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-05-02-01-02-13.wav": {
+    "md5": "981b671e975621b44641f675acd4b1bc",
+    "size": 459370,
+    "emotion": "angry",
+    "actor": 13,
+    "gender": "male"
+  },
+  "03-01-05-01-02-02-18.wav": {
+    "md5": "48e0588775b864efdfb5470774f8751d",
+    "size": 408888,
+    "emotion": "angry",
+    "actor": 18,
+    "gender": "female"
+  },
+  "03-01-05-02-01-02-02.wav": {
+    "md5": "ffeb795ddc513e47c8368f9f76f30b92",
+    "size": 445354,
+    "emotion": "angry",
+    "actor": 2,
+    "gender": "female"
+  },
+  "03-01-05-02-01-02-24.wav": {
+    "md5": "9493dee119dc3d66ee77526819206d89",
+    "size": 476112,
+    "emotion": "angry",
+    "actor": 24,
+    "gender": "female"
+  },
+  "03-01-05-02-02-01-22.wav": {
+    "md5": "1bfb2de42dc5d3c721787e3dbf447335",
+    "size": 465280,
+    "emotion": "angry",
+    "actor": 22,
+    "gender": "female"
+  },
+  "03-01-05-01-01-02-10.wav": {
+    "md5": "230694caecec97a15ab6a5ed0369fb06",
+    "size": 444362,
+    "emotion": "angry",
+    "actor": 10,
+    "gender": "female"
+  },
+  "03-01-05-01-02-02-20.wav": {
+    "md5": "65d0536b790898adf7970dc246fb5928",
+    "size": 425104,
+    "emotion": "angry",
+    "actor": 20,
+    "gender": "female"
+  },
+  "03-01-05-01-01-02-01.wav": {
+    "md5": "8ca5e29074e4baa45ba64cd4580ea034",
+    "size": 437952,
+    "emotion": "angry",
+    "actor": 1,
+    "gender": "male"
+  },
+  "03-01-05-02-01-01-11.wav": {
+    "md5": "411b1e7ec399baad1df1854ccdda9c7b",
+    "size": 386772,
+    "emotion": "angry",
+    "actor": 11,
+    "gender": "male"
+  },
+  "03-01-06-02-01-02-09.wav": {
+    "md5": "93e2ad9e53b986b1509025b9d6392f04",
+    "size": 361180,
+    "emotion": "fearful",
+    "actor": 9,
+    "gender": "male"
+  },
+  "03-01-06-02-01-02-14.wav": {
+    "md5": "75b7a7bc2e6ec22144178621707b7da2",
+    "size": 387690,
+    "emotion": "fearful",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-06-02-02-02-23.wav": {
+    "md5": "6ebbcae29649e0e1124b3602150bc9b7",
+    "size": 396704,
+    "emotion": "fearful",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-06-02-02-02-17.wav": {
+    "md5": "6ba5fa22cf7e1a3d75ba41dc9f044cd0",
+    "size": 418214,
+    "emotion": "fearful",
+    "actor": 17,
+    "gender": "male"
+  },
+  "03-01-06-02-02-01-13.wav": {
+    "md5": "7789f0fa00f79ca54e0da2743eabcb04",
+    "size": 385694,
+    "emotion": "fearful",
+    "actor": 13,
+    "gender": "male"
+  },
+  "03-01-06-02-01-01-06.wav": {
+    "md5": "fb8bcd34881d43aadccd8f8c85518133",
+    "size": 396518,
+    "emotion": "fearful",
+    "actor": 6,
+    "gender": "female"
+  },
+  "03-01-06-01-01-02-01.wav": {
+    "md5": "d0893636c02f297255dd508bc695a7fe",
+    "size": 409140,
+    "emotion": "fearful",
+    "actor": 1,
+    "gender": "male"
+  },
+  "03-01-06-02-01-02-10.wav": {
+    "md5": "c0de6536da6e19d16273bb920db3422c",
+    "size": 415538,
+    "emotion": "fearful",
+    "actor": 10,
+    "gender": "female"
+  },
+  "03-01-06-02-01-01-12.wav": {
+    "md5": "ba1739da8df63920a77dc2080ec58a6a",
+    "size": 406134,
+    "emotion": "fearful",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-06-01-01-01-02.wav": {
+    "md5": "a1200348590016aefacb42a10fccaf74",
+    "size": 410134,
+    "emotion": "fearful",
+    "actor": 2,
+    "gender": "female"
+  },
+  "03-01-06-02-01-01-22.wav": {
+    "md5": "ea1ef916b1eceabcfd83cac92813dc54",
+    "size": 401214,
+    "emotion": "fearful",
+    "actor": 22,
+    "gender": "female"
+  },
+  "03-01-06-01-01-01-21.wav": {
+    "md5": "aaa0390aae037ca1e7d4649fa5af2b62",
+    "size": 411674,
+    "emotion": "fearful",
+    "actor": 21,
+    "gender": "male"
+  },
+  "03-01-06-02-02-01-16.wav": {
+    "md5": "01ee559c8b7c7e1c5f019b4f30771dc6",
+    "size": 399528,
+    "emotion": "fearful",
+    "actor": 16,
+    "gender": "female"
+  },
+  "03-01-06-01-01-02-03.wav": {
+    "md5": "f150b40f6d7a6d4c9b58abd5bae4395f",
+    "size": 418038,
+    "emotion": "fearful",
+    "actor": 3,
+    "gender": "male"
+  },
+  "03-01-06-02-01-02-19.wav": {
+    "md5": "60f5223065ecab3d71be650777ae28f2",
+    "size": 467738,
+    "emotion": "fearful",
+    "actor": 19,
+    "gender": "male"
+  },
+  "03-01-06-02-02-02-05.wav": {
+    "md5": "894cb82a3ba33ad6bf2e81c7738d0be6",
+    "size": 347312,
+    "emotion": "fearful",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-06-02-01-01-15.wav": {
+    "md5": "af05e11f9f18c567e12eb65a76ab5613",
+    "size": 370706,
+    "emotion": "fearful",
+    "actor": 15,
+    "gender": "male"
+  },
+  "03-01-06-02-02-01-18.wav": {
+    "md5": "f847b57214f8cb941cab272705cb2103",
+    "size": 425022,
+    "emotion": "fearful",
+    "actor": 18,
+    "gender": "female"
+  },
+  "03-01-07-02-01-01-06.wav": {
+    "md5": "625c383387aa19e617a89b0fea6d6bd1",
+    "size": 460582,
+    "emotion": "disgust",
+    "actor": 6,
+    "gender": "female"
+  },
+  "03-01-07-01-02-02-04.wav": {
+    "md5": "7bdad60e2a24c7458918b89400a81d2d",
+    "size": 422592,
+    "emotion": "disgust",
+    "actor": 4,
+    "gender": "female"
+  },
+  "03-01-07-02-02-02-20.wav": {
+    "md5": "1147ed4378e470f5dd80a228270dce94",
+    "size": 431524,
+    "emotion": "disgust",
+    "actor": 20,
+    "gender": "female"
+  },
+  "03-01-07-01-01-02-05.wav": {
+    "md5": "6914fee15ff19ba79024e4c7b603423a",
+    "size": 443408,
+    "emotion": "disgust",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-07-01-02-01-15.wav": {
+    "md5": "56863bf60a46a40bfdd8477ddfcb2d0d",
+    "size": 402740,
+    "emotion": "disgust",
+    "actor": 15,
+    "gender": "male"
+  },
+  "03-01-07-02-01-02-14.wav": {
+    "md5": "91da3b0120c388347508dd91626a58fc",
+    "size": 419750,
+    "emotion": "disgust",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-07-01-02-01-23.wav": {
+    "md5": "2b129a305d971caf7c58a68d1e6d5199",
+    "size": 390296,
+    "emotion": "disgust",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-07-01-01-01-16.wav": {
+    "md5": "52e9fce753d4fc846e8bc2f77e7687aa",
+    "size": 421950,
+    "emotion": "disgust",
+    "actor": 16,
+    "gender": "female"
+  },
+  "03-01-07-02-02-01-12.wav": {
+    "md5": "98b2bb873de2f166f8d4602849b85000",
+    "size": 450978,
+    "emotion": "disgust",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-07-01-02-01-01.wav": {
+    "md5": "120382d83289d04623ec71cea8ee60fb",
+    "size": 434760,
+    "emotion": "disgust",
+    "actor": 1,
+    "gender": "male"
+  },
+  "03-01-07-02-02-02-03.wav": {
+    "md5": "1cfea302a11b4dbce3a18ad9498c997d",
+    "size": 427648,
+    "emotion": "disgust",
+    "actor": 3,
+    "gender": "male"
+  },
+  "03-01-07-01-01-01-13.wav": {
+    "md5": "56b465d2b585ea3a99a07d5183140218",
+    "size": 350458,
+    "emotion": "disgust",
+    "actor": 13,
+    "gender": "male"
+  },
+  "03-01-07-02-01-01-09.wav": {
+    "md5": "facd69361422bded2f224971c2104b41",
+    "size": 396436,
+    "emotion": "disgust",
+    "actor": 9,
+    "gender": "male"
+  },
+  "03-01-07-02-01-01-08.wav": {
+    "md5": "94a92b74eecd491ea75d356164b0d949",
+    "size": 427900,
+    "emotion": "disgust",
+    "actor": 8,
+    "gender": "female"
+  },
+  "03-01-07-01-01-02-24.wav": {
+    "md5": "8f90bd30c0b03e5387fbdd6dde98c04b",
+    "size": 450486,
+    "emotion": "disgust",
+    "actor": 24,
+    "gender": "female"
+  },
+  "03-01-07-02-02-01-17.wav": {
+    "md5": "fe1ec2a672fa333dfa497c73015cc9db",
+    "size": 479080,
+    "emotion": "disgust",
+    "actor": 17,
+    "gender": "male"
+  },
+  "03-01-07-01-02-01-21.wav": {
+    "md5": "a445d1ae481bb7db7c708581c2051c09",
+    "size": 408472,
+    "emotion": "disgust",
+    "actor": 21,
+    "gender": "male"
+  },
+  "03-01-07-01-02-01-11.wav": {
+    "md5": "8a65eae87ea569e4b55df20a89271f33",
+    "size": 380364,
+    "emotion": "disgust",
+    "actor": 11,
+    "gender": "male"
+  },
+  "03-01-08-01-02-02-12.wav": {
+    "md5": "68bf0ab831461dc414b82204aec67bcd",
+    "size": 393324,
+    "emotion": "surprised",
+    "actor": 12,
+    "gender": "female"
+  },
+  "03-01-08-02-01-01-13.wav": {
+    "md5": "eb1294bff224d435f24446fd201a6f3f",
+    "size": 369680,
+    "emotion": "surprised",
+    "actor": 13,
+    "gender": "male"
+  },
+  "03-01-08-01-01-01-11.wav": {
+    "md5": "ffbc84416b9560b036b9d1f7e47f1194",
+    "size": 341912,
+    "emotion": "surprised",
+    "actor": 11,
+    "gender": "male"
+  },
+  "03-01-08-01-02-02-24.wav": {
+    "md5": "fd49d13de3dacf4c440e528a564b4ddb",
+    "size": 383208,
+    "emotion": "surprised",
+    "actor": 24,
+    "gender": "female"
+  },
+  "03-01-08-01-02-02-16.wav": {
+    "md5": "c9e2d20d14765d6a298ac1a76757eb5a",
+    "size": 389926,
+    "emotion": "surprised",
+    "actor": 16,
+    "gender": "female"
+  },
+  "03-01-08-02-01-01-10.wav": {
+    "md5": "32a79f9da5eb2339c74b50d1c4f03a4d",
+    "size": 396302,
+    "emotion": "surprised",
+    "actor": 10,
+    "gender": "female"
+  },
+  "03-01-08-01-01-01-17.wav": {
+    "md5": "787455fb70f6bc72fef34a08bf0543e7",
+    "size": 376498,
+    "emotion": "surprised",
+    "actor": 17,
+    "gender": "male"
+  },
+  "03-01-08-01-01-02-08.wav": {
+    "md5": "48ee98f170108cce12962b51c405c438",
+    "size": 402274,
+    "emotion": "surprised",
+    "actor": 8,
+    "gender": "female"
+  },
+  "03-01-08-02-02-01-23.wav": {
+    "md5": "1b6e9703c49daa88a055dc93239ebe98",
+    "size": 377462,
+    "emotion": "surprised",
+    "actor": 23,
+    "gender": "male"
+  },
+  "03-01-08-01-02-01-05.wav": {
+    "md5": "dd08bacc06365b1fa3164b0ef0ab5599",
+    "size": 344110,
+    "emotion": "surprised",
+    "actor": 5,
+    "gender": "male"
+  },
+  "03-01-08-02-02-01-14.wav": {
+    "md5": "d97523b78f4533851d0c04a0e5c6bbef",
+    "size": 416544,
+    "emotion": "surprised",
+    "actor": 14,
+    "gender": "female"
+  },
+  "03-01-08-01-01-01-22.wav": {
+    "md5": "9c5b08d30dfe313309a363e6cf32c244",
+    "size": 397992,
+    "emotion": "surprised",
+    "actor": 22,
+    "gender": "female"
+  },
+  "03-01-08-02-02-02-02.wav": {
+    "md5": "3cb434a03553d5a8e70e6324e8017573",
+    "size": 426150,
+    "emotion": "surprised",
+    "actor": 2,
+    "gender": "female"
+  },
+  "03-01-08-01-01-01-06.wav": {
+    "md5": "fa748cba513b9ea40001a10a70335cd0",
+    "size": 358134,
+    "emotion": "surprised",
+    "actor": 6,
+    "gender": "female"
+  },
+  "03-01-08-01-01-02-21.wav": {
+    "md5": "271b9246ffb60e9f17802ec90cea67b3",
+    "size": 392426,
+    "emotion": "surprised",
+    "actor": 21,
+    "gender": "male"
+  },
+  "03-01-08-01-02-01-09.wav": {
+    "md5": "c0e229154ed21fc569c07e959cccc595",
+    "size": 377196,
+    "emotion": "surprised",
+    "actor": 9,
+    "gender": "male"
+  },
+  "03-01-08-02-01-02-07.wav": {
+    "md5": "03a5c045e8318d21f0fba6f785873106",
+    "size": 398584,
+    "emotion": "surprised",
+    "actor": 7,
+    "gender": "male"
+  },
+  "03-01-08-01-01-01-18.wav": {
+    "md5": "f488fd1a232319cd84bbe478effcfedf",
+    "size": 383382,
+    "emotion": "surprised",
+    "actor": 18,
+    "gender": "female"
+  }
+}
