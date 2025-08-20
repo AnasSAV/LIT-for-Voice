@@ -122,6 +122,61 @@ curl -s -X POST http://localhost:8000/datasets/reindex -H "Content-Type: applica
 
 - The `/datasets/files` response now includes `meta` per entry (pruned) and the `/datasets/summary` includes `meta_constants`. Frontend can display constants once and show per-file fields under each row.
 
+## Model In-Memory Cache (Per-Process)
+
+- Models are cached in-process (module-level singletons) inside `Backend/app/services/model_loader_service.py`.
+  - ASR (Whisper) pipelines: `_asr_pipelines` managed via `get_asr_pipeline(model_id)`.
+  - Emotion (wav2vec2) components: `_emotion_feature_extractor`, `_emotion_model` via `get_emotion_components()`.
+- Initialization is lazy and protected by per-model/thread locks to avoid duplicate loads under concurrency.
+- Scope: per Python process. If you run multiple Uvicorn workers or containers, each holds its own model copy.
+- Reset: restarting the process clears the in-memory cache (models will be recreated on first use).
+
+### Startup Warmup (Optional)
+
+- Implemented in `Backend/app/main.py` under `@app.on_event("startup")`.
+- Control via `PRELOAD_MODELS` env var (comma-separated):
+  - `whisper-base`, `whisper-large`, `wav2vec2`
+- Example (PowerShell):
+
+```powershell
+$env:PRELOAD_MODELS = "whisper-base,whisper-large,wav2vec2"
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+### Memory Considerations
+
+- Whisper-large is heavy; expect high RAM/VRAM usage. Each additional worker multiplies memory usage.
+- Prefer a single worker for development, or smaller models (e.g., `whisper-base`) if constrained.
+- GPU is used automatically when available; fallback to CPU otherwise (see `_device` in `model_loader_service.py`).
+
+### Redis Separation
+
+- Redis stores only inference results (small JSON) keyed by model + file hash.
+- Model objects are not serialized to Redis; they reside in process RAM for speed.
+
+### Hugging Face Cache Persistence
+
+- Model weights are downloaded and cached on disk by Hugging Face. Persist this cache across restarts:
+  - Set `HF_HOME` to a stable path.
+  - If using Docker, mount it as a volume.
+
+Example (docker-compose service excerpt):
+
+```yaml
+environment:
+  - HF_HOME=/cache/huggingface
+volumes:
+  - hf-cache:/cache/huggingface
+
+volumes:
+  hf-cache:
+```
+
+### Multi-Worker/Container Deployments
+
+- Each worker/container will hold its own in-memory copy of models.
+- This improves isolation but increases total memory use. Scale workers with care.
+
 ## Future Options
 
 - Add a `content_hash` (SHA1 over file bytes) if you need prediction reuse across renames/moves. Keep the current `h` for speed and add `content_hash` only where needed.
