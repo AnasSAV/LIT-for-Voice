@@ -2,25 +2,45 @@ import torch
 from transformers import *
 import librosa
 import numpy as np
+import threading
+from collections import defaultdict
+
+# Global device/dtype for this process
+_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+_torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+# Lazy caches for ASR (Whisper) pipelines
+_asr_pipelines = {}
+_asr_locks = defaultdict(threading.Lock)
+
+def get_asr_pipeline(model_id: str):
+    pipe = _asr_pipelines.get(model_id)
+    if pipe is not None:
+        return pipe
+    lock = _asr_locks[model_id]
+    with lock:
+        pipe = _asr_pipelines.get(model_id)
+        if pipe is not None:
+            return pipe
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id, torch_dtype=_torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+        ).to(_device)
+
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        p = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            torch_dtype=_torch_dtype,
+            device=_device,
+        )
+        _asr_pipelines[model_id] = p
+        return p
 
 def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-    model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
-    ).to(device)
-
-    processor = AutoProcessor.from_pretrained(model_id)
-
-    pipe = pipeline(
-        "automatic-speech-recognition",
-        model=model,
-        tokenizer=processor.tokenizer,
-        feature_extractor=processor.feature_extractor,
-        torch_dtype=torch_dtype,
-        device=device,
-    )
+    pipe = get_asr_pipeline(model_id)
 
     generate_kwargs = {"return_timestamps": True}
 
