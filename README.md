@@ -148,16 +148,6 @@ LIT-for-Voice/
    pip install -r requirements.txt
    ```
 
-   Or with PowerShell:
-
-   ```powershell
-   cd Backend
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   python -m pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
 3. **Set up the frontend**
 
    ```bash
@@ -202,7 +192,7 @@ LIT-for-Voice/
    ```
 
 4. **Access the application**
-   Open your browser and navigate to `http://localhost:3000`
+   Open your browser and navigate to `http://localhost:8080`
 
 ### Docker: Redis only
 

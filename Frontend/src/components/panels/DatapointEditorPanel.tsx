@@ -31,10 +31,9 @@ interface UploadedFile {
 
 interface DatapointEditorPanelProps {
   selectedFile?: UploadedFile | null;
-  model?: string | null;
 }
 
-export const DatapointEditorPanel = ({ selectedFile, model }: DatapointEditorPanelProps) => {
+export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps) => {
   const [selectedLabel, setSelectedLabel] = useState<string>("neutral");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -117,14 +116,6 @@ export const DatapointEditorPanel = ({ selectedFile, model }: DatapointEditorPan
       }
     }
   }, [selectedFile]);
-
-  // Whisper-specific rendering helpers
-  const isWhisper = (model ?? "").toLowerCase().startsWith("whisper");
-  const predictedText = selectedFile?.prediction?.text || "";
-  const groundTruthText =
-    (selectedFile?.meta?.text as string) ||
-    (selectedFile?.meta?.statement as string) ||
-    "";
   
   return (
     <div className="h-full panel-background border-l panel-border flex flex-col">
@@ -185,7 +176,8 @@ export const DatapointEditorPanel = ({ selectedFile, model }: DatapointEditorPan
                     "modality",
                     "vocal_channel",
                     "filename",
-                    "duration",
+                    "duration", // already shown as a table column
+                    // Avoid duplicating ground truth; often provided as emotion in RAVDESS
                     "emotion",
                   ]);
                   // Dataset-aware blacklist
@@ -338,27 +330,15 @@ export const DatapointEditorPanel = ({ selectedFile, model }: DatapointEditorPan
             <div className="text-xs space-y-2">
               <div>
                 <span className="text-muted-foreground">Predicted:</span>
-                {isWhisper ? (
-                  <p className="mt-1 inline-block max-w-full whitespace-pre-wrap break-words rounded-2xl bg-muted px-3 py-2 text-sm leading-snug text-foreground shadow-sm">
-                    {predictedText || "N/A"}
-                  </p>
-                ) : (
-                  <p className="mt-1 p-2 bg-muted rounded text-foreground">
-                    {predictedText || "N/A"}
-                  </p>
-                )}
+                <p className="mt-1 p-2 bg-muted rounded text-foreground">
+                  "The quick brown fox jumps over the lazy dog"
+                </p>
               </div>
               <div>
                 <span className="text-muted-foreground">Ground Truth:</span>
-                {isWhisper ? (
-                  <Badge variant="outline" className="mt-1 text-xs rounded-full px-3 py-1 whitespace-pre-wrap break-words normal-case font-normal">
-                    {groundTruthText || "N/A"}
-                  </Badge>
-                ) : (
-                  <p className="mt-1 p-2 bg-muted rounded text-foreground">
-                    {groundTruthText || "N/A"}
-                  </p>
-                )}
+                <p className="mt-1 p-2 bg-muted rounded text-foreground">
+                  "The quick brown fox jumps over the lazy dog"
+                </p>
               </div>
             </div>
           </CardContent>

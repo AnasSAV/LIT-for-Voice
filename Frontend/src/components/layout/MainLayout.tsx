@@ -89,7 +89,7 @@ export const MainLayout = () => {
           
           {/* Right Panel: Audio Player & Label Editor */}
           <Panel defaultSize={25} minSize={20}>
-            <DatapointEditorPanel selectedFile={selectedFile} model={model} />
+            <DatapointEditorPanel selectedFile={selectedFile} />
           </Panel>
         </PanelGroup>
       </div>

@@ -338,11 +338,14 @@ export const AudioDataTable = ({
         accessorKey: "predictedTranscript",
         header: "Predicted Transcript",
         cell: (info) => {
-          const text = (info.getValue() as string) || "N/A";
+          const text = (info.getValue() as string) || "";
           return (
-            <p className="inline-block max-w-full whitespace-pre-wrap break-words rounded-2xl bg-muted px-3 py-1.5 text-xs leading-snug text-foreground shadow-sm">
-              {text}
-            </p>
+            <div
+              className="inline-block max-w-[72ch] whitespace-normal break-words text-left text-xs leading-snug px-3 py-1 rounded-full bg-muted border border-border text-foreground/90"
+              title={text}
+            >
+              {text || "—"}
+            </div>
           );
         },
       });
@@ -364,24 +367,9 @@ export const AudioDataTable = ({
     cols.push({
       accessorKey: "groundTruthLabel",
       header: "Ground Truth",
-      cell: (info) => {
-        const orig = info.row.original;
-        const gt = isWhisper
-          ? ((orig.meta?.text as string) || (orig.meta?.statement as string) || "N/A")
-          : ((info.getValue() as string) || "N/A");
-        if (isWhisper) {
-          return (
-            <Badge variant="outline" className="text-xs rounded-full px-3 py-1 normal-case font-normal">
-              {gt}
-            </Badge>
-          );
-        }
-        return (
-          <Badge variant="secondary" className="text-xs">
-            {gt}
-          </Badge>
-        );
-      },
+      cell: (info) => (
+        <div className="text-xs leading-tight -my-0.5">{(info.getValue() as string) || "N/A"}</div>
+      ),
     });
 
     // For wav2vec2: show static metadata columns: Intensity, Gender, Actor (placed between Ground Truth and Confidence)

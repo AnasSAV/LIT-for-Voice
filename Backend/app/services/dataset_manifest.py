@@ -15,12 +15,6 @@ from ..core.redis import (
 )
 from ..core.settings import settings
 
-# Optional dependency for MP3 header parsing
-try:  # pragma: no cover - optional import guard
-    from mutagen.mp3 import MP3  # type: ignore
-except Exception:  # pragma: no cover
-    MP3 = None  # type: ignore
-
 # Public API
 # - compute_dir_version(base)
 # - get_or_build_manifest(ds_id, base, ttl=86400, force=False)
@@ -53,22 +47,6 @@ def _safe_wav_info(p: Path) -> Tuple[Optional[float], Optional[int]]:
             nframes = wf.getnframes() or 0
             dur = float(nframes) / float(framerate) if framerate > 0 else None
             return dur, int(framerate) if framerate > 0 else None
-    return None, None
-
-
-def _safe_mp3_info(p: Path) -> Tuple[Optional[float], Optional[int]]:
-    """
-    Compute (duration, sample_rate) for MP3 files using mutagen (no decoding).
-    Returns (None, None) if mutagen is unavailable or parsing fails.
-    """
-    if MP3 is None:
-        return None, None
-    with contextlib.suppress(Exception):
-        info = MP3(str(p)).info  # type: ignore[attr-defined]
-        sr = getattr(info, "sample_rate", None)
-        length = getattr(info, "length", None)
-        dur = float(length) if length else None
-        return dur, int(sr) if sr else None
     return None, None
 
 
@@ -221,13 +199,11 @@ async def _scan_dataset(base: Path, ds_id: str) -> Tuple[List[Dict[str, Any]], D
         rel = _posix_rel(base, p)
         size = int(st.st_size)
         mtime = int(st.st_mtime)
-        # Duration and sample rate
+        # Duration and sample rate: WAV via wave; MP3 may be provided by metadata if present
         duration: Optional[float] = None
         sample_rate: Optional[int] = None
         if p.suffix.lower() == ".wav":
             duration, sample_rate = await asyncio.to_thread(_safe_wav_info, p)
-        elif p.suffix.lower() == ".mp3":
-            duration, sample_rate = await asyncio.to_thread(_safe_mp3_info, p)
         # Determine label
         label: Optional[str] = _parse_label_from_filename(p.name)
         h = _compute_file_hash(rel, size, mtime)
