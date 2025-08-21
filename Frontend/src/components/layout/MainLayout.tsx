@@ -38,7 +38,7 @@ export const MainLayout = () => {
     }
   };
 
-  const [model, setModel] = useState("whisper-base");
+  const [model, setModel] = useState("whisper-tiny");
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}

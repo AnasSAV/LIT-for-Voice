@@ -15,10 +15,10 @@ export interface InferenceResponse {
   [key: string]: unknown;
 }
 
-export type FlushScope = 'all' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3' | 'wav2vec2';
+export type FlushScope = 'all' | 'whisper-tiny' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3' | 'wav2vec2';
 export type FlushResponse =
   | { ok: boolean; scope: 'all'; summary: { asr_removed: number; emotion_removed: boolean } }
-  | { ok: boolean; scope: 'whisper-base' | 'whisper-large' | 'whisper-large-v3'; asr_removed: number }
+  | { ok: boolean; scope: 'whisper-tiny' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3'; asr_removed: number }
   | { ok: boolean; scope: 'wav2vec2'; emotion_removed: boolean };
 
 export type CacheStatus = {
@@ -48,8 +48,11 @@ function dispatchLoading(model: string) {
   const count = inflight[model] ?? 0;
   const isLoading = count > 0;
   try {
+    // Compute aggregate loading across all models
+    const anyCount = Object.values(inflight).reduce((acc, v) => acc + (v ?? 0), 0);
+    const anyLoading = anyCount > 0;
     window.dispatchEvent(
-      new CustomEvent('inference:loading', { detail: { model, count, isLoading } })
+      new CustomEvent('inference:loading', { detail: { model, count, isLoading, anyCount, anyLoading } })
     );
   } catch (_e) { /* noop for non-browser envs */ }
 }

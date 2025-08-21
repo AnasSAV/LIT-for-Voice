@@ -147,6 +147,32 @@ LIT-for-Voice/
    # Install dependencies
    pip install -r requirements.txt
    ```
+   
+```cmd
+pip install -r requirements.txt
+```
+
+```cmd
+
+### For Miniconda Users
+:: 1️⃣ Initialize conda for your shell (Only if you have not used Conda on device before)
+conda init cmd.exe
+
+:: 2️⃣ Navigate to your project folder
+cd Backend
+
+:: 3️⃣ Create the environment with Python 3.10
+conda create -n voice-lit python=3.10 -y
+
+:: 4️⃣ Activate the environment
+conda activate voice-lit
+
+:: 5️⃣ Install web/backend dependencies
+conda install -c pytorch -c nvidia -c conda-forge fastapi uvicorn starlette httpx python-multipart python-dotenv pydantic-settings anyio numpy pandas librosa pysoundfile transformers pytorch torchvision torchaudio pytorch-cuda=12.1 redis-py pytest pytest-asyncio requests kaggle -y
+
+:: ✅ Environment 'voice-lit' is now ready for your project
+uvicorn app.main:app --reload
+```
 
 3. **Set up the frontend**
 
@@ -230,7 +256,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For questions or feedback, please open an issue or contact [your-email@example.com](mailto:your-email@example.com).
 
-
 ## How to Run (Windows)
 
 The app has a FastAPI backend and a React (Vite) frontend. Run the backend first, then the frontend.
@@ -245,12 +270,34 @@ Run these in a terminal from the `Backend/` directory.
 python -m venv .venv
 .\.venv\Scripts\activate
 python -m pip install --upgrade pip
-````
+```
 
 2. Install dependencies
 
 ```cmd
 pip install -r requirements.txt
+```
+
+```cmd
+
+### For Miniconda Users
+:: 1️⃣ Initialize conda for your shell (Only if you have not used Conda on device before)
+conda init cmd.exe
+
+:: 2️⃣ Navigate to your project folder
+cd Backend
+
+:: 3️⃣ Create the environment with Python 3.10
+conda create -n voice-lit python=3.10 -y
+
+:: 4️⃣ Activate the environment
+conda activate voice-lit
+
+:: 5️⃣ Install web/backend dependencies
+conda install -c pytorch -c nvidia -c conda-forge fastapi uvicorn starlette httpx python-multipart python-dotenv pydantic-settings anyio numpy pandas librosa pysoundfile transformers pytorch torchvision torchaudio pytorch-cuda=12.1 redis-py pytest pytest-asyncio requests kaggle -y
+
+:: ✅ Environment 'voice-lit' is now ready for your project
+uvicorn app.main:app --reload
 ```
 
 Note: `torch` is a large dependency. Ensure your Python version is supported and you have sufficient disk space.
@@ -371,12 +418,11 @@ pytest -q
     VITE_API_BASE=http://localhost:8000
     ```
 
-
 ## Frontend Inference API and Global Loading Events
 
-- __Centralized API__: Use `runInference()` from `Frontend/src/lib/api/inferences.ts` for all calls to `/inferences/run`. It manages per-model concurrency and dispatches global loading events.
-- __Global events__: A `CustomEvent` named `inference:loading` is dispatched on `window` with `{ model, count, isLoading }` whenever inference starts/ends for a model.
-- __Return type__: `runInference()` returns `string | InferenceResponse` to support Whisper (raw text) and structured responses.
+- **Centralized API**: Use `runInference()` from `Frontend/src/lib/api/inferences.ts` for all calls to `/inferences/run`. It manages per-model concurrency and dispatches global loading events.
+- **Global events**: A `CustomEvent` named `inference:loading` is dispatched on `window` with `{ model, count, isLoading }` whenever inference starts/ends for a model.
+- **Return type**: `runInference()` returns `string | InferenceResponse` to support Whisper (raw text) and structured responses.
 
 Example usage:
 
@@ -396,20 +442,25 @@ Subscribe to loading events (e.g., in `Frontend/src/components/layout/Toolbar.ts
 ```ts
 useEffect(() => {
   const onLoading = (e: Event) => {
-    const ce = e as CustomEvent<{ model: string; count: number; isLoading: boolean }>; 
+    const ce = e as CustomEvent<{
+      model: string;
+      count: number;
+      isLoading: boolean;
+    }>;
     if (ce?.detail?.model === model) {
       setIsModelLoading(!!ce.detail.isLoading);
     }
   };
   window.addEventListener("inference:loading", onLoading as EventListener);
-  return () => window.removeEventListener("inference:loading", onLoading as EventListener);
+  return () =>
+    window.removeEventListener("inference:loading", onLoading as EventListener);
 }, [model]);
 ```
 
 Flush button UI states (in `Toolbar.tsx`):
 
-- __Model loading__: green background, spinner, label “Model loading…”, button disabled.
-- __Flushing__: blue background, spinner, label “Flushing…”, button disabled.
+- **Model loading**: green background, spinner, label “Model loading…”, button disabled.
+- **Flushing**: blue background, spinner, label “Flushing…”, button disabled.
 
 Important: To ensure consistent global loading state, always call `runInference()` instead of `fetch()` directly.
 

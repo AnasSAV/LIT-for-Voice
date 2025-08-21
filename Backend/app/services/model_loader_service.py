@@ -65,6 +65,10 @@ def transcribe_whisper_base(audio_file_path):
     model_id = "openai/whisper-base"
     return transcribe_whisper(model_id, audio_file_path)
 
+def transcribe_whisper_tiny(audio_file_path):
+    model_id = "openai/whisper-tiny"
+    return transcribe_whisper(model_id, audio_file_path)
+
 
 # Lazy cache for wav2vec2 emotion model
 _emotion_feature_extractor = None

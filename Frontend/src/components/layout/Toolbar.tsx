@@ -49,6 +49,7 @@ interface ToolbarProps {
 }
 
 const modelDatasetMap: Record<string, string[]> = {
+  "whisper-tiny": ["common-voice", "custom"],
   "whisper-base": ["common-voice", "custom"],
   "whisper-large": ["common-voice", "custom"],
   "wav2vec2": ["ravdess", "custom"],
@@ -75,6 +76,8 @@ export const Toolbar = ({
   const [isFlushing, setIsFlushing] = useState(false);
   const [reloadIn, setReloadIn] = useState<number>(0);
   const [isModelLoading, setIsModelLoading] = useState(false);
+  const [loadingCounts, setLoadingCounts] = useState<Record<string, number>>({});
+  const [isAnyLoading, setIsAnyLoading] = useState(false);
 
   // Load available datasets on component mount
   useEffect(() => {
@@ -163,9 +166,19 @@ export const Toolbar = ({
   // Subscribe to global inference loading events to reflect true loading state
   useEffect(() => {
     const onLoading = (e: Event) => {
-      const ce = e as CustomEvent<{ model: string; count: number; isLoading: boolean }>;
+      const ce = e as CustomEvent<{ model: string; count: number; isLoading: boolean; anyCount?: number; anyLoading?: boolean }>;
+      // Track current model's loading state for existing UX bits
       if (ce?.detail?.model === model) {
         setIsModelLoading(Boolean(ce.detail.isLoading));
+      }
+      // Track aggregate state and per-model counts to decide which models can be flushed
+      if (typeof ce?.detail?.anyLoading === 'boolean') {
+        setIsAnyLoading(ce.detail.anyLoading);
+      }
+      if (ce?.detail?.model) {
+        const m = String(ce.detail.model);
+        const c = Math.max(0, Number(ce.detail.count ?? 0));
+        setLoadingCounts((prev) => ({ ...prev, [m]: c }));
       }
     };
     window.addEventListener("inference:loading", onLoading as EventListener);
@@ -282,6 +295,7 @@ export const Toolbar = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="whisper-tiny">Whisper Tiny</SelectItem>
                 <SelectItem value="whisper-base">Whisper Base</SelectItem>
                 <SelectItem value="whisper-large">Whisper Large</SelectItem>
                 <SelectItem value="wav2vec2">Wav2Vec2</SelectItem>
@@ -395,20 +409,35 @@ export const Toolbar = ({
 
         {(() => {
           const loadedCount = cacheStatus?.total_loaded ?? 0;
+          // Map backend-loaded model identifiers to UI model tokens
+          const loadedTokens = (() => {
+            const asrIds = cacheStatus?.asr_loaded ?? [];
+            const tokens: string[] = [];
+            for (const id of asrIds) {
+              if (id.includes('whisper-large-v3') || id.includes('openai/whisper-large-v3')) tokens.push('whisper-large-v3');
+              else if (id.includes('whisper-large')) tokens.push('whisper-large');
+              else if (id.includes('whisper-tiny')) tokens.push('whisper-tiny');
+              else if (id.includes('whisper-base')) tokens.push('whisper-base');
+            }
+            if (cacheStatus?.emotion_loaded) tokens.push('wav2vec2');
+            return Array.from(new Set(tokens));
+          })();
+          // Determine which loaded models are currently busy
+          const busyTokens = loadedTokens.filter(t => (loadingCounts[t] ?? 0) > 0);
+          const idleTokens = loadedTokens.filter(t => (loadingCounts[t] ?? 0) === 0);
           const isPlural = loadedCount > 1;
           const baseLabel = `Flush Model${isPlural ? 's' : ''}`;
-          const label = isFlushing ? 'Flushing…' : isModelLoading ? 'Model loading…' : baseLabel;
-          const disabled = !model || isFlushing || isModelLoading || loadedCount === 0;
-          const title = !model
-            ? 'Select a model to enable flushing'
-            : isFlushing
-              ? 'Flush in progress...'
-              : isModelLoading
-                ? 'Model is loading; flushing is disabled'
-              : loadedCount === 0
-                ? 'No cached models to flush'
-                : undefined;
-          const busy = isFlushing || isModelLoading;
+          const label = isFlushing ? 'Flushing…' : (isAnyLoading && idleTokens.length === 0) ? 'Busy' : baseLabel;
+          // Enable flushing whenever there is at least one idle loaded model
+          const disabled = isFlushing || loadedTokens.length === 0 || idleTokens.length === 0;
+          const title = isFlushing
+            ? 'Flush in progress...'
+            : loadedTokens.length === 0
+              ? 'No cached models to flush'
+              : idleTokens.length === 0
+                ? 'All loaded models are busy; wait for inferences to finish'
+                : `Idle models available to flush: ${idleTokens.join(', ')}`;
+          const busy = isFlushing || (isAnyLoading && idleTokens.length === 0);
           const colorClasses = isModelLoading
             ? 'bg-green-600 hover:bg-green-600 text-white'
             : isFlushing
@@ -418,16 +447,101 @@ export const Toolbar = ({
             ? `cursor-not-allowed ${busy ? '' : 'opacity-70'}`
             : '';
           return (
-            <Button
-              variant={busy ? "secondary" : "destructive"}
-              size="sm"
-              className={`h-8 ${colorClasses} ${disabledClasses}`}
-              disabled={disabled}
-              title={title}
-              onClick={async () => {
-                const scope = model as 'whisper-base' | 'whisper-large' | 'wav2vec2';
-                const confirmed = window.confirm(`Flush cached model(s)? This frees RAM/VRAM.\nScope: ${scope}`);
-                if (!confirmed) return;
+            <div className="flex items-center gap-3">
+              {/* Loaded models badges */}
+              {loadedTokens.length > 0 && (
+                <div className="hidden md:flex items-center gap-2" title={`Loaded models: ${loadedTokens.join(', ')}`}>
+                  <span className="text-sm text-muted-foreground">Loaded:</span>
+                  {loadedTokens.map((t) => {
+                    const label = t === 'whisper-tiny'
+                      ? 'Whisper Tiny'
+                      : t === 'whisper-base'
+                        ? 'Whisper Base'
+                        : (t === 'whisper-large' || t === 'whisper-large-v3')
+                          ? 'Whisper Large'
+                        : t === 'wav2vec2'
+                          ? 'Wav2Vec2'
+                          : t; // legacy tokens like whisper-large, whisper-large-v3
+                    const isBusy = busyTokens.includes(t);
+                    // Match Flush button shape for Whisper Tiny only
+                    const shapeClass = t === 'whisper-tiny' ? 'rounded-md' : 'rounded-full';
+                    return (
+                      isBusy ? (
+                        <Button
+                          key={t}
+                          variant="secondary"
+                          size="sm"
+                          disabled
+                          className={`h-8 px-3 ${shapeClass} bg-blue-600 hover:bg-blue-600 text-white shadow-sm pointer-events-none`}
+                          title={label}
+                        >
+                          <span className="text-xs font-medium">{label}</span>
+                        </Button>
+                      ) : (
+                        t === 'whisper-tiny' ? (
+                          <Button
+                            key={t}
+                            variant="outline"
+                            size="sm"
+                            disabled
+                            className={`h-8 px-3 ${shapeClass}`}
+                            title={label}
+                          >
+                            <span className="text-xs font-medium">{label}</span>
+                          </Button>
+                        ) : (
+                          <Badge key={t} variant="outline" className="text-xs">
+                            {label}
+                          </Badge>
+                        )
+                      )
+                    );
+                  })}
+                </div>
+              )}
+              <Button
+                variant={busy ? "secondary" : "destructive"}
+                size="sm"
+                className={`h-8 ${colorClasses} ${disabledClasses}`}
+                disabled={disabled}
+                title={title}
+                onClick={async () => {
+                // Determine which model to flush: prefer selected idle model, else prompt
+                const loadedTokensNow = (() => {
+                  const asrIds = cacheStatus?.asr_loaded ?? [];
+                  const tokens: string[] = [];
+                  for (const id of asrIds) {
+                    if (id.includes('whisper-large-v3') || id.includes('openai/whisper-large-v3')) tokens.push('whisper-large-v3');
+                    else if (id.includes('whisper-large')) tokens.push('whisper-large');
+                    else if (id.includes('whisper-tiny')) tokens.push('whisper-tiny');
+                    else if (id.includes('whisper-base')) tokens.push('whisper-base');
+                  }
+                  if (cacheStatus?.emotion_loaded) tokens.push('wav2vec2');
+                  return Array.from(new Set(tokens));
+                })();
+                const busySet = new Set(loadedTokensNow.filter(t => (loadingCounts[t] ?? 0) > 0));
+                const idleNow = loadedTokensNow.filter(t => !busySet.has(t));
+                if (idleNow.length === 0) {
+                  alert('All loaded models are currently busy. Try again when inferences finish.');
+                  return;
+                }
+                let scope: 'whisper-tiny' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3' | 'wav2vec2' | 'all' | undefined;
+                if (model && idleNow.includes(model)) {
+                  scope = model as 'whisper-tiny' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3' | 'wav2vec2';
+                } else if (idleNow.length === 1) {
+                  scope = idleNow[0] as 'whisper-tiny' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3' | 'wav2vec2';
+                } else {
+                  const choice = window.prompt(`Multiple idle models detected. Enter one to flush: ${idleNow.join(', ')}`);
+                  if (!choice) return;
+                  const normalized = choice.trim();
+                  if (!idleNow.includes(normalized)) {
+                    alert(`Invalid choice. Allowed: ${idleNow.join(', ')}`);
+                    return;
+                  }
+                  scope = normalized as 'whisper-tiny' | 'whisper-base' | 'whisper-large' | 'whisper-large-v3' | 'wav2vec2';
+                }
+                const confirmed = window.confirm(`Flush cached model? This frees RAM/VRAM.\nScope: ${scope}`);
+                if (!confirmed || !scope) return;
                 setIsFlushing(true);
                 try {
                   const result = await flushModels(scope);
@@ -442,11 +556,12 @@ export const Toolbar = ({
                 } finally {
                   setIsFlushing(false);
                 }
-              }}
-            >
-              {(isFlushing || isModelLoading) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {label}
-            </Button>
+                }}
+              >
+                {(isFlushing || isModelLoading) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {label}
+              </Button>
+            </div>
           );
         })()}
 

@@ -12,6 +12,7 @@ router = APIRouter()
 
 
 MODEL_FUNCTIONS = {
+    "whisper-tiny": transcribe_whisper_tiny,
     "whisper-base": transcribe_whisper_base,
     "whisper-large": transcribe_whisper_large,
     "wav2vec2": wave2vec
@@ -114,7 +115,7 @@ async def run_inference(
 async def flush_models(payload: dict = Body(None)):
     """
     Flush cached models to free RAM/VRAM.
-    Payload (optional): {"model": "whisper-base" | "whisper-large" | "wav2vec2" | "all"}
+    Payload (optional): {"model": "whisper-tiny" | "whisper-base" | "whisper-large" | "wav2vec2" | "all"}
     If omitted or "all", unloads all cached models.
     """
     try:
@@ -127,6 +128,9 @@ async def flush_models(payload: dict = Body(None)):
             summary = unload_all_models()
             return {"ok": True, "scope": "all", "summary": summary}
 
+        if target == "whisper-tiny":
+            cnt = unload_asr_model("openai/whisper-tiny")
+            return {"ok": True, "scope": target, "asr_removed": cnt}
         if target == "whisper-base":
             cnt = unload_asr_model("openai/whisper-base")
             return {"ok": True, "scope": target, "asr_removed": cnt}
