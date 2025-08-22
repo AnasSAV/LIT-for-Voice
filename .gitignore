@@ -49,3 +49,22 @@ venv/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Ignore all files inside Backend/data/dev
+/Backend/data/dev/**
+
+# Audio files (global)
+# Ignore audio files anywhere in the repository
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.aac
+*.webm
+*.opus
+*.wma
+*.aiff
+*.aif
+*.pcm
+*.caf
