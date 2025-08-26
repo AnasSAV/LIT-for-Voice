@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Select,
   SelectContent,
@@ -21,13 +21,15 @@ interface UploadedFile {
 }
 
 interface ToolbarProps {
-  apiData: any;
-  setApiData: (data: any) => void;
+  apiData: unknown;
+  setApiData: (data: unknown) => void;
   selectedFile?: UploadedFile | null;
   uploadedFiles?: UploadedFile[];
   onFileSelect?: (file: UploadedFile) => void;
   model: string;
   setModel: (model: string) => void; // important for lifting state
+  dataset: string;
+  setDataset: (dataset: string) => void;
 }
 const modelDatasetMap: Record<string, string[]> = {
   "whisper-base": ["common-voice", "custom"],
@@ -41,10 +43,7 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-;
-
-export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect,model,setModel}: ToolbarProps) => {
-  const [dataset, setDataset] = useState(defaultDatasetForModel[model]);
+export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset}: ToolbarProps) => {
 
 let abortController: AbortController | null = null;
 const onModelChange = async (value: string) => {

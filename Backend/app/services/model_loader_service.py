@@ -1,7 +1,17 @@
+import logging
 import torch
-from transformers import *
+from transformers import (
+    AutoModelForSpeechSeq2Seq,
+    AutoProcessor,
+    pipeline,
+    Wav2Vec2FeatureExtractor,
+    Wav2Vec2ForSequenceClassification,
+)
 import librosa
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
 
 def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -45,26 +55,33 @@ def transcribe_whisper_base(audio_file_path):
     return transcribe_whisper(model_id, audio_file_path)
 
 
-feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
-model = Wav2Vec2ForCTC.from_pretrained("r-f/wav2vec-english-speech-emotion-recognition")
+_EMO_MODEL_ID = "r-f/wav2vec-english-speech-emotion-recognition"
+feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(_EMO_MODEL_ID)
+emo_model = Wav2Vec2ForSequenceClassification.from_pretrained(_EMO_MODEL_ID)
+emo_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+emo_model = emo_model.to(emo_device)
 
 def predict_emotion_wave2vec(audio_path):
     audio, rate = librosa.load(audio_path, sr=16000)
     inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
-    
+
+    # Move tensors to model device
+    input_values = inputs.input_values.to(emo_device)
+    attention_mask = inputs.attention_mask.to(emo_device) if "attention_mask" in inputs else None
+
     with torch.no_grad():
-        outputs = model(inputs.input_values)
-        predictions = torch.nn.functional.softmax(outputs.logits.mean(dim=1), dim=-1)  # Average over sequence length
-        predicted_label = torch.argmax(predictions, dim=-1)
-        emotion = model.config.id2label[predicted_label.item()]
-        print("Logits shape:", outputs.logits.shape)
-        print("num_labels in config:", model.config.num_labels)
-        print("id2label keys:", list(model.config.id2label.keys()))
+        outputs = emo_model(input_values=input_values, attention_mask=attention_mask)
+        logits = outputs.logits  # [batch, num_labels]
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        pred = torch.argmax(probs, dim=-1)
+        label_idx = int(pred.item())
+        # Map to label; fall back safely if out-of-range
+        emotion = emo_model.config.id2label.get(label_idx, str(label_idx)) if isinstance(emo_model.config.id2label, dict) else str(label_idx)
+        logger.debug("Emotion logits shape=%s, predicted=%s, label=%s", tuple(logits.shape), label_idx, emotion)
     return emotion
 
-def wave2vec(audio_file_path):
-    emotion = predict_emotion_wave2vec(audio_file_path)
-    return emotion
+def wave2vec(audio_file_path: str) -> str:
+    return predict_emotion_wave2vec(audio_file_path)
 
 
 

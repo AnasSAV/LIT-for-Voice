@@ -231,3 +231,5 @@ secrets.json
 
 # Docker
 .dockerignore
+
+/data

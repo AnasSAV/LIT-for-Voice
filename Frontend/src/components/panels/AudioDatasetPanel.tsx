@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,12 +7,6 @@ import { Upload, Search, Play, Pause } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
 import { toast } from "sonner";
-
-interface ApiData {
-  prediction: {
-    text: string;
-  };
-}
 
 interface UploadedFile {
   file_id: string;
@@ -26,8 +20,9 @@ interface UploadedFile {
 }
 
 interface AudioDatasetPanelProps {
-  apiData: ApiData | null;
+  apiData?: unknown;
   model: string | null;
+  dataset: string;
   uploadedFiles?: UploadedFile[];
   selectedFile?: UploadedFile | null;
   onFileSelect?: (file: UploadedFile) => void;
@@ -37,6 +32,7 @@ interface AudioDatasetPanelProps {
 export const AudioDatasetPanel = ({ 
   apiData, 
   model,
+  dataset,
   selectedFile, 
   onFileSelect, 
   onUploadSuccess 
@@ -45,6 +41,30 @@ export const AudioDatasetPanel = ({
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [datasetMetadata, setDatasetMetadata] = useState<Record<string, string | number>[]>([]);
+
+  // Fetch dataset metadata when dataset changes (for non-custom datasets)
+  useEffect(() => {
+    const allowed = ["common-voice", "ravdess"];
+    if (!allowed.includes(dataset)) {
+      setDatasetMetadata([]);
+      return;
+    }
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/datasets/${dataset}/metadata`, { signal: ac.signal });
+        if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
+        const data = await res.json();
+        if (Array.isArray(data)) setDatasetMetadata(data as Record<string, string | number>[]);
+        else setDatasetMetadata([]);
+      } catch (e) {
+        const name = (e as { name?: string } | null)?.name;
+        if (name !== 'AbortError') console.error(e);
+      }
+    })();
+    return () => ac.abort();
+  }, [dataset]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -57,7 +77,7 @@ export const AudioDatasetPanel = ({
         const file = files[i];
         if (file.type.startsWith('audio/')) {
           try {
-            await uploadFile(file,model);
+            await uploadFile(file, model ?? "");
           } catch (error) {
             console.error('Upload error:', error);
           }
@@ -72,7 +92,7 @@ export const AudioDatasetPanel = ({
     }
   };
 
-  const uploadFile = async (file: File,model) => {
+  const uploadFile = async (file: File, model: string) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('model', model);
@@ -99,7 +119,8 @@ export const AudioDatasetPanel = ({
       return data;
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error(`Failed to upload ${file.name}: ${error.message}`);
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to upload ${file.name}: ${msg}`);
       throw error;
     }
   };
@@ -148,6 +169,9 @@ export const AudioDatasetPanel = ({
               onRowSelect={setSelectedRow}
               searchQuery={searchQuery}
               apiData={apiData}
+              model={model ?? ""}
+              dataset={dataset}
+              datasetMetadata={datasetMetadata}
               uploadedFiles={uploadedFiles}
               onFilePlay={(file) => {
                 console.log('AudioDatasetPanel - File selected for play:', file);

@@ -41,21 +41,59 @@ git clone https://github.com/AnasSAV/LIT-for-Voice.git
 cd LIT-for-Voice/Frontend
 ```
 
-2. Install dependencies:
-```bash
-npm install
-# or
-bun install
+3. **Set up the frontend**
+
+   ```bash
+   cd Frontend
+   npm install && npm run dev
+   ```
+
+Start Redis server in Docker(in a new terminal)
+docker compose up -d
+```
+3. **Set up the backend**
+
+   ```cmd
+   :: Create and activate virtual environment (Windows cmd)
+   cd Backend
+   python -m venv .venv
+   .venv\Scripts\activate
+   python -m pip install --upgrade pip
+
+   # Install dependencies
+   pip install -r requirements.txt
+   ```
+   
+```cmd
+pip install -r requirements.txt
 ```
 
-3. Start the development server:
-```bash
-npm run dev
-# or
-bun run dev
+```cmd
+
+### For Miniconda Users
+:: 1️⃣ Initialize conda for your shell (Only if you have not used Conda on device before)
+conda init cmd.exe
+
+:: 2️⃣ Navigate to your project folder
+cd Backend
+
+:: 3️⃣ Create the environment with Python 3.10
+conda create -n voice-lit python=3.10 -y
+
+:: 4️⃣ Activate the environment
+conda activate lit-voice
+
+:: 5️⃣ Install web/backend dependencies
+conda install -c pytorch -c nvidia -c conda-forge fastapi uvicorn starlette httpx python-multipart python-dotenv pydantic-settings anyio numpy pandas librosa pysoundfile transformers pytorch torchvision torchaudio pytorch-cuda=12.1 redis-py pytest pytest-asyncio requests -y
+
+:: ✅ Environment 'lit-voice' is now ready for your project
+uvicorn app.main:app --reload
 ```
+
+
 
 4. Open your browser and navigate to `http://localhost:8080`
+
 
 ### Available Scripts
 

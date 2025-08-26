@@ -1,9 +1,15 @@
 from fastapi import APIRouter, HTTPException, Query
 import inspect
 import asyncio
+import logging
 from pathlib import Path
-from app.services.model_loader_service import *
+from app.services.model_loader_service import (
+    transcribe_whisper_base,
+    transcribe_whisper_large,
+    wave2vec,
+)
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 
@@ -15,7 +21,7 @@ MODEL_FUNCTIONS = {
 
 @router.get("/inferences/run")
 async def run_inference(model: str, file_path: str = Query(None, description="Path to uploaded audio file")):
-    print("calling infer api")
+    logger.info("calling infer api model=%s file_path=%s", model, file_path)
     func = MODEL_FUNCTIONS.get(model)
 
     if not func:

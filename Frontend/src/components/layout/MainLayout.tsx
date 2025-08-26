@@ -17,7 +17,7 @@ interface UploadedFile {
 }
 
 export const MainLayout = () => {
-  const [apiData, setApiData] = useState(null);
+  const [apiData, setApiData] = useState<unknown>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
 
@@ -30,6 +30,7 @@ export const MainLayout = () => {
   };
 
   const [model, setModel] = useState("whisper-base");
+  const [dataset, setDataset] = useState("common-voice");
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
@@ -40,7 +41,9 @@ export const MainLayout = () => {
         uploadedFiles={uploadedFiles}
         onFileSelect={setSelectedFile}
         model={model}        // current model value
-        setModel={setModel} 
+        setModel={setModel}
+        dataset={dataset}
+        setDataset={setDataset}
       />
       
       {/* Main Content Area */}
@@ -64,6 +67,7 @@ export const MainLayout = () => {
                   onFileSelect={setSelectedFile}
                   onUploadSuccess={handleUploadSuccess}
                   model={model}
+                  dataset={dataset}
                 />
               </Panel>
               
