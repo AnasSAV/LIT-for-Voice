@@ -1,12 +1,11 @@
-import { useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   getFilteredRowModel,
-  createColumnHelper,
   flexRender,
+  ColumnDef,
 } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,7 @@ interface UploadedFile {
 interface AudioData {
   id: string;
   filename: string;
-  prediction
+  prediction?: string;
   groundTruthLabel: string;
   confidence: number;
   duration: number;
@@ -35,93 +34,181 @@ interface AudioData {
   size?: number;
 }
 
-const columnHelper = createColumnHelper<AudioData>();
-interface ApiData {
-  prediction: {
-    text: string;
-  };
-}
 interface AudioDataTableProps {
   selectedRow: string | null;
   onRowSelect: (id: string) => void;
   searchQuery: string;
-  apiData: ApiData;
+  apiData?: unknown;
+  model: string;
+  dataset: string; // "custom" | "common-voice" | "ravdess"
+  datasetMetadata?: Record<string, string | number>[];
   uploadedFiles?: UploadedFile[];
   onFilePlay?: (file: UploadedFile) => void;
 }
 
-export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, uploadedFiles, onFilePlay }: AudioDataTableProps) => {
-  // Convert uploaded files to table data format
-  const tableData: AudioData[] = uploadedFiles?.map(file => ({
+export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, model, dataset, datasetMetadata, uploadedFiles, onFilePlay }: AudioDataTableProps) => {
+  // Branch: dataset mode vs custom uploads
+  const isDatasetMode = dataset !== "custom" && (datasetMetadata?.length || 0) > 0;
+
+  // Custom uploads data and columns
+  const customTableData: AudioData[] = (uploadedFiles?.map(file => ({
     id: file.file_id,
     filename: file.filename,
-    prediction:file.prediction,
-    groundTruthLabel: "", // Can be manually set later
-    confidence: 0.85, // Default confidence, will be updated from predictions
+    prediction: file.prediction,
+    groundTruthLabel: "",
+    confidence: 0.85,
     duration: file.duration || 0,
     file_path: file.file_path,
     size: file.size
-  })) || [];
-  const columns = [
-    columnHelper.accessor("filename", {
+  })) || []);
+
+  const customColumns: ColumnDef<unknown, unknown>[] = [
+    {
+      id: "filename",
       header: "Filename",
-      cell: (info) => {
-        const row = info.row.original;
-        const file = uploadedFiles?.find(f => f.file_id === row.id);
+      cell: ({ row }) => {
+        const data = row.original as AudioData;
+        const file = uploadedFiles?.find(f => f.file_id === data.id);
         return (
           <div className="flex items-center gap-2">
-            <Button 
-              size="sm" 
-              variant="ghost" 
+            <Button
+              size="sm"
+              variant="ghost"
               className="h-6 w-6 p-0"
               onClick={() => file && onFilePlay && onFilePlay(file)}
             >
               <Play className="h-3 w-3" />
             </Button>
-            <span className="font-mono text-xs">{info.getValue()}</span>
+            <span className="font-mono text-xs">{data.filename}</span>
           </div>
         );
       },
-    }),
-    // columnHelper.accessor("predictedTranscript", {
-    //   header: "Predicted Transcript",
-    //   cell: (info) => (
-    //     <span className="text-xs">{info.getValue()}</span>
-    //   ),
-    // }),
-    columnHelper.accessor("prediction", {
-      header: "Predicted Label",
-      cell: (info) => (
-        <Badge variant="outline" className="text-xs">
-          {info.getValue()}
-        </Badge>
-      ),
-    }),
-    columnHelper.accessor("groundTruthLabel", {
-      header: "Ground Truth",
-      cell: (info) => (
-        <Badge variant="secondary" className="text-xs">
-          {info.getValue()}
-        </Badge>
-      ),
-    }),
-    columnHelper.accessor("confidence", {
-      header: "Confidence",
-      cell: (info) => (
-        <span className="text-xs">{info.getValue()}%</span>
-      ),
-    }),
-    columnHelper.accessor("duration", {
-      header: "Duration",
-      cell: (info) => {
-        const value = info.getValue() as number; // get numeric value
-        return <span className="text-xs">{value.toFixed(2)}s</span>;
+    },
+    {
+      id: "prediction",
+      header: model.startsWith("whisper") ? "Predicted Transcript" : "Predicted Label",
+      cell: ({ row }) => {
+        const data = row.original as AudioData;
+        return (
+          <Badge variant="outline" className="text-xs">
+            {data.prediction}
+          </Badge>
+        );
       },
-    }),
+    },
+    {
+      id: "groundTruthLabel",
+      header: "Ground Truth",
+      cell: ({ row }) => {
+        const data = row.original as AudioData;
+        return (
+          <Badge variant="secondary" className="text-xs">
+            {data.groundTruthLabel}
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "confidence",
+      header: "Confidence",
+      cell: ({ row }) => {
+        const data = row.original as AudioData;
+        return <span className="text-xs">{data.confidence}%</span>;
+      },
+    },
+    {
+      id: "duration",
+      header: "Duration",
+      cell: ({ row }) => {
+        const data = row.original as AudioData;
+        return <span className="text-xs">{data.duration.toFixed(2)}s</span>;
+      },
+    },
   ];
 
-  const table = useReactTable({
-    data: tableData,
+  // Dataset metadata data and columns
+  type DatasetRow = Record<string, string | number | null | undefined>;
+  const datasetRows: DatasetRow[] = (datasetMetadata || []).map((r) => r);
+
+  const getFrom = (row: DatasetRow, keys: string[], fallback = ""): string => {
+    for (const k of keys) {
+      const v = row[k];
+      if (v !== undefined && v !== null && String(v).length > 0) return String(v);
+    }
+    return fallback;
+  };
+
+  const getDatasetRowId = (row: DatasetRow, fallback: string): string => {
+    const v = row["id"] ?? row["path"] ?? row["filepath"] ?? row["file"] ?? row["filename"];
+    return v !== undefined && v !== null && String(v).length > 0 ? String(v) : fallback;
+  };
+
+  const datasetColumnsCommonVoice: ColumnDef<unknown, unknown>[] = [
+    {
+      id: "filename",
+      header: "Filename",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        const path = getFrom(data, ["path", "filepath", "file", "filename"], "");
+        const filename = path.split("/").pop() || path;
+        return <span className="font-mono text-xs">{filename}</span>;
+      },
+    },
+    {
+      id: "sentence",
+      header: "Transcript",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        return <span className="text-xs">{getFrom(data, ["sentence", "transcript", "text"], "")}</span>;
+      },
+    },
+    {
+      id: "duration",
+      header: "Duration",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        const d = Number(getFrom(data, ["duration"], "0"));
+        return <span className="text-xs">{isNaN(d) ? "" : `${d.toFixed(2)}s`}</span>;
+      },
+    },
+  ];
+
+  const datasetColumnsRavdess: ColumnDef<unknown, unknown>[] = [
+    {
+      id: "filename",
+      header: "Filename",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        const path = getFrom(data, ["path", "filepath", "file", "filename"], "");
+        const filename = path.split("/").pop() || path;
+        return <span className="font-mono text-xs">{filename}</span>;
+      },
+    },
+    {
+      id: "emotion",
+      header: "Emotion",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        return <Badge variant="secondary" className="text-xs">{getFrom(data, ["emotion", "label"], "")}</Badge>;
+      },
+    },
+    {
+      id: "duration",
+      header: "Duration",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        const d = Number(getFrom(data, ["duration"], "0"));
+        return <span className="text-xs">{isNaN(d) ? "" : `${d.toFixed(2)}s`}</span>;
+      },
+    },
+  ];
+
+  // Build table config based on mode
+  const data: unknown[] = isDatasetMode ? datasetRows : customTableData;
+  const columns: ColumnDef<unknown, unknown>[] = isDatasetMode ? (dataset === "ravdess" ? datasetColumnsRavdess : datasetColumnsCommonVoice) : customColumns;
+
+  const table = useReactTable<unknown>({
+    data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -163,9 +250,19 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  data-state={selectedRow === row.original.id ? "selected" : undefined}
+                  data-state={(() => {
+                    const rowId: string = isDatasetMode
+                      ? getDatasetRowId(row.original as DatasetRow, String(row.id))
+                      : (row.original as AudioData).id;
+                    return selectedRow === rowId ? "selected" : undefined;
+                  })()}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => onRowSelect(row.original.id)}
+                  onClick={() => {
+                    const rowId: string = isDatasetMode
+                      ? getDatasetRowId(row.original as DatasetRow, String(row.id))
+                      : (row.original as AudioData).id;
+                    onRowSelect(rowId);
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-2">
@@ -176,7 +273,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-xs">
+                <TableCell colSpan={Array.isArray(columns) ? columns.length : 0} className="h-24 text-center text-xs">
                   No results.
                 </TableCell>
               </TableRow>
