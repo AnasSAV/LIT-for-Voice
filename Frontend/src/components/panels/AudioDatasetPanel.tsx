@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,88 @@ export const AudioDatasetPanel = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [datasetMetadata, setDatasetMetadata] = useState<Record<string, string | number>[]>([]);
+  const [predictionMap, setPredictionMap] = useState<Record<string, string>>({});
+  const [inferenceStatus, setInferenceStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
+  // Gate inferences so responses map to the correct row
+  const inFlightRowRef = useRef<string | null>(null);
+  const [queuedRowId, setQueuedRowId] = useState<string | null>(null);
+
+  // Stable handlers to prevent downstream re-renders
+  const handleRowSelect = useCallback((id: string) => {
+    setSelectedRow(id);
+  }, []);
+
+  const handleFilePlay = useCallback((file: UploadedFile) => {
+    console.log('AudioDatasetPanel - File selected for play:', file);
+    console.log('AudioDatasetPanel - onFileSelect callback exists:', !!onFileSelect);
+    if (onFileSelect) {
+      onFileSelect(file);
+      console.log('AudioDatasetPanel - Called onFileSelect with file');
+    }
+  }, [onFileSelect]);
+
+  // When a dataset row is selected (non-custom), map it to a file-like object and propagate selection.
+  // Only start a new inference if none is in-flight; otherwise queue the selection.
+  useEffect(() => {
+    if (dataset === "custom") return;
+    if (!selectedRow) return;
+    if (!onFileSelect) return;
+
+    // If an inference is already running for another row, queue this selection and return
+    if (inFlightRowRef.current && inFlightRowRef.current !== selectedRow) {
+      setQueuedRowId(selectedRow);
+      return;
+    }
+
+    // Try to find the row in metadata matching the selectedRow by common keys
+    const findMatch = () => {
+      for (const row of datasetMetadata) {
+        const id = row["id"]; // may exist
+        const path = row["path"] || row["filepath"] || row["file"] || row["filename"]; // prefer path-like keys
+        if (typeof id === "string" && id === selectedRow) return row;
+        if (typeof path === "string" && (path === selectedRow || path.endsWith(`/${selectedRow}`) || path.endsWith(`\\${selectedRow}`))) return row;
+      }
+      return null;
+    };
+
+    const match = findMatch();
+    if (!match) return;
+
+    const pathVal = (match["path"] || match["filepath"] || match["file"] || match["filename"]) as string | undefined;
+    const filename = pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || String(selectedRow)) : String(selectedRow);
+
+    const fileLike: UploadedFile = {
+      file_id: String(selectedRow),
+      filename,
+      file_path: pathVal || filename, // assume backend can resolve this path
+      message: "",
+    };
+
+    // Mark this row as in-flight and set status to loading, then trigger inference
+    if (!inFlightRowRef.current) {
+      inFlightRowRef.current = selectedRow;
+      setInferenceStatus(prev => ({ ...prev, [selectedRow]: 'loading' }));
+      onFileSelect(fileLike);
+    }
+  }, [dataset, selectedRow, datasetMetadata, onFileSelect]);
+
+  // Persist latest inference result against the row that initiated the request.
+  useEffect(() => {
+    if (typeof apiData === "string") {
+      const rowId = inFlightRowRef.current;
+      if (rowId) {
+        setPredictionMap((prev) => ({ ...prev, [rowId]: String(apiData) }));
+        setInferenceStatus((prev) => ({ ...prev, [rowId]: 'done' }));
+        inFlightRowRef.current = null;
+        // If a selection was queued while this inference was running, start it now
+        if (queuedRowId) {
+          const next = queuedRowId;
+          setQueuedRowId(null);
+          setSelectedRow(next);
+        }
+      }
+    }
+  }, [apiData, queuedRowId]);
 
   // Fetch dataset metadata when dataset changes (for non-custom datasets)
   useEffect(() => {
@@ -166,21 +248,16 @@ export const AudioDatasetPanel = ({
           <CardContent className="p-0 h-full">
             <AudioDataTable 
               selectedRow={selectedRow}
-              onRowSelect={setSelectedRow}
+              onRowSelect={handleRowSelect}
               searchQuery={searchQuery}
               apiData={apiData}
               model={model ?? ""}
               dataset={dataset}
               datasetMetadata={datasetMetadata}
               uploadedFiles={uploadedFiles}
-              onFilePlay={(file) => {
-                console.log('AudioDatasetPanel - File selected for play:', file);
-                console.log('AudioDatasetPanel - onFileSelect callback exists:', !!onFileSelect);
-                if (onFileSelect) {
-                  onFileSelect(file);
-                  console.log('AudioDatasetPanel - Called onFileSelect with file');
-                }
-              }}
+              onFilePlay={handleFilePlay}
+              predictionMap={predictionMap}
+              inferenceStatus={inferenceStatus}
             />
           </CardContent>
         </Card>

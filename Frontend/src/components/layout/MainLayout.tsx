@@ -75,7 +75,7 @@ export const MainLayout = () => {
               
               {/* Bottom Panel: Predictions */}
               <Panel defaultSize={30} minSize={20}>
-                <PredictionPanel />
+                <PredictionPanel apiData={apiData} model={model} />
               </Panel>
             </PanelGroup>
           </Panel>
@@ -84,7 +84,7 @@ export const MainLayout = () => {
           
           {/* Right Panel: Audio Player & Label Editor */}
           <Panel defaultSize={25} minSize={20}>
-            <DatapointEditorPanel selectedFile={selectedFile} />
+            <DatapointEditorPanel selectedFile={selectedFile} dataset={dataset} />
           </Panel>
         </PanelGroup>
       </div>

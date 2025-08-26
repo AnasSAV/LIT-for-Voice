@@ -65,15 +65,16 @@ const onModelChange = async (value: string) => {
 
   try {
     let url = `http://localhost:8000/inferences/run?model=${value}`;
-    
-    // If there's a selected file, include it in the API call
     if (selectedFile) {
-      url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
-      console.log("Using uploaded file:", selectedFile.filename);
-    } else {
-      console.log("Using default sample file");
+      if (dataset !== 'custom') {
+        const filename = encodeURIComponent(selectedFile.filename);
+        url += `&dataset=${encodeURIComponent(dataset)}&dataset_file=${filename}`;
+        console.log("Using dataset file:", dataset, selectedFile.filename);
+      } else {
+        url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
+        console.log("Using uploaded file:", selectedFile.filename);
+      }
     }
-    
     const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`API error: ${res.status}`);
@@ -93,6 +94,34 @@ const onModelChange = async (value: string) => {
 
   // Get datasets allowed for current model
   const allowedDatasets = modelDatasetMap[model] || ["custom"];
+
+  // Auto-run inference when a file is selected/changes
+  React.useEffect(() => {
+    if (!selectedFile) return;
+    const ac = new AbortController();
+    (async () => {
+      try {
+        let url = `http://localhost:8000/inferences/run?model=${model}`;
+        if (dataset !== 'custom') {
+          const filename = encodeURIComponent(selectedFile.filename);
+          url += `&dataset=${encodeURIComponent(dataset)}&dataset_file=${filename}`;
+        } else if (selectedFile.file_path) {
+          url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
+        }
+        const res = await fetch(url, { signal: ac.signal });
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status}`);
+        }
+        const data = await res.json();
+        setApiData(data);
+        console.log("Auto inference (file change) response:", data);
+      } catch (error: unknown) {
+        if (typeof error === 'object' && error && 'name' in error && (error as { name?: string }).name === 'AbortError') return;
+        console.error("Auto inference failed:", error as unknown);
+      }
+    })();
+    return () => ac.abort();
+  }, [selectedFile, selectedFile?.file_path, model, dataset, setApiData]);
 
   return (
     <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">

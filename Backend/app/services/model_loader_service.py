@@ -1,8 +1,6 @@
 import logging
 import torch
 from transformers import (
-    AutoModelForSpeechSeq2Seq,
-    AutoProcessor,
     pipeline,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForSequenceClassification,
@@ -14,20 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    # Use integer device indices to avoid meta-tensor issues in some transformer/torch combos
+    device = 0 if torch.cuda.is_available() else -1  # 0 => cuda:0, -1 => CPU
     torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-    model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
-    ).to(device)
-
-    processor = AutoProcessor.from_pretrained(model_id)
 
     pipe = pipeline(
         "automatic-speech-recognition",
-        model=model,
-        tokenizer=processor.tokenizer,
-        feature_extractor=processor.feature_extractor,
+        model=model_id,
         torch_dtype=torch_dtype,
         device=device,
     )
