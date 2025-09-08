@@ -47,6 +47,8 @@ export const AudioDatasetPanel = ({
   // Gate inferences so responses map to the correct row
   const inFlightRowRef = useRef<string | null>(null);
   const [queuedRowId, setQueuedRowId] = useState<string | null>(null);
+  // Minimal queue to process visible rows sequentially (per page)
+  const [pendingRowQueue, setPendingRowQueue] = useState<string[]>([]);
 
   // Stable handlers to prevent downstream re-renders
   const handleRowSelect = useCallback((id: string) => {
@@ -71,7 +73,8 @@ export const AudioDatasetPanel = ({
 
     // If an inference is already running for another row, queue this selection and return
     if (inFlightRowRef.current && inFlightRowRef.current !== selectedRow) {
-      setQueuedRowId(selectedRow);
+      // Ensure selected row appears next in queue if not already present
+      setPendingRowQueue((prev) => (prev.includes(selectedRow) ? prev : [...prev, selectedRow]));
       return;
     }
 
@@ -115,15 +118,27 @@ export const AudioDatasetPanel = ({
         setPredictionMap((prev) => ({ ...prev, [rowId]: String(apiData) }));
         setInferenceStatus((prev) => ({ ...prev, [rowId]: 'done' }));
         inFlightRowRef.current = null;
-        // If a selection was queued while this inference was running, start it now
-        if (queuedRowId) {
-          const next = queuedRowId;
-          setQueuedRowId(null);
-          setSelectedRow(next);
-        }
+        // Dequeue and trigger next item if present
+        setPendingRowQueue((prev) => {
+          const nextQueue = prev[0] === rowId ? prev.slice(1) : prev;
+          if (nextQueue.length > 0) {
+            // trigger next
+            const nextId = nextQueue[0];
+            setSelectedRow(nextId);
+          }
+          return nextQueue;
+        });
       }
     }
   }, [apiData, queuedRowId]);
+
+  // Process queue when visible rows change or when idle
+  useEffect(() => {
+    if (inFlightRowRef.current) return;
+    if (pendingRowQueue.length === 0) return;
+    const nextId = pendingRowQueue[0];
+    setSelectedRow(nextId);
+  }, [pendingRowQueue]);
 
   // Fetch dataset metadata when dataset changes (for non-custom datasets)
   useEffect(() => {
@@ -258,6 +273,11 @@ export const AudioDatasetPanel = ({
               onFilePlay={handleFilePlay}
               predictionMap={predictionMap}
               inferenceStatus={inferenceStatus}
+              onVisibleRowIdsChange={(ids) => {
+                // Skip rows already completed; preserve simple ordering as provided
+                const next = ids.filter((id) => inferenceStatus[id] !== 'done');
+                setPendingRowQueue(next);
+              }}
             />
           </CardContent>
         </Card>

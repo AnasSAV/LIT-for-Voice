@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 
 interface UploadedFile {
   file_id: string;
@@ -47,9 +47,10 @@ interface AudioDataTableProps {
   onFilePlay?: (file: UploadedFile) => void;
   predictionMap?: Record<string, string>;
   inferenceStatus?: Record<string, 'idle' | 'loading' | 'done' | 'error'>;
+  onVisibleRowIdsChange?: (rowIds: string[]) => void;
 }
 
-export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, model, dataset, datasetMetadata, uploadedFiles, onFilePlay, predictionMap, inferenceStatus }: AudioDataTableProps) => {
+export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, model, dataset, datasetMetadata, uploadedFiles, onFilePlay, predictionMap, inferenceStatus, onVisibleRowIdsChange }: AudioDataTableProps) => {
   // Branch: dataset mode vs custom uploads
   const isDatasetMode = dataset !== "custom" && (datasetMetadata?.length || 0) > 0;
 
@@ -284,6 +285,14 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
     },
     getRowId,
   });
+
+  // Notify parent of currently visible row ids (for sequential per-page inference)
+  useEffect(() => {
+    if (!onVisibleRowIdsChange) return;
+    const rows = table.getRowModel().rows;
+    const ids = rows.map(r => String(r.id));
+    onVisibleRowIdsChange(ids);
+  }, [onVisibleRowIdsChange, table, searchQuery, dataset, model, isDatasetMode, data]);
 
   return (
     <div className="h-full flex flex-col">
