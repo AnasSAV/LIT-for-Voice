@@ -65,7 +65,7 @@ docker compose up -d
    ```
    
 ```cmd
-pip install -r requirements.txt
+uvicorn app.main:app --reload
 ```
 
 ```cmd
