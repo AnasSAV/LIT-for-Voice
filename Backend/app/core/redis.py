@@ -5,6 +5,10 @@ from .settings import settings
 
 redis = from_url(settings.REDIS_URL, decode_responses=True)
 
+def get_redis():
+    """Get the Redis client instance"""
+    return redis
+
 def k_sess(sid: str) -> str:  return f"sess:{sid}"
 def k_queue(sid: str) -> str: return f"{k_sess(sid)}:queue"
 def k_meta(sid: str) -> str:  return f"{k_sess(sid)}:meta"

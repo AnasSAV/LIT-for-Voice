@@ -45,6 +45,7 @@ export const AudioDatasetPanel = ({
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [datasetMetadata, setDatasetMetadata] = useState<Record<string, string | number>[]>([]);
   const [isRunningBatchPredictions, setIsRunningBatchPredictions] = useState(false);
+  const [predictionCache, setPredictionCache] = useState<Map<string, any>>(new Map());
 
   const runBatchPredictions = async () => {
     if (!model || dataset === "custom") {
@@ -52,29 +53,53 @@ export const AudioDatasetPanel = ({
       return;
     }
 
+    const cacheKey = `${model}-${dataset}`;
+    
+    // Check if we already have cached results
+    if (predictionCache.has(cacheKey)) {
+      const cachedResults = predictionCache.get(cacheKey);
+      if (onPredictionResults && cachedResults.predictions) {
+        onPredictionResults(cachedResults.predictions);
+        toast.success(`Using cached results for ${model} + ${dataset} (${cachedResults.predictions.length} files)`);
+        return;
+      }
+    }
+
     setIsRunningBatchPredictions(true);
     try {
-      const response = await fetch(`http://localhost:8000/predictions/batch?model=${model}&dataset=${dataset}&limit=10`);
+      toast.info(`Running batch predictions for ${model} on ${dataset} dataset (all files)...`);
+      
+      const response = await fetch(`http://localhost:8000/predictions/batch?model=${model}&dataset=${dataset}`, {
+        method: 'GET'
+      });
       if (!response.ok) {
         throw new Error(`Failed to run batch predictions: ${response.status}`);
       }
       
       const results = await response.json();
-      toast.success(`Batch predictions completed! Processed ${results.processed_files} files`);
+      
+      // Cache results in frontend
+      setPredictionCache(prev => new Map(prev.set(cacheKey, results)));
+      
+      if (results.cached || results.cache_hit) {
+        toast.success(`Loaded cached predictions from server! Processed ${results.processed_files} files`);
+      } else {
+        toast.success(`Batch predictions completed! Processed ${results.processed_files} files`);
+      }
       
       // Pass results to parent component
       if (onPredictionResults && results.predictions) {
         onPredictionResults(results.predictions);
       }
       
-      // Display results in console for now - you could show this in a modal or update the UI
+      // Display results in console for debugging
       console.log('Batch prediction results:', results);
       
       // Show first few results as an example
       if (results.predictions && results.predictions.length > 0) {
         const firstResult = results.predictions[0];
         if (firstResult.prediction_type === "emotion") {
-          alert(`Sample Result:\nFile: ${firstResult.filename}\nPredicted Emotion: ${firstResult.emotion_prediction}\nGround Truth: ${firstResult.ground_truth_emotion}\nTranscript: ${firstResult.transcript}`);
+          console.log(`Sample Result:\nFile: ${firstResult.filename}\nPredicted Emotion: ${firstResult.emotion_prediction}\nGround Truth: ${firstResult.ground_truth_emotion}\nTranscript: ${firstResult.transcript}`);
         }
       }
     } catch (error) {
@@ -84,6 +109,20 @@ export const AudioDatasetPanel = ({
       setIsRunningBatchPredictions(false);
     }
   };
+
+  // Check cache when model or dataset changes
+  useEffect(() => {
+    if (model && dataset && dataset !== "custom") {
+      const cacheKey = `${model}-${dataset}`;
+      const cachedResults = predictionCache.get(cacheKey);
+      
+      if (cachedResults && onPredictionResults) {
+        console.log(`Loading cached results for ${cacheKey}`, cachedResults);
+        onPredictionResults(cachedResults.predictions || []);
+        toast.success(`Loaded cached results for ${model} + ${dataset} (${cachedResults.predictions?.length || 0} files)`);
+      }
+    }
+  }, [model, dataset, predictionCache, onPredictionResults]);
 
   // Fetch dataset metadata when dataset changes (for non-custom datasets)
   useEffect(() => {
