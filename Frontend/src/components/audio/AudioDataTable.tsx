@@ -179,26 +179,79 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       header: "Filename",
       cell: ({ row }) => {
         const data = row.original as DatasetRow;
-        const path = getFrom(data, ["path", "filepath", "file", "filename"], "");
-        const filename = path.split("/").pop() || path;
-        return <span className="font-mono text-xs">{filename}</span>;
+        const filename = getFrom(data, ["path", "filepath", "file", "filename"], "");
+        const displayName = filename.split("/").pop() || filename;
+        return (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  // Run prediction on this dataset file
+                  const response = await fetch(`http://localhost:8000/predictions/single?model=${model}&dataset=${dataset}&filename=${displayName}`);
+                  if (response.ok) {
+                    const result = await response.json();
+                    console.log('Prediction result:', result);
+                    // You could show this in a modal or update the UI
+                    alert(`Prediction: ${result.emotion_prediction}\nTranscript: ${result.transcript}\nGround Truth: ${result.ground_truth_emotion}`);
+                  } else {
+                    throw new Error(`HTTP ${response.status}`);
+                  }
+                } catch (error) {
+                  console.error('Prediction failed:', error);
+                  alert(`Prediction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                }
+              }}
+            >
+              <Play className="h-3 w-3" />
+            </Button>
+            <span className="font-mono text-xs">{displayName}</span>
+          </div>
+        );
       },
     },
     {
       id: "emotion",
-      header: "Emotion",
+      header: "Ground Truth Emotion",
       cell: ({ row }) => {
         const data = row.original as DatasetRow;
         return <Badge variant="secondary" className="text-xs">{getFrom(data, ["emotion", "label"], "")}</Badge>;
       },
     },
     {
-      id: "duration",
-      header: "Duration",
+      id: "transcript",
+      header: "Ground Truth Transcript",
       cell: ({ row }) => {
         const data = row.original as DatasetRow;
-        const d = Number(getFrom(data, ["duration"], "0"));
-        return <span className="text-xs">{isNaN(d) ? "" : `${d.toFixed(2)}s`}</span>;
+        return <span className="text-xs">{getFrom(data, ["statement", "sentence"], "")}</span>;
+      },
+    },
+    {
+      id: "intensity",
+      header: "Intensity",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        return <Badge variant="outline" className="text-xs">{getFrom(data, ["intensity"], "")}</Badge>;
+      },
+    },
+    {
+      id: "actor",
+      header: "Actor",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        return <span className="text-xs">{getFrom(data, ["actor"], "")}</span>;
+      },
+    },
+    {
+      id: "gender",
+      header: "Gender",
+      cell: ({ row }) => {
+        const data = row.original as DatasetRow;
+        return <Badge variant="outline" className="text-xs">{getFrom(data, ["gender"], "")}</Badge>;
       },
     },
   ];

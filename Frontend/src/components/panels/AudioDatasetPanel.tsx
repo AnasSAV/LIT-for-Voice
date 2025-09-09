@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Search, Play, Pause } from "lucide-react";
+import { Upload, Search, Play, Pause, Zap } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ interface AudioDatasetPanelProps {
   selectedFile?: UploadedFile | null;
   onFileSelect?: (file: UploadedFile) => void;
   onUploadSuccess?: (uploadResponse: UploadedFile) => void;
+  onPredictionResults?: (results: any[]) => void;
 }
 
 export const AudioDatasetPanel = ({ 
@@ -35,13 +36,54 @@ export const AudioDatasetPanel = ({
   dataset,
   selectedFile, 
   onFileSelect, 
-  onUploadSuccess 
+  onUploadSuccess,
+  onPredictionResults
 }: AudioDatasetPanelProps) => {
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [datasetMetadata, setDatasetMetadata] = useState<Record<string, string | number>[]>([]);
+  const [isRunningBatchPredictions, setIsRunningBatchPredictions] = useState(false);
+
+  const runBatchPredictions = async () => {
+    if (!model || dataset === "custom") {
+      toast.error("Please select a model and dataset first");
+      return;
+    }
+
+    setIsRunningBatchPredictions(true);
+    try {
+      const response = await fetch(`http://localhost:8000/predictions/batch?model=${model}&dataset=${dataset}&limit=10`);
+      if (!response.ok) {
+        throw new Error(`Failed to run batch predictions: ${response.status}`);
+      }
+      
+      const results = await response.json();
+      toast.success(`Batch predictions completed! Processed ${results.processed_files} files`);
+      
+      // Pass results to parent component
+      if (onPredictionResults && results.predictions) {
+        onPredictionResults(results.predictions);
+      }
+      
+      // Display results in console for now - you could show this in a modal or update the UI
+      console.log('Batch prediction results:', results);
+      
+      // Show first few results as an example
+      if (results.predictions && results.predictions.length > 0) {
+        const firstResult = results.predictions[0];
+        if (firstResult.prediction_type === "emotion") {
+          alert(`Sample Result:\nFile: ${firstResult.filename}\nPredicted Emotion: ${firstResult.emotion_prediction}\nGround Truth: ${firstResult.ground_truth_emotion}\nTranscript: ${firstResult.transcript}`);
+        }
+      }
+    } catch (error) {
+      console.error('Batch prediction error:', error);
+      toast.error(`Batch predictions failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsRunningBatchPredictions(false);
+    }
+  };
 
   // Fetch dataset metadata when dataset changes (for non-custom datasets)
   useEffect(() => {
@@ -134,6 +176,18 @@ export const AudioDatasetPanel = ({
             <Badge variant="secondary" className="text-xs">
               {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
             </Badge>
+            {dataset !== "custom" && (
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="h-7" 
+                onClick={runBatchPredictions}
+                disabled={isRunningBatchPredictions || !model}
+              >
+                <Zap className="h-3 w-3 mr-1" />
+                {isRunningBatchPredictions ? "Running..." : "Run Predictions"}
+              </Button>
+            )}
             <Button size="sm" variant="outline" className="h-7" onClick={handleUploadClick}>
               <Upload className="h-3 w-3 mr-1" />
               Upload

@@ -20,6 +20,7 @@ export const MainLayout = () => {
   const [apiData, setApiData] = useState<unknown>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
+  const [predictionResults, setPredictionResults] = useState<any[]>([]);
 
   const handleUploadSuccess = (uploadResponse: UploadedFile) => {
     setUploadedFiles(prev => [...prev, uploadResponse]);
@@ -29,8 +30,8 @@ export const MainLayout = () => {
     }
   };
 
-  const [model, setModel] = useState("whisper-base");
-  const [dataset, setDataset] = useState("common-voice");
+  const [model, setModel] = useState("wav2vec2");
+  const [dataset, setDataset] = useState("ravdess");
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
@@ -68,6 +69,7 @@ export const MainLayout = () => {
                   onUploadSuccess={handleUploadSuccess}
                   model={model}
                   dataset={dataset}
+                  onPredictionResults={setPredictionResults}
                 />
               </Panel>
               
@@ -75,7 +77,12 @@ export const MainLayout = () => {
               
               {/* Bottom Panel: Predictions */}
               <Panel defaultSize={30} minSize={20}>
-                <PredictionPanel />
+                <PredictionPanel 
+                  selectedFile={selectedFile}
+                  predictionResults={predictionResults}
+                  model={model}
+                  dataset={dataset}
+                />
               </Panel>
             </PanelGroup>
           </Panel>

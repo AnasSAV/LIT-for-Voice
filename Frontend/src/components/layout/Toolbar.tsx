@@ -47,42 +47,53 @@ export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFil
 
 let abortController: AbortController | null = null;
 const onModelChange = async (value: string) => {
-  setModel(value);
-    if (abortController) {
-    abortController.abort();
-  }
-  abortController = new AbortController();
-  
-  // Update dataset based on model
-  const allowedDatasets = modelDatasetMap[value] || ["custom"];
-  const defaultDataset = defaultDatasetForModel[value] || "custom";
-
-  if (!allowedDatasets.includes(dataset)) {
-    setDataset(defaultDataset);
-  }
-
-  console.log("Model selected:", value);
-
   try {
-    let url = `http://localhost:8000/inferences/run?model=${value}`;
+    console.log("Model change started:", value);
+    setModel(value);
     
-    // If there's a selected file, include it in the API call
-    if (selectedFile) {
-      url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
-      console.log("Using uploaded file:", selectedFile.filename);
-    } else {
-      console.log("Using default sample file");
+    if (abortController) {
+      abortController.abort();
     }
+    abortController = new AbortController();
     
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
+    // Update dataset based on model
+    const allowedDatasets = modelDatasetMap[value] || ["custom"];
+    const defaultDataset = defaultDatasetForModel[value] || "custom";
+    
+    console.log("Allowed datasets for model:", allowedDatasets);
+    console.log("Current dataset:", dataset);
+    
+    if (!allowedDatasets.includes(dataset)) {
+      console.log("Changing dataset to:", defaultDataset);
+      setDataset(defaultDataset);
     }
-    const data = await res.json();
-    setApiData(data);
-    console.log("API response:", data);
+
+    console.log("Model selected:", value);
+
+    // Skip API call for now to avoid crashes
+    // try {
+    //   let url = `http://localhost:8000/inferences/run?model=${value}`;
+    //   
+    //   // If there's a selected file, include it in the API call
+    //   if (selectedFile) {
+    //     url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
+    //     console.log("Using uploaded file:", selectedFile.filename);
+    //   } else {
+    //     console.log("Using default sample file");
+    //   }
+    //   
+    //   const res = await fetch(url);
+    //   if (!res.ok) {
+    //     throw new Error(`API error: ${res.status}`);
+    //   }
+    //   const data = await res.json();
+    //   setApiData(data);
+    //   console.log("API response:", data);
+    // } catch (error) {
+    //   console.error("Failed to run inference:", error);
+    // }
   } catch (error) {
-    console.error("Failed to run inference:", error);
+    console.error("Error in onModelChange:", error);
   }
 };
 

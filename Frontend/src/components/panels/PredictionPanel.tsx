@@ -5,8 +5,16 @@ import { Progress } from "@/components/ui/progress";
 import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
+import { PredictionResults } from "../analysis/PredictionResults";
 
-export const PredictionPanel = () => {
+interface PredictionPanelProps {
+  selectedFile?: any;
+  predictionResults?: any[];
+  model?: string;
+  dataset?: string;
+}
+
+export const PredictionPanel = ({ selectedFile, predictionResults = [], model = "", dataset = "" }: PredictionPanelProps) => {
   return (
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="predictions" className="h-full">
@@ -21,53 +29,32 @@ export const PredictionPanel = () => {
         
         <div className="h-[calc(100%-2.5rem)] overflow-auto">
           <TabsContent value="predictions" className="m-0 h-full">
-            <div className="p-3 space-y-3">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Classification Results</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {[
-                    { label: "Neutral", probability: 0.87, isTrue: true, isPredicted: true },
-                    { label: "Happy", probability: 0.08, isTrue: false, isPredicted: false },
-                    { label: "Sad", probability: 0.03, isTrue: false, isPredicted: false },
-                    { label: "Angry", probability: 0.02, isTrue: false, isPredicted: false },
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span>{item.label}</span>
-                        {item.isPredicted && <Badge variant="default" className="text-[10px] px-1">P</Badge>}
-                        {item.isTrue && <Badge variant="outline" className="text-[10px] px-1">T</Badge>}
-                      </div>
-                      <div className="flex items-center gap-2 flex-1 max-w-[120px]">
-                        <Progress value={item.probability * 100} className="h-2" />
-                        <span className="text-muted-foreground min-w-[2rem]">
-                          {(item.probability * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Token-level Predictions (ASR)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-xs space-y-1">
-                    {["The", "quick", "brown", "fox", "jumps"].map((token, idx) => (
-                      <div key={idx} className="flex items-center justify-between">
-                        <span className="font-mono">{token}</span>
-                        <span className="text-muted-foreground">
-                          {(0.95 - idx * 0.02).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {predictionResults.length > 0 ? (
+              <PredictionResults 
+                results={predictionResults}
+                model={model}
+                dataset={dataset}
+                onPlayFile={(filename) => {
+                  // Handle file playback
+                  console.log('Play file:', filename);
+                }}
+              />
+            ) : (
+              <div className="p-3 space-y-3">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">No Predictions Yet</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-center py-8">
+                    <p className="text-sm text-muted-foreground">
+                      {model === "wav2vec2" && dataset === "ravdess" 
+                        ? "Select wav2vec2 model and ravdess dataset, then click 'Run Predictions' to see emotion predictions and transcripts."
+                        : "Upload files or select a dataset and model to see predictions here."}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </TabsContent>
           
           <TabsContent value="saliency" className="m-0 h-full">
