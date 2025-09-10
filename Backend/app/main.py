@@ -4,6 +4,7 @@ from .core.session import SessionMiddleware
 
 from .api.routes import session as session_routes, results as results_routes, inferences as inferences_routes, upload as upload_routes
 from .api.routes import datasets as datasets_routes, predictions as predictions_routes, dataset_files as dataset_files_routes
+from .api.routes import database as database_routes
 
 app = FastAPI(title="LIT for Voice – API")
 origins = [
@@ -26,3 +27,4 @@ app.include_router(upload_routes.router)
 app.include_router(datasets_routes.router)
 app.include_router(predictions_routes.router)
 app.include_router(dataset_files_routes.router)
+app.include_router(database_routes.router)

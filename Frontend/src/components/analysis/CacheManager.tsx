@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Trash2, RefreshCw, Database, Clock } from "lucide-react";
+import { Trash2, RefreshCw, Database, Clock, Download, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 interface CacheStats {
@@ -13,17 +13,24 @@ interface CacheStats {
   file_entries: number;
   file_size_bytes: number;
   file_size_mb: number;
+  database_entries: number;
+  database_files: number;
+  database_size_bytes: number;
+  database_size_mb: number;
   total_size_mb: number;
   cache_dir: string;
+  database_path: string;
   redis_available: boolean;
+  models: string[];
+  datasets: string[];
 }
 
 interface CachedCombination {
   model: string;
   dataset: string;
-  timestamp: string;
   file_count: number;
-  cache_file: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface CacheManagerProps {
@@ -34,13 +41,15 @@ export const CacheManager = ({ onCacheCleared }: CacheManagerProps) => {
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [cachedCombinations, setCachedCombinations] = useState<CachedCombination[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isRebuilding, setIsRebuilding] = useState(false);
 
   const fetchCacheStats = async () => {
     try {
-      const response = await fetch('http://localhost:8000/predictions/cache/stats');
+      const response = await fetch('http://localhost:8000/database/stats');
       if (response.ok) {
-        const stats = await response.json();
-        setCacheStats(stats);
+        const result = await response.json();
+        setCacheStats(result.stats);
       }
     } catch (error) {
       console.error('Failed to fetch cache stats:', error);
@@ -49,20 +58,75 @@ export const CacheManager = ({ onCacheCleared }: CacheManagerProps) => {
 
   const fetchCachedCombinations = async () => {
     try {
-      const response = await fetch('http://localhost:8000/predictions/cache/list');
+      const response = await fetch('http://localhost:8000/database/predictions');
       if (response.ok) {
         const data = await response.json();
-        setCachedCombinations(data.cached_combinations || []);
+        setCachedCombinations(data.predictions || []);
       }
     } catch (error) {
       console.error('Failed to fetch cached combinations:', error);
     }
   };
 
+  const exportDatabase = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch('http://localhost:8000/database/export/download');
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `predictions_export_${new Date().toISOString().replace(/[:.]/g, '-')}.sql`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast.success('Database exported successfully!');
+      } else {
+        throw new Error('Failed to export database');
+      }
+    } catch (error) {
+      console.error('Failed to export database:', error);
+      toast.error('Failed to export database');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const rebuildCache = async () => {
+    setIsRebuilding(true);
+    try {
+      const response = await fetch('http://localhost:8000/database/rebuild-cache', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        toast.success(`Cache rebuilt! ${result.rebuilt_count} prediction sets restored`);
+        
+        // Refresh cache data
+        await fetchCacheStats();
+        await fetchCachedCombinations();
+        
+        if (onCacheCleared) {
+          onCacheCleared();
+        }
+      } else {
+        throw new Error('Failed to rebuild cache');
+      }
+    } catch (error) {
+      console.error('Failed to rebuild cache:', error);
+      toast.error('Failed to rebuild cache');
+    } finally {
+      setIsRebuilding(false);
+    }
+  };
+
   const clearCache = async (model?: string, dataset?: string) => {
     setIsLoading(true);
     try {
-      let url = 'http://localhost:8000/predictions/cache/clear';
+      let url = 'http://localhost:8000/database/predictions';
       const params = new URLSearchParams();
       if (model) params.append('model', model);
       if (dataset) params.append('dataset', dataset);
@@ -71,7 +135,7 @@ export const CacheManager = ({ onCacheCleared }: CacheManagerProps) => {
       const response = await fetch(url, { method: 'DELETE' });
       if (response.ok) {
         const result = await response.json();
-        toast.success(`Cache cleared! ${result.invalidated_entries} entries removed`);
+        toast.success(`Cache cleared! ${result.deleted_count} entries removed`);
         
         // Refresh cache data
         await fetchCacheStats();
@@ -149,6 +213,14 @@ export const CacheManager = ({ onCacheCleared }: CacheManagerProps) => {
                     <span>File backup:</span>
                     <Badge variant="outline">{cacheStats.file_entries}</Badge>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4" />
+                    <span>Database:</span>
+                    <Badge variant="secondary">{cacheStats.database_entries}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      ({cacheStats.database_files} files)
+                    </span>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <div className="text-sm">
@@ -160,12 +232,51 @@ export const CacheManager = ({ onCacheCleared }: CacheManagerProps) => {
                   <div className="text-xs text-muted-foreground">
                     Redis: {cacheStats.redis_size_mb} MB | Files: {cacheStats.file_size_mb} MB
                   </div>
+                  <div className="text-xs text-muted-foreground">
+                    Database: {cacheStats.database_size_mb} MB
+                  </div>
                 </div>
               </div>
               
               <Separator />
               
-              <div className="flex gap-2">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Available Models & Datasets:</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="font-medium">Models:</span>
+                    <div className="mt-1 space-y-1">
+                      {cacheStats.models.length > 0 ? (
+                        cacheStats.models.map((model, i) => (
+                          <Badge key={i} variant="outline" className="text-xs mr-1">
+                            {model}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">None</span>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="font-medium">Datasets:</span>
+                    <div className="mt-1 space-y-1">
+                      {cacheStats.datasets.length > 0 ? (
+                        cacheStats.datasets.map((dataset, i) => (
+                          <Badge key={i} variant="outline" className="text-xs mr-1">
+                            {dataset}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">None</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
                   variant="destructive"
@@ -175,6 +286,28 @@ export const CacheManager = ({ onCacheCleared }: CacheManagerProps) => {
                 >
                   <Trash2 className="h-3 w-3 mr-1" />
                   Clear All Cache
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={exportDatabase}
+                  disabled={isExporting}
+                  className="h-7"
+                >
+                  <Download className="h-3 w-3 mr-1" />
+                  {isExporting ? 'Exporting...' : 'Export SQL'}
+                </Button>
+                
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={rebuildCache}
+                  disabled={isRebuilding}
+                  className="h-7"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  {isRebuilding ? 'Rebuilding...' : 'Rebuild Cache'}
                 </Button>
               </div>
             </>
@@ -221,7 +354,14 @@ export const CacheManager = ({ onCacheCleared }: CacheManagerProps) => {
                 </div>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  <span>Cached: {formatTimestamp(combination.timestamp)}</span>
+                  <span>
+                    Created: {formatTimestamp(combination.created_at)}
+                    {combination.updated_at !== combination.created_at && (
+                      <span className="ml-2">
+                        Updated: {formatTimestamp(combination.updated_at)}
+                      </span>
+                    )}
+                  </span>
                 </div>
               </div>
             ))

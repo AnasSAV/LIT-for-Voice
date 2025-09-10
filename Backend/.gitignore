@@ -209,7 +209,7 @@ Thumbs.db
 uploads/
 media/
 static/user_uploads/
-
+cache/
 # Documentation builds
 docs/build/
 
