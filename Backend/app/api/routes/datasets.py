@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
@@ -8,9 +9,8 @@ from app.services.dataset_service import (
     resolve_file,
     media_type_for,
 )
-
-router = APIRouter(prefix="/datasets", tags=["datasets"])
-
+router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.get("/{dataset}/metadata")
 async def get_dataset_metadata(dataset: str) -> JSONResponse:
