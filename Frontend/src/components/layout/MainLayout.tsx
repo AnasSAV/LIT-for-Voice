@@ -137,6 +137,8 @@ export const MainLayout = () => {
                   <PredictionPanel 
                     selectedFile={selectedFile}
                     selectedEmbeddingFile={selectedEmbeddingFile}
+                    model={model}
+                    dataset={dataset}
                   />
                 </Panel>
               </PanelGroup>

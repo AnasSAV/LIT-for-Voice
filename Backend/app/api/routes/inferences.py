@@ -13,6 +13,7 @@ from app.services.model_loader_service import (
     extract_whisper_embeddings,
     extract_wav2vec2_embeddings,
     reduce_dimensions,
+    predict_emotion_wave2vec,
 )
 from app.services.dataset_service import resolve_file
 from app.core.redis import get_result, cache_result
@@ -157,6 +158,62 @@ async def run_inference(
     logger.info(f"Cached prediction for {resolved_path}")
 
     return prediction
+
+
+@router.post("/inferences/wav2vec2-detailed")
+async def get_wav2vec2_detailed_prediction(
+    request: dict = Body(..., example={
+        "file_path": "/path/to/audio.wav",
+        "dataset": "common-voice", 
+        "dataset_file": "sample-001.mp3"
+    })
+):
+    """Get detailed wav2vec2 prediction with probabilities for all emotions"""
+    file_path = request.get("file_path")
+    dataset = request.get("dataset")
+    dataset_file = request.get("dataset_file")
+    
+    # Resolve file path
+    resolved_path = None
+    if file_path:
+        resolved_path = Path(file_path)
+    elif dataset and dataset_file:
+        try:
+            resolved_path = resolve_file(dataset, dataset_file)
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing audio reference. Provide either 'file_path' or 'dataset' + 'dataset_file'."
+        )
+    
+    if not resolved_path.exists():
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
+    
+    # Create cache key for detailed predictions
+    file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+    cache_key = f"wav2vec2_detailed_{file_content_hash}"
+    
+    # Check if result is cached
+    cached_result = await get_result("wav2vec2", cache_key)
+    if cached_result is not None:
+        logger.info(f"Returning cached detailed wav2vec2 result for {resolved_path}")
+        return cached_result.get("prediction", cached_result)
+    
+    # Get detailed prediction with probabilities
+    try:
+        detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
+        
+        # Cache the detailed result
+        await cache_result("wav2vec2", cache_key, {"prediction": detailed_result}, ttl=6*60*60)
+        logger.info(f"Cached detailed wav2vec2 prediction for {resolved_path}")
+        
+        return detailed_result
+        
+    except Exception as e:
+        logger.error(f"Error getting detailed wav2vec2 prediction: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @router.post("/inferences/embeddings")
