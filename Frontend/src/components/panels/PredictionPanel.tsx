@@ -6,7 +6,22 @@ import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
 
-export const PredictionPanel = () => {
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
+interface PredictionPanelProps {
+  selectedFile?: UploadedFile | null;
+  selectedEmbeddingFile?: string | null;
+}
+
+export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile }: PredictionPanelProps) => {
   return (
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="predictions" className="h-full">
@@ -22,6 +37,37 @@ export const PredictionPanel = () => {
         <div className="h-[calc(100%-2.5rem)] overflow-auto">
           <TabsContent value="predictions" className="m-0 h-full">
             <div className="p-3 space-y-3">
+              {/* Selected File Information */}
+              {(selectedFile || selectedEmbeddingFile) && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Selected File</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="text-xs">
+                      <div className="font-medium text-blue-800 mb-2">
+                        {selectedFile ? selectedFile.filename : selectedEmbeddingFile}
+                      </div>
+                      {selectedFile && (
+                        <div className="space-y-1 text-gray-600">
+                          <div><span className="font-medium">File ID:</span> {selectedFile.file_id}</div>
+                          <div><span className="font-medium">Path:</span> {selectedFile.file_path}</div>
+                          {selectedFile.size && (
+                            <div><span className="font-medium">Size:</span> {(selectedFile.size / 1024).toFixed(1)} KB</div>
+                          )}
+                          {selectedFile.duration && (
+                            <div><span className="font-medium">Duration:</span> {selectedFile.duration.toFixed(2)}s</div>
+                          )}
+                          {selectedFile.sample_rate && (
+                            <div><span className="font-medium">Sample Rate:</span> {selectedFile.sample_rate} Hz</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Classification Results</CardTitle>

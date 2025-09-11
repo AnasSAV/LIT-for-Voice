@@ -30,6 +30,7 @@ interface AudioDatasetPanelProps {
   batchInferenceStatus?: 'idle' | 'running' | 'done';
   onBatchInferenceStart?: () => void;
   onBatchInferenceComplete?: () => void;
+  onAvailableFilesChange?: (files: string[]) => void;
 }
 
 export const AudioDatasetPanel = ({ 
@@ -41,7 +42,8 @@ export const AudioDatasetPanel = ({
   onUploadSuccess,
   batchInferenceStatus,
   onBatchInferenceStart,
-  onBatchInferenceComplete
+  onBatchInferenceComplete,
+  onAvailableFilesChange
 }: AudioDatasetPanelProps) => {
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -331,8 +333,23 @@ export const AudioDatasetPanel = ({
         const res = await fetch(`http://localhost:8000/${dataset}/metadata`, { signal: ac.signal });
         if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
         const data = await res.json();
-        if (Array.isArray(data)) setDatasetMetadata(data as Record<string, string | number>[]);
-        else setDatasetMetadata([]);
+        if (Array.isArray(data)) {
+          setDatasetMetadata(data as Record<string, string | number>[]);
+          
+          // Extract filenames for embeddings
+          const filenames = data.map((row: Record<string, string | number>) => {
+            const pathVal = row["path"] || row["filepath"] || row["file"] || row["filename"];
+            const filename = typeof pathVal === 'string' ? 
+              (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : 
+              String(pathVal);
+            return filename;
+          });
+          
+          onAvailableFilesChange?.(filenames);
+        } else {
+          setDatasetMetadata([]);
+          onAvailableFilesChange?.([]);
+        }
       } catch (e) {
         const name = (e as { name?: string } | null)?.name;
         if (name !== 'AbortError') console.error(e);
