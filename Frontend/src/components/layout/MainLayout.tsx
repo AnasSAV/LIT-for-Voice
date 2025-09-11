@@ -4,6 +4,7 @@ import { EmbeddingPanel } from "../panels/EmbeddingPanel";
 import { AudioDatasetPanel } from "../panels/AudioDatasetPanel";
 import { DatapointEditorPanel } from "../panels/DatapointEditorPanel";
 import { PredictionPanel } from "../panels/PredictionPanel";
+import { EmbeddingProvider } from "../../contexts/EmbeddingContext";
 import React, { useState } from "react";
 
 interface UploadedFile {
@@ -23,6 +24,7 @@ export const MainLayout = () => {
   const [model, setModel] = useState("whisper-base");
   const [dataset, setDataset] = useState("common-voice");
   const [batchInferenceStatus, setBatchInferenceStatus] = useState<'idle' | 'running' | 'done'>('idle');
+  const [availableFiles, setAvailableFiles] = useState<string[]>([]);
 
   const handleUploadSuccess = (uploadResponse: UploadedFile) => {
     setUploadedFiles(prev => [...prev, uploadResponse]);
@@ -48,66 +50,73 @@ export const MainLayout = () => {
     }
   };
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Top Navigation Bar */}
-      <Toolbar
-        apiData={apiData}
-        setApiData={setApiData}
-        selectedFile={selectedFile}
-        uploadedFiles={uploadedFiles}
-        onFileSelect={setSelectedFile}
-        model={model}        // current model value
-        setModel={setModel}
-        dataset={dataset}
-        setDataset={setDataset}
-        onBatchInference={handleBatchInference}
-      />
-      
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden">
-        <PanelGroup direction="horizontal" className="h-full">
-          {/* Left Panel: Embeddings & Scalar Plots */}
-          <Panel defaultSize={25} minSize={20}>
-            <EmbeddingPanel />
-          </Panel>
-          
-          <PanelResizeHandle className="w-1 bg-border hover:bg-border/80 transition-colors" />
-          
-          {/* Center Panel: Audio Dataset Table */}
-          <Panel defaultSize={50} minSize={30}>
-            <PanelGroup direction="vertical">
-              <Panel defaultSize={70} minSize={40}>
-                <AudioDatasetPanel
-                  apiData={apiData}
-                  uploadedFiles={uploadedFiles}
-                  selectedFile={selectedFile}
-                  onFileSelect={setSelectedFile}
-                  onUploadSuccess={handleUploadSuccess}
-                  model={model}
-                  dataset={dataset}
-                  batchInferenceStatus={batchInferenceStatus}
-                  onBatchInferenceStart={() => setBatchInferenceStatus('running')}
-                  onBatchInferenceComplete={() => setBatchInferenceStatus('done')}
-                />
-              </Panel>
-              
-              <PanelResizeHandle className="h-1 bg-border hover:bg-border/80 transition-colors" />
-              
-              {/* Bottom Panel: Predictions */}
-              <Panel defaultSize={30} minSize={20}>
-                <PredictionPanel />
-              </Panel>
-            </PanelGroup>
-          </Panel>
-          
-          <PanelResizeHandle className="w-1 bg-border hover:bg-border/80 transition-colors" />
-          
-          {/* Right Panel: Audio Player & Label Editor */}
-          <Panel defaultSize={25} minSize={20}>
-            <DatapointEditorPanel selectedFile={selectedFile} dataset={dataset} />
-          </Panel>
-        </PanelGroup>
+    <EmbeddingProvider>
+      <div className="h-screen flex flex-col bg-background">
+        {/* Top Navigation Bar */}
+        <Toolbar
+          apiData={apiData}
+          setApiData={setApiData}
+          selectedFile={selectedFile}
+          uploadedFiles={uploadedFiles}
+          onFileSelect={setSelectedFile}
+          model={model}        // current model value
+          setModel={setModel}
+          dataset={dataset}
+          setDataset={setDataset}
+          onBatchInference={handleBatchInference}
+        />
+        
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-hidden">
+          <PanelGroup direction="horizontal" className="h-full">
+            {/* Left Panel: Embeddings & Scalar Plots */}
+            <Panel defaultSize={25} minSize={20}>
+              <EmbeddingPanel 
+                model={model}
+                dataset={dataset}
+                availableFiles={availableFiles}
+              />
+            </Panel>
+            
+            <PanelResizeHandle className="w-1 bg-border hover:bg-border/80 transition-colors" />
+            
+            {/* Center Panel: Audio Dataset Table */}
+            <Panel defaultSize={50} minSize={30}>
+              <PanelGroup direction="vertical">
+                <Panel defaultSize={70} minSize={40}>
+                  <AudioDatasetPanel
+                    apiData={apiData}
+                    uploadedFiles={uploadedFiles}
+                    selectedFile={selectedFile}
+                    onFileSelect={setSelectedFile}
+                    onUploadSuccess={handleUploadSuccess}
+                    model={model}
+                    dataset={dataset}
+                    batchInferenceStatus={batchInferenceStatus}
+                    onBatchInferenceStart={() => setBatchInferenceStatus('running')}
+                    onBatchInferenceComplete={() => setBatchInferenceStatus('done')}
+                    onAvailableFilesChange={setAvailableFiles}
+                  />
+                </Panel>
+                
+                <PanelResizeHandle className="h-1 bg-border hover:bg-border/80 transition-colors" />
+                
+                {/* Bottom Panel: Predictions */}
+                <Panel defaultSize={30} minSize={20}>
+                  <PredictionPanel />
+                </Panel>
+              </PanelGroup>
+            </Panel>
+            
+            <PanelResizeHandle className="w-1 bg-border hover:bg-border/80 transition-colors" />
+            
+            {/* Right Panel: Audio Player & Label Editor */}
+            <Panel defaultSize={25} minSize={20}>
+              <DatapointEditorPanel selectedFile={selectedFile} dataset={dataset} />
+            </Panel>
+          </PanelGroup>
+        </div>
       </div>
-    </div>
+    </EmbeddingProvider>
   );
 };
