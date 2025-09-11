@@ -123,6 +123,8 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       header: "Confidence",
       cell: ({ row }) => {
         const data = row.original as AudioData;
+        // Don't display confidence if it's 0
+        if (data.confidence === 0) return null;
         return <span className="text-xs">{data.confidence}</span>;
       },
     },
@@ -186,13 +188,6 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       },
     },
     {
-      id: "confidence",
-      header: "Confidence",
-      cell: () => {
-        return <span className="text-xs">0</span>;
-      },
-    },
-    {
       id: "duration",
       header: "Duration",
       cell: ({ row }) => {
@@ -236,19 +231,16 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       },
     },
     {
-      id: "confidence",
-      header: "Confidence",
-      cell: () => {
-        return <span className="text-xs">0</span>;
-      },
-    },
-    {
       id: "duration",
       header: "Duration",
       cell: ({ row }) => {
         const data = row.original as DatasetRow;
-        const d = Number(getFrom(data, ["duration"], "0"));
-        return <span className="text-xs">{isNaN(d) ? "" : `${d.toFixed(2)}s`}</span>;
+        // Ravdess dataset doesn't have duration in metadata, so we'll show "N/A"
+        const d = Number(getFrom(data, ["duration", "length"], "0"));
+        if (d > 0) {
+          return <span className="text-xs">{d.toFixed(2)}s</span>;
+        }
+        return <span className="text-xs text-muted-foreground">N/A</span>;
       },
     },
   ], [getFrom, model, predictionMap, inferenceStatus]);
