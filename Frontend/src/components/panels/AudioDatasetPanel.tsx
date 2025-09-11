@@ -54,6 +54,8 @@ export const AudioDatasetPanel = ({
   // Batch inference state
   const [currentInferenceIndex, setCurrentInferenceIndex] = useState(0);
   const [batchInferenceQueue, setBatchInferenceQueue] = useState<string[]>([]);
+  const [isInferenceComplete, setIsInferenceComplete] = useState(false);
+  const [currentModelDataset, setCurrentModelDataset] = useState<string>("");
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Stable handlers to prevent downstream re-renders
@@ -110,7 +112,15 @@ export const AudioDatasetPanel = ({
     if (dataset === "custom" || !model) return;
     if (datasetMetadata.length === 0) return;
     
-    console.log(`Starting batch inference for ${model} on ${datasetMetadata.length} files in ${dataset} dataset`);
+    const modelDatasetKey = `${model}-${dataset}`;
+    
+    // If we've already completed inference for this model+dataset combination, don't restart
+    if (isInferenceComplete && currentModelDataset === modelDatasetKey) {
+      console.log(`Inference already completed for ${modelDatasetKey}, skipping`);
+      return;
+    }
+    
+    console.log(`Starting batch inference check for ${model} on ${datasetMetadata.length} files in ${dataset} dataset`);
     
     // Abort any ongoing inference
     if (abortControllerRef.current) {
@@ -118,21 +128,110 @@ export const AudioDatasetPanel = ({
     }
     abortControllerRef.current = new AbortController();
     
-    // Create queue of all dataset files
-    const fileIds = datasetMetadata.map((row, index) => {
-      const id = row["id"] || row["path"] || row["filepath"] || row["file"] || row["filename"] || String(index);
-      return String(id);
-    });
-    
-    setBatchInferenceQueue(fileIds);
+    // Reset state for new model/dataset combination
+    setCurrentModelDataset(modelDatasetKey);
+    setIsInferenceComplete(false);
     setCurrentInferenceIndex(0);
-    setPredictionMap({}); // Clear previous predictions
-    setInferenceStatus({}); // Clear previous status
+    setBatchInferenceQueue([]);
     
-    if (onBatchInferenceStart) {
-      onBatchInferenceStart();
-    }
-  }, [model, dataset, datasetMetadata, onBatchInferenceStart]);
+    // First, check what's already cached
+    const checkCachedResults = async () => {
+      try {
+        const filenames = datasetMetadata.map(row => {
+          const pathVal = (row["path"] || row["filepath"] || row["file"] || row["filename"]) as string;
+          return pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : String(row["id"] || "unknown");
+        });
+
+        const response = await fetch(`http://localhost:8000/inferences/batch-check`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            dataset,
+            files: filenames
+          }),
+          signal: abortControllerRef.current?.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Batch check failed: ${response.status}`);
+        }
+
+        const { cached_results, missing_files, cache_hit_rate } = await response.json();
+        
+        console.log(`Cache hit rate: ${(cache_hit_rate * 100).toFixed(1)}% (${Object.keys(cached_results).length}/${filenames.length})`);
+        
+        // Load cached results
+        const newPredictionMap: Record<string, string> = {};
+        const newInferenceStatus: Record<string, 'idle' | 'loading' | 'done' | 'error'> = {};
+        
+        // Map cached results to file IDs
+        datasetMetadata.forEach((row, index) => {
+          const fileId = String(row["id"] || row["path"] || row["filepath"] || row["file"] || row["filename"] || index);
+          const pathVal = (row["path"] || row["filepath"] || row["file"] || row["filename"]) as string;
+          const filename = pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : fileId;
+          
+          if (cached_results[filename]) {
+            newPredictionMap[fileId] = cached_results[filename];
+            newInferenceStatus[fileId] = 'done';
+          } else {
+            newInferenceStatus[fileId] = 'idle';
+          }
+        });
+        
+        setPredictionMap(newPredictionMap);
+        setInferenceStatus(newInferenceStatus);
+        
+        if (missing_files.length === 0) {
+          // All files are cached, we're done!
+          console.log('All files are cached, inference complete');
+          setIsInferenceComplete(true);
+          if (onBatchInferenceComplete) {
+            onBatchInferenceComplete();
+          }
+          return;
+        }
+        
+        // Queue only missing files for inference
+        const fileIds = datasetMetadata
+          .filter((row, index) => {
+            const pathVal = (row["path"] || row["filepath"] || row["file"] || row["filename"]) as string;
+            const filename = pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : String(row["id"] || index);
+            return missing_files.includes(filename);
+          })
+          .map((row, index) => String(row["id"] || row["path"] || row["filepath"] || row["file"] || row["filename"] || index));
+        
+        setBatchInferenceQueue(fileIds);
+        console.log(`Queuing ${fileIds.length} files for inference:`, fileIds);
+        
+        if (onBatchInferenceStart) {
+          onBatchInferenceStart();
+        }
+        
+      } catch (error: any) {
+        if (error.name === 'AbortError') return;
+        console.error('Failed to check cached results:', error);
+        
+        // Fallback: run inference on all files
+        const fileIds = datasetMetadata.map((row, index) => {
+          const id = row["id"] || row["path"] || row["filepath"] || row["file"] || row["filename"] || String(index);
+          return String(id);
+        });
+        
+        setBatchInferenceQueue(fileIds);
+        setPredictionMap({});
+        setInferenceStatus({});
+        
+        if (onBatchInferenceStart) {
+          onBatchInferenceStart();
+        }
+      }
+    };
+    
+    checkCachedResults();
+  }, [model, dataset, datasetMetadata, onBatchInferenceStart, onBatchInferenceComplete, isInferenceComplete, currentModelDataset]);
 
   // Process batch inference queue
   useEffect(() => {
@@ -140,6 +239,7 @@ export const AudioDatasetPanel = ({
     if (currentInferenceIndex >= batchInferenceQueue.length) {
       // Batch inference complete
       console.log('Batch inference completed');
+      setIsInferenceComplete(true);
       if (onBatchInferenceComplete) {
         onBatchInferenceComplete();
       }
@@ -309,12 +409,12 @@ export const AudioDatasetPanel = ({
             <Badge variant="secondary" className="text-xs">
               {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
             </Badge>
-            {dataset !== 'custom' && batchInferenceStatus === 'running' && (
+            {dataset !== 'custom' && batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
               <Badge variant="outline" className="text-xs">
                 Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
               </Badge>
             )}
-            {dataset !== 'custom' && batchInferenceStatus === 'done' && (
+            {dataset !== 'custom' && (batchInferenceStatus === 'done' || isInferenceComplete) && (
               <Badge variant="default" className="text-xs">
                 ✓ Inference Complete
               </Badge>

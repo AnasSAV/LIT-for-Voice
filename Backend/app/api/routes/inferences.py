@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Body
 import inspect
 import asyncio
 import logging
+import hashlib
 from pathlib import Path
 from typing import Optional
 from app.services.model_loader_service import (
@@ -10,6 +11,7 @@ from app.services.model_loader_service import (
     wave2vec,
 )
 from app.services.dataset_service import resolve_file
+from app.core.redis import get_result, cache_result
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -41,6 +43,52 @@ async def run_inference_endpoint(
         raise HTTPException(status_code=400, detail="Model is required")
     
     return await run_inference(model, file_path, dataset, dataset_file)
+
+
+@router.post("/inferences/batch-check")
+async def check_batch_cache(
+    request: dict = Body(..., example={
+        "model": "whisper-base",
+        "dataset": "common-voice",
+        "files": ["sample-001.mp3", "sample-002.mp3"]
+    })
+):
+    """Check which files in a batch already have cached predictions"""
+    model = request.get("model")
+    dataset = request.get("dataset") 
+    files = request.get("files", [])
+    
+    if not model or not dataset:
+        raise HTTPException(status_code=400, detail="Model and dataset are required")
+    
+    cached_results = {}
+    missing_files = []
+    
+    for filename in files:
+        try:
+            # Resolve the file path
+            resolved_path = resolve_file(dataset, filename)
+            
+            # Create cache key
+            file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+            cache_key = f"{model}_{file_content_hash}"
+            
+            # Check cache
+            cached_result = await get_result(model, cache_key)
+            if cached_result is not None:
+                cached_results[filename] = cached_result.get("prediction", cached_result)
+            else:
+                missing_files.append(filename)
+                
+        except (FileNotFoundError, ValueError):
+            # File doesn't exist or invalid dataset
+            missing_files.append(filename)
+    
+    return {
+        "cached_results": cached_results,
+        "missing_files": missing_files,
+        "cache_hit_rate": len(cached_results) / len(files) if files else 0
+    }
 
 
 async def run_inference(
@@ -84,10 +132,24 @@ async def run_inference(
     if not resolved_path.exists():
         raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
 
+    # Create cache key based on model and file path
+    file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+    cache_key = f"{model}_{file_content_hash}"
+    
+    # Check if result is cached
+    cached_result = await get_result(model, cache_key)
+    if cached_result is not None:
+        logger.info(f"Returning cached result for {resolved_path}")
+        return cached_result.get("prediction", cached_result)
+
     # Detect if function is async or sync and call appropriately
     if inspect.iscoroutinefunction(func):
         prediction = await func(str(resolved_path))
     else:
         prediction = await asyncio.to_thread(func, str(resolved_path))
+
+    # Cache the result for future use (6 hours TTL)
+    await cache_result(model, cache_key, {"prediction": prediction}, ttl=6*60*60)
+    logger.info(f"Cached prediction for {resolved_path}")
 
     return prediction
