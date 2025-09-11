@@ -156,7 +156,7 @@ export const AudioDatasetPanel = ({
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await fetch(`http://localhost:8000/datasets/${dataset}/metadata`, { signal: ac.signal });
+        const res = await fetch(`http://localhost:8000/${dataset}/metadata`, { signal: ac.signal });
         if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) setDatasetMetadata(data as Record<string, string | number>[]);
