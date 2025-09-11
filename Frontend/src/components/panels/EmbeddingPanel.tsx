@@ -24,6 +24,15 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
   const [is3D, setIs3D] = useState(false);
   const { embeddingData, isLoading, error, fetchEmbeddings, clearEmbeddings } = useEmbedding();
 
+  // Auto-fetch embeddings when model, dataset, or reduction method changes
+  useEffect(() => {
+    if (availableFiles.length > 0 && model && dataset) {
+      const filesToProcess = availableFiles;
+      const nComponents = is3D ? 3 : 2;
+      fetchEmbeddings(model, dataset, filesToProcess, reductionMethod, nComponents);
+    }
+  }, [model, dataset, availableFiles, reductionMethod, fetchEmbeddings]);
+
   const handleFetchEmbeddings = () => {
     if (availableFiles.length > 0) {
       // Use entire dataset for better visualization
@@ -35,18 +44,13 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
 
   const handleReductionMethodChange = (method: string) => {
     setReductionMethod(method);
-    if (embeddingData && availableFiles.length > 0) {
-      // Re-fetch with new reduction method using entire dataset
-      const filesToProcess = availableFiles;
-      const nComponents = is3D ? 3 : 2;
-      fetchEmbeddings(model, dataset, filesToProcess, method, nComponents);
-    }
+    // The useEffect will handle re-fetching when method changes
   };
 
   const handle3DToggle = (checked: boolean) => {
     setIs3D(checked);
+    // Re-fetch with new dimensionality using entire dataset
     if (embeddingData && availableFiles.length > 0) {
-      // Re-fetch with new dimensionality using entire dataset
       const filesToProcess = availableFiles;
       const nComponents = checked ? 3 : 2;
       fetchEmbeddings(model, dataset, filesToProcess, reductionMethod, nComponents);

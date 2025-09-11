@@ -43,11 +43,24 @@ export const MainLayout = () => {
 
   const handleEmbeddingSelection = (filename: string) => {
     setSelectedEmbeddingFile(filename);
+    
     // Try to find and select corresponding file in audio dataset
-    const matchingFile = uploadedFiles.find(f => f.filename === filename);
-    if (matchingFile) {
-      setSelectedFile(matchingFile);
+    // First check uploaded files
+    const matchingUploadedFile = uploadedFiles.find(f => f.filename === filename);
+    if (matchingUploadedFile) {
+      setSelectedFile(matchingUploadedFile);
+      return;
     }
+    
+    // For dataset files, create a file-like object for the UI
+    // The AudioDatasetPanel should handle highlighting the corresponding row
+    const fileLike: UploadedFile = {
+      file_id: filename,
+      filename: filename,
+      file_path: filename,
+      message: "Selected from embeddings"
+    };
+    setSelectedFile(fileLike);
   };
 
   const handleBatchInference = async (selectedModel: string, selectedDataset: string) => {

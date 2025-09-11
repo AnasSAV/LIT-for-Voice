@@ -317,7 +317,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
                       : (row.original as AudioData).id;
                     return selectedRow === rowId ? "selected" : undefined;
                   })()}
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 data-[state=selected]:bg-blue-50 data-[state=selected]:border-blue-200 data-[state=selected]:shadow-sm"
                   onClick={() => {
                     const rowId: string = isDatasetMode
                       ? getDatasetRowId(row.original as DatasetRow, String(row.id))
