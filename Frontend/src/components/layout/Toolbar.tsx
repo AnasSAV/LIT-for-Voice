@@ -30,6 +30,7 @@ interface ToolbarProps {
   setModel: (model: string) => void; // important for lifting state
   dataset: string;
   setDataset: (dataset: string) => void;
+  onBatchInference?: (model: string, dataset: string) => void; // New callback for batch inference
 }
 const modelDatasetMap: Record<string, string[]> = {
   "whisper-base": ["common-voice", "custom"],
@@ -43,102 +44,42 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset}: ToolbarProps) => {
+export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset, onBatchInference}: ToolbarProps) => {
 
 let abortController: AbortController | null = null;
 const onModelChange = async (value: string) => {
   setModel(value);
-    if (abortController) {
-    abortController.abort();
-  }
-  abortController = new AbortController();
   
   // Update dataset based on model
   const allowedDatasets = modelDatasetMap[value] || ["custom"];
   const defaultDataset = defaultDatasetForModel[value] || "custom";
 
+  let finalDataset = dataset;
   if (!allowedDatasets.includes(dataset)) {
+    finalDataset = defaultDataset;
     setDataset(defaultDataset);
   }
 
   console.log("Model selected:", value);
 
-  try {
-    const requestBody: any = { model: value };
-    
-    if (selectedFile) {
-      if (dataset !== 'custom') {
-        requestBody.dataset = dataset;
-        requestBody.dataset_file = selectedFile.filename;
-        console.log("Using dataset file:", dataset, selectedFile.filename);
-      } else {
-        requestBody.file_path = selectedFile.file_path;
-        console.log("Using uploaded file:", selectedFile.filename);
-      }
-    }
-    
-    const res = await fetch(`http://localhost:8000/inferences/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
-    }
-    const data = await res.json();
-    setApiData(data);
-    console.log("API response:", data);
-  } catch (error) {
-    console.error("Failed to run inference:", error);
+  // Trigger batch inference for dataset when model changes (except for custom)
+  if (finalDataset !== 'custom' && onBatchInference) {
+    onBatchInference(value, finalDataset);
   }
 };
 
   const onDatasetChange = (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
+    
+    // Trigger batch inference when dataset changes (except for custom)
+    if (value !== 'custom' && onBatchInference) {
+      onBatchInference(model, value);
+    }
   };
 
   // Get datasets allowed for current model
   const allowedDatasets = modelDatasetMap[model] || ["custom"];
-
-  // Auto-run inference when a file is selected/changes
-  React.useEffect(() => {
-    if (!selectedFile) return;
-    const ac = new AbortController();
-    (async () => {
-      try {
-        const requestBody: any = { model };
-        
-        if (dataset !== 'custom') {
-          requestBody.dataset = dataset;
-          requestBody.dataset_file = selectedFile.filename;
-        } else if (selectedFile.file_path) {
-          requestBody.file_path = selectedFile.file_path;
-        }
-        
-        const res = await fetch(`http://localhost:8000/inferences/run`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-          signal: ac.signal,
-        });
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status}`);
-        }
-        const data = await res.json();
-        setApiData(data);
-        console.log("Auto inference (file change) response:", data);
-      } catch (error: unknown) {
-        if (typeof error === 'object' && error && 'name' in error && (error as { name?: string }).name === 'AbortError') return;
-        console.error("Auto inference failed:", error as unknown);
-      }
-    })();
-    return () => ac.abort();
-  }, [selectedFile, selectedFile?.file_path, model, dataset, setApiData]);
 
   return (
     <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">

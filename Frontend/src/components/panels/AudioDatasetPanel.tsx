@@ -27,6 +27,9 @@ interface AudioDatasetPanelProps {
   selectedFile?: UploadedFile | null;
   onFileSelect?: (file: UploadedFile) => void;
   onUploadSuccess?: (uploadResponse: UploadedFile) => void;
+  batchInferenceStatus?: 'idle' | 'running' | 'done';
+  onBatchInferenceStart?: () => void;
+  onBatchInferenceComplete?: () => void;
 }
 
 export const AudioDatasetPanel = ({ 
@@ -35,7 +38,10 @@ export const AudioDatasetPanel = ({
   dataset,
   selectedFile, 
   onFileSelect, 
-  onUploadSuccess 
+  onUploadSuccess,
+  batchInferenceStatus,
+  onBatchInferenceStart,
+  onBatchInferenceComplete
 }: AudioDatasetPanelProps) => {
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -44,16 +50,47 @@ export const AudioDatasetPanel = ({
   const [datasetMetadata, setDatasetMetadata] = useState<Record<string, string | number>[]>([]);
   const [predictionMap, setPredictionMap] = useState<Record<string, string>>({});
   const [inferenceStatus, setInferenceStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
-  // Gate inferences so responses map to the correct row
-  const inFlightRowRef = useRef<string | null>(null);
-  const [queuedRowId, setQueuedRowId] = useState<string | null>(null);
-  // Minimal queue to process visible rows sequentially (per page)
-  const [pendingRowQueue, setPendingRowQueue] = useState<string[]>([]);
+  
+  // Batch inference state
+  const [currentInferenceIndex, setCurrentInferenceIndex] = useState(0);
+  const [batchInferenceQueue, setBatchInferenceQueue] = useState<string[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Stable handlers to prevent downstream re-renders
   const handleRowSelect = useCallback((id: string) => {
     setSelectedRow(id);
-  }, []);
+    
+    // When a row is selected, just propagate the file selection for UI/audio playback
+    // No inference should be triggered here
+    if (dataset === "custom") return;
+    if (!onFileSelect) return;
+
+    const findMatch = () => {
+      for (const row of datasetMetadata) {
+        const rowId = row["id"]; 
+        const path = row["path"] || row["filepath"] || row["file"] || row["filename"];
+        if (typeof rowId === "string" && rowId === id) return row;
+        if (typeof path === "string" && (path === id || path.endsWith(`/${id}`) || path.endsWith(`\\${id}`))) return row;
+      }
+      return null;
+    };
+
+    const match = findMatch();
+    if (!match) return;
+
+    const pathVal = (match["path"] || match["filepath"] || match["file"] || match["filename"]) as string | undefined;
+    const filename = pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || String(id)) : String(id);
+
+    const fileLike: UploadedFile = {
+      file_id: String(id),
+      filename,
+      file_path: pathVal || filename,
+      message: "",
+    };
+
+    // Just select the file for UI purposes, no inference
+    onFileSelect(fileLike);
+  }, [dataset, datasetMetadata, onFileSelect]);
 
   const handleFilePlay = useCallback((file: UploadedFile) => {
     console.log('AudioDatasetPanel - File selected for play:', file);
@@ -65,86 +102,121 @@ export const AudioDatasetPanel = ({
   }, [onFileSelect]);
 
   const handleVisibleRowIdsChange = useCallback((ids: string[]) => {
-    // Skip rows already completed; preserve simple ordering as provided
-    const next = ids.filter((id) => inferenceStatus[id] !== 'done');
-    setPendingRowQueue(next);
-  }, [inferenceStatus]);
+    // This is now just for pagination, no inference triggering
+  }, []);
 
-  // When a dataset row is selected (non-custom), map it to a file-like object and propagate selection.
-  // Only start a new inference if none is in-flight; otherwise queue the selection.
+  // Batch inference for entire dataset when model/dataset changes
   useEffect(() => {
-    if (dataset === "custom") return;
-    if (!selectedRow) return;
-    if (!onFileSelect) return;
+    if (dataset === "custom" || !model) return;
+    if (datasetMetadata.length === 0) return;
+    
+    console.log(`Starting batch inference for ${model} on ${datasetMetadata.length} files in ${dataset} dataset`);
+    
+    // Abort any ongoing inference
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    
+    // Create queue of all dataset files
+    const fileIds = datasetMetadata.map((row, index) => {
+      const id = row["id"] || row["path"] || row["filepath"] || row["file"] || row["filename"] || String(index);
+      return String(id);
+    });
+    
+    setBatchInferenceQueue(fileIds);
+    setCurrentInferenceIndex(0);
+    setPredictionMap({}); // Clear previous predictions
+    setInferenceStatus({}); // Clear previous status
+    
+    if (onBatchInferenceStart) {
+      onBatchInferenceStart();
+    }
+  }, [model, dataset, datasetMetadata, onBatchInferenceStart]);
 
-    // If an inference is already running for another row, queue this selection and return
-    if (inFlightRowRef.current && inFlightRowRef.current !== selectedRow) {
-      // Ensure selected row appears next in queue if not already present
-      setPendingRowQueue((prev) => (prev.includes(selectedRow) ? prev : [...prev, selectedRow]));
+  // Process batch inference queue
+  useEffect(() => {
+    if (batchInferenceQueue.length === 0) return;
+    if (currentInferenceIndex >= batchInferenceQueue.length) {
+      // Batch inference complete
+      console.log('Batch inference completed');
+      if (onBatchInferenceComplete) {
+        onBatchInferenceComplete();
+      }
       return;
     }
 
-    // Try to find the row in metadata matching the selectedRow by common keys
-    const findMatch = () => {
-      for (const row of datasetMetadata) {
-        const id = row["id"]; // may exist
-        const path = row["path"] || row["filepath"] || row["file"] || row["filename"]; // prefer path-like keys
-        if (typeof id === "string" && id === selectedRow) return row;
-        if (typeof path === "string" && (path === selectedRow || path.endsWith(`/${selectedRow}`) || path.endsWith(`\\${selectedRow}`))) return row;
-      }
-      return null;
-    };
+    const currentFileId = batchInferenceQueue[currentInferenceIndex];
+    const currentRow = datasetMetadata.find(row => {
+      const id = row["id"] || row["path"] || row["filepath"] || row["file"] || row["filename"];
+      return String(id) === currentFileId;
+    });
 
-    const match = findMatch();
-    if (!match) return;
-
-    const pathVal = (match["path"] || match["filepath"] || match["file"] || match["filename"]) as string | undefined;
-    const filename = pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || String(selectedRow)) : String(selectedRow);
-
-    const fileLike: UploadedFile = {
-      file_id: String(selectedRow),
-      filename,
-      file_path: pathVal || filename, // assume backend can resolve this path
-      message: "",
-    };
-
-    // Mark this row as in-flight and set status to loading, then trigger inference
-    if (!inFlightRowRef.current) {
-      inFlightRowRef.current = selectedRow;
-      setInferenceStatus(prev => ({ ...prev, [selectedRow]: 'loading' }));
-      onFileSelect(fileLike);
+    if (!currentRow) {
+      // Skip this file and continue
+      setCurrentInferenceIndex(prev => prev + 1);
+      return;
     }
-  }, [dataset, selectedRow, datasetMetadata, onFileSelect]);
 
-  // Persist latest inference result against the row that initiated the request.
-  useEffect(() => {
-    if (typeof apiData === "string") {
-      const rowId = inFlightRowRef.current;
-      if (rowId) {
-        setPredictionMap((prev) => ({ ...prev, [rowId]: String(apiData) }));
-        setInferenceStatus((prev) => ({ ...prev, [rowId]: 'done' }));
-        inFlightRowRef.current = null;
-        // Dequeue and trigger next item if present
-        setPendingRowQueue((prev) => {
-          const nextQueue = prev[0] === rowId ? prev.slice(1) : prev;
-          if (nextQueue.length > 0) {
-            // trigger next
-            const nextId = nextQueue[0];
-            setSelectedRow(nextId);
-          }
-          return nextQueue;
+    const runInference = async () => {
+      try {
+        setInferenceStatus(prev => ({ ...prev, [currentFileId]: 'loading' }));
+        
+        const pathVal = (currentRow["path"] || currentRow["filepath"] || currentRow["file"] || currentRow["filename"]) as string;
+        const filename = pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || currentFileId) : currentFileId;
+
+        const requestBody = {
+          model,
+          dataset,
+          dataset_file: filename
+        };
+
+        const response = await fetch(`http://localhost:8000/inferences/run`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+          signal: abortControllerRef.current?.signal,
         });
-      }
-    }
-  }, [apiData, queuedRowId]);
 
-  // Process queue when visible rows change or when idle
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const prediction = await response.json();
+        const predictionText = typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction);
+
+        setPredictionMap(prev => ({ ...prev, [currentFileId]: predictionText }));
+        setInferenceStatus(prev => ({ ...prev, [currentFileId]: 'done' }));
+        
+        console.log(`Inference complete for ${filename}: ${predictionText}`);
+        
+      } catch (error: any) {
+        if (error.name === 'AbortError') return;
+        console.error(`Inference failed for ${currentFileId}:`, error);
+        setInferenceStatus(prev => ({ ...prev, [currentFileId]: 'error' }));
+      }
+      
+      // Move to next file
+      setCurrentInferenceIndex(prev => prev + 1);
+    };
+
+    // Add small delay to prevent overwhelming the server
+    const timeoutId = setTimeout(runInference, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [batchInferenceQueue, currentInferenceIndex, datasetMetadata, model, dataset, onBatchInferenceComplete]);
+
+  // Cleanup on unmount or when dataset changes
   useEffect(() => {
-    if (inFlightRowRef.current) return;
-    if (pendingRowQueue.length === 0) return;
-    const nextId = pendingRowQueue[0];
-    setSelectedRow(nextId);
-  }, [pendingRowQueue]);
+    abortControllerRef.current = new AbortController();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [model, dataset]);
 
   // Fetch dataset metadata when dataset changes (for non-custom datasets)
   useEffect(() => {
@@ -237,6 +309,16 @@ export const AudioDatasetPanel = ({
             <Badge variant="secondary" className="text-xs">
               {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
             </Badge>
+            {dataset !== 'custom' && batchInferenceStatus === 'running' && (
+              <Badge variant="outline" className="text-xs">
+                Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
+              </Badge>
+            )}
+            {dataset !== 'custom' && batchInferenceStatus === 'done' && (
+              <Badge variant="default" className="text-xs">
+                ✓ Inference Complete
+              </Badge>
+            )}
             <Button size="sm" variant="outline" className="h-7" onClick={handleUploadClick}>
               <Upload className="h-3 w-3 mr-1" />
               Upload
