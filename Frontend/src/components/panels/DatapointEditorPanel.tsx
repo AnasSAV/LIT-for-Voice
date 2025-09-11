@@ -34,7 +34,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom" }: Datap
     if (!selectedFile) return undefined;
     if (dataset && dataset !== "custom") {
       const filename = encodeURIComponent(selectedFile.filename);
-      return `http://localhost:8000/datasets/${dataset}/file/${filename}`;
+      return `http://localhost:8000/${dataset}/file/${filename}`;
     }
     return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
   })();

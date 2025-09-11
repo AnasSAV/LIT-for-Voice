@@ -20,6 +20,9 @@ export const MainLayout = () => {
   const [apiData, setApiData] = useState<unknown>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
+  const [model, setModel] = useState("whisper-base");
+  const [dataset, setDataset] = useState("common-voice");
+  const [batchInferenceStatus, setBatchInferenceStatus] = useState<'idle' | 'running' | 'done'>('idle');
 
   const handleUploadSuccess = (uploadResponse: UploadedFile) => {
     setUploadedFiles(prev => [...prev, uploadResponse]);
@@ -29,8 +32,21 @@ export const MainLayout = () => {
     }
   };
 
-  const [model, setModel] = useState("whisper-base");
-  const [dataset, setDataset] = useState("common-voice");
+  const handleBatchInference = async (selectedModel: string, selectedDataset: string) => {
+    if (selectedDataset === 'custom') return;
+    
+    setBatchInferenceStatus('running');
+    console.log(`Starting batch inference for ${selectedModel} on ${selectedDataset} dataset`);
+    
+    try {
+      // This will be implemented by AudioDatasetPanel to run inference on all files
+      // For now, just set the status to indicate batch inference is requested
+      setBatchInferenceStatus('done');
+    } catch (error) {
+      console.error('Batch inference failed:', error);
+      setBatchInferenceStatus('idle');
+    }
+  };
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
@@ -44,6 +60,7 @@ export const MainLayout = () => {
         setModel={setModel}
         dataset={dataset}
         setDataset={setDataset}
+        onBatchInference={handleBatchInference}
       />
       
       {/* Main Content Area */}
@@ -68,6 +85,9 @@ export const MainLayout = () => {
                   onUploadSuccess={handleUploadSuccess}
                   model={model}
                   dataset={dataset}
+                  batchInferenceStatus={batchInferenceStatus}
+                  onBatchInferenceStart={() => setBatchInferenceStatus('running')}
+                  onBatchInferenceComplete={() => setBatchInferenceStatus('done')}
                 />
               </Panel>
               
@@ -75,7 +95,7 @@ export const MainLayout = () => {
               
               {/* Bottom Panel: Predictions */}
               <Panel defaultSize={30} minSize={20}>
-                <PredictionPanel apiData={apiData} model={model} />
+                <PredictionPanel />
               </Panel>
             </PanelGroup>
           </Panel>

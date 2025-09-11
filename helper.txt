@@ -53,12 +53,19 @@ Backend route source files:
   - Source: Backend/app/api/routes/results.py
 
 4) Inference
-- GET /inferences/run?model={model}&file_path={path?}
+- POST /inferences/run (JSON body: {model, file_path?, dataset?, dataset_file?})
   - Used by (frontend):
     - Frontend/src/components/layout/Toolbar.tsx (function onModelChange)
-      - Builds URL with optional file_path from selected uploaded file
+      - Sends POST request with JSON body containing model and optional file parameters
   - Used by (backend internal call):
     - Backend/app/api/routes/upload.py calls run_inference(model, file_path) directly (not HTTP) after saving upload
+  - Now includes Redis caching to avoid re-running inference on same files
+  - Source: Backend/app/api/routes/inferences.py
+
+- POST /inferences/batch-check (JSON body: {model, dataset, files: [filenames]})
+  - Used by (frontend):
+    - Frontend/src/components/panels/AudioDatasetPanel.tsx for checking cached predictions before batch inference
+  - Returns cached results and list of files that need inference
   - Source: Backend/app/api/routes/inferences.py
 
 5) Uploads
@@ -103,21 +110,15 @@ Backend route source files:
   - Source: Backend/app/api/routes/upload.py
 
 6) Datasets
-- GET /dataset/list?dataset={key}
+- GET /{dataset}/metadata
   - Used by (frontend):
     - Frontend/src/components/panels/AudioDatasetPanel.tsx (loads dataset items in useEffect)
   - Source: Backend/app/api/routes/datasets.py
 
-- GET /dataset/item?dataset={key}&id={id}
+- GET /{dataset}/file/{file_path}
   - Used by (frontend):
-    - Frontend/src/components/panels/AudioDatasetPanel.tsx (loads metadata for selected dataset item)
-  - Source: Backend/app/api/routes/datasets.py
-
-- GET /dataset/file?dataset={key}&id={id}
-  - Used by (frontend):
-    - Frontend/src/components/panels/AudioDatasetPanel.tsx (constructs audioUrl for selected item)
+    - Frontend/src/components/panels/DatapointEditorPanel.tsx (constructs audioUrl for dataset files)
     - Frontend/src/components/audio/WaveformViewer.tsx loads the audioUrl via HEAD/GET
-    - Frontend/src/components/panels/DatapointEditorPanel.tsx prefers selectedFile.audio_url when present (dataset)
   - Source: Backend/app/api/routes/datasets.py
 
 Notes and gaps

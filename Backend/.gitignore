@@ -209,6 +209,9 @@ Thumbs.db
 uploads/
 media/
 static/user_uploads/
+cache/
+sample1.wav
+sample2.mp3
 
 # Documentation builds
 docs/build/
