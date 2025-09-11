@@ -64,6 +64,12 @@ export const AudioDatasetPanel = ({
     }
   }, [onFileSelect]);
 
+  const handleVisibleRowIdsChange = useCallback((ids: string[]) => {
+    // Skip rows already completed; preserve simple ordering as provided
+    const next = ids.filter((id) => inferenceStatus[id] !== 'done');
+    setPendingRowQueue(next);
+  }, [inferenceStatus]);
+
   // When a dataset row is selected (non-custom), map it to a file-like object and propagate selection.
   // Only start a new inference if none is in-flight; otherwise queue the selection.
   useEffect(() => {
@@ -273,11 +279,7 @@ export const AudioDatasetPanel = ({
               onFilePlay={handleFilePlay}
               predictionMap={predictionMap}
               inferenceStatus={inferenceStatus}
-              onVisibleRowIdsChange={(ids) => {
-                // Skip rows already completed; preserve simple ordering as provided
-                const next = ids.filter((id) => inferenceStatus[id] !== 'done');
-                setPendingRowQueue(next);
-              }}
+              onVisibleRowIdsChange={handleVisibleRowIdsChange}
             />
           </CardContent>
         </Card>

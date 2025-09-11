@@ -53,10 +53,10 @@ Backend route source files:
   - Source: Backend/app/api/routes/results.py
 
 4) Inference
-- GET /inferences/run?model={model}&file_path={path?}
+- POST /inferences/run (JSON body: {model, file_path?, dataset?, dataset_file?})
   - Used by (frontend):
     - Frontend/src/components/layout/Toolbar.tsx (function onModelChange)
-      - Builds URL with optional file_path from selected uploaded file
+      - Sends POST request with JSON body containing model and optional file parameters
   - Used by (backend internal call):
     - Backend/app/api/routes/upload.py calls run_inference(model, file_path) directly (not HTTP) after saving upload
   - Source: Backend/app/api/routes/inferences.py

@@ -7,7 +7,18 @@ from .api.routes import session as session_routes, results as results_routes, in
 from .api.routes import datasets as datasets_routes
 
 app = FastAPI(title="LIT for Voice – API")
-origins = os.getenv("ALLOWED_ORIGINS", "").split(",") if os.getenv("ALLOWED_ORIGINS") else []
+
+# Configure CORS origins - default to common development origins if not set
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+else:
+    # Default development origins
+    origins = [
+        "http://localhost:3000",
+        "http://localhost:8080", 
+    ]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,       

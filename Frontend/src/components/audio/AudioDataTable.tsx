@@ -292,7 +292,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
     const rows = table.getRowModel().rows;
     const ids = rows.map(r => String(r.id));
     onVisibleRowIdsChange(ids);
-  }, [onVisibleRowIdsChange, table, searchQuery, dataset, model, isDatasetMode, data]);
+  }, [onVisibleRowIdsChange, searchQuery, dataset, model, isDatasetMode]);
 
   return (
     <div className="h-full flex flex-col">

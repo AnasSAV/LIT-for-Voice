@@ -64,18 +64,26 @@ const onModelChange = async (value: string) => {
   console.log("Model selected:", value);
 
   try {
-    let url = `http://localhost:8000/inferences/run?model=${value}`;
+    const requestBody: any = { model: value };
+    
     if (selectedFile) {
       if (dataset !== 'custom') {
-        const filename = encodeURIComponent(selectedFile.filename);
-        url += `&dataset=${encodeURIComponent(dataset)}&dataset_file=${filename}`;
+        requestBody.dataset = dataset;
+        requestBody.dataset_file = selectedFile.filename;
         console.log("Using dataset file:", dataset, selectedFile.filename);
       } else {
-        url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
+        requestBody.file_path = selectedFile.file_path;
         console.log("Using uploaded file:", selectedFile.filename);
       }
     }
-    const res = await fetch(url);
+    
+    const res = await fetch(`http://localhost:8000/inferences/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
     if (!res.ok) {
       throw new Error(`API error: ${res.status}`);
     }
@@ -101,14 +109,23 @@ const onModelChange = async (value: string) => {
     const ac = new AbortController();
     (async () => {
       try {
-        let url = `http://localhost:8000/inferences/run?model=${model}`;
+        const requestBody: any = { model };
+        
         if (dataset !== 'custom') {
-          const filename = encodeURIComponent(selectedFile.filename);
-          url += `&dataset=${encodeURIComponent(dataset)}&dataset_file=${filename}`;
+          requestBody.dataset = dataset;
+          requestBody.dataset_file = selectedFile.filename;
         } else if (selectedFile.file_path) {
-          url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
+          requestBody.file_path = selectedFile.file_path;
         }
-        const res = await fetch(url, { signal: ac.signal });
+        
+        const res = await fetch(`http://localhost:8000/inferences/run`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+          signal: ac.signal,
+        });
         if (!res.ok) {
           throw new Error(`API error: ${res.status}`);
         }

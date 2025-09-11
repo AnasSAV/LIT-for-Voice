@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Body
 import inspect
 import asyncio
 import logging
@@ -22,13 +22,34 @@ MODEL_FUNCTIONS = {
 }
 
 
-@router.get("/inferences/run")
+@router.post("/inferences/run")
+async def run_inference_endpoint(
+    request: dict = Body(..., example={
+        "model": "whisper-base",
+        "file_path": "/path/to/audio.wav",
+        "dataset": "common-voice", 
+        "dataset_file": "sample-001.mp3"
+    })
+):
+    # Extract parameters from request body
+    model = request.get("model")
+    file_path = request.get("file_path")
+    dataset = request.get("dataset")
+    dataset_file = request.get("dataset_file")
+    
+    if not model:
+        raise HTTPException(status_code=400, detail="Model is required")
+    
+    return await run_inference(model, file_path, dataset, dataset_file)
+
+
 async def run_inference(
     model: str,
-    file_path: Optional[str] = Query(None, description="Path to uploaded audio file (server-visible)"),
-    dataset: Optional[str] = Query(None, description="Dataset key for server-side files (e.g., 'common-voice', 'ravdess')"),
-    dataset_file: Optional[str] = Query(None, description="Filename within dataset (basename only)"),
+    file_path: Optional[str] = None,
+    dataset: Optional[str] = None,
+    dataset_file: Optional[str] = None,
 ):
+    """Internal function for running inference - can be called directly or via HTTP endpoint"""
     logger.info(
         "inferences.run model=%s file_path=%s dataset=%s dataset_file=%s",
         model,
