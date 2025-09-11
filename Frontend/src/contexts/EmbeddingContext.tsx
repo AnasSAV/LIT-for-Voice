@@ -56,7 +56,7 @@ export const EmbeddingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     dataset: string,
     files: string[],
     reductionMethod: string = 'pca',
-    nComponents: number = 2
+    nComponents: number = 3
   ) => {
     if (!files || files.length === 0) {
       setError('No files provided');

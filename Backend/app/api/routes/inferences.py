@@ -166,7 +166,7 @@ async def extract_embeddings_endpoint(
         "dataset": "common-voice",
         "files": ["sample-001.mp3", "sample-002.mp3"],
         "reduction_method": "pca",
-        "n_components": 2
+        "n_components": 3
     })
 ):
     """Extract embeddings from multiple audio files and optionally reduce dimensions"""
@@ -174,7 +174,7 @@ async def extract_embeddings_endpoint(
     dataset = request.get("dataset")
     files = request.get("files", [])
     reduction_method = request.get("reduction_method", "pca")
-    n_components = request.get("n_components", 2)
+    n_components = request.get("n_components", 3)
     
     if not model or not dataset or not files:
         raise HTTPException(status_code=400, detail="Model, dataset, and files are required")
