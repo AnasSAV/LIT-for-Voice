@@ -25,12 +25,28 @@ export const MainLayout = () => {
   const [dataset, setDataset] = useState("common-voice");
   const [batchInferenceStatus, setBatchInferenceStatus] = useState<'idle' | 'running' | 'done'>('idle');
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
+  const [selectedEmbeddingFile, setSelectedEmbeddingFile] = useState<string | null>(null);
 
   const handleUploadSuccess = (uploadResponse: UploadedFile) => {
     setUploadedFiles(prev => [...prev, uploadResponse]);
     // Automatically select the first uploaded file
     if (!selectedFile) {
       setSelectedFile(uploadResponse);
+    }
+  };
+
+  const handleFileSelection = (file: UploadedFile) => {
+    setSelectedFile(file);
+    // Sync embedding selection with audio dataset selection
+    setSelectedEmbeddingFile(file.filename);
+  };
+
+  const handleEmbeddingSelection = (filename: string) => {
+    setSelectedEmbeddingFile(filename);
+    // Try to find and select corresponding file in audio dataset
+    const matchingFile = uploadedFiles.find(f => f.filename === filename);
+    if (matchingFile) {
+      setSelectedFile(matchingFile);
     }
   };
 
@@ -75,6 +91,8 @@ export const MainLayout = () => {
                 model={model}
                 dataset={dataset}
                 availableFiles={availableFiles}
+                selectedFile={selectedEmbeddingFile}
+                onFileSelect={handleEmbeddingSelection}
               />
             </Panel>
             
@@ -88,7 +106,7 @@ export const MainLayout = () => {
                     apiData={apiData}
                     uploadedFiles={uploadedFiles}
                     selectedFile={selectedFile}
-                    onFileSelect={setSelectedFile}
+                    onFileSelect={handleFileSelection}
                     onUploadSuccess={handleUploadSuccess}
                     model={model}
                     dataset={dataset}
@@ -103,7 +121,10 @@ export const MainLayout = () => {
                 
                 {/* Bottom Panel: Predictions */}
                 <Panel defaultSize={30} minSize={20}>
-                  <PredictionPanel />
+                  <PredictionPanel 
+                    selectedFile={selectedFile}
+                    selectedEmbeddingFile={selectedEmbeddingFile}
+                  />
                 </Panel>
               </PanelGroup>
             </Panel>

@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Plot from "react-plotly.js";
 import { useEmbedding } from "../../contexts/EmbeddingContext";
+import { Button } from "@/components/ui/button";
+import { ZoomIn, ZoomOut, RotateCcw, Maximize2 } from "lucide-react";
 
 interface EmbeddingPlotProps {
   selectedMethod?: string;
   is3D?: boolean;
   onPointSelect?: (filename: string, coordinates: number[]) => void;
+  selectedFile?: string | null;
 }
 
-export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSelect }: EmbeddingPlotProps) => {
+export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSelect, selectedFile }: EmbeddingPlotProps) => {
   const { embeddingData, isLoading, error } = useEmbedding();
-  const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
+  const plotRef = useRef<any>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Generate mock data as fallback
   const generateMockData = () => {
@@ -37,12 +41,81 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
       const filename = point.text;
       const coordinates = is3D ? [point.x, point.y, point.z] : [point.x, point.y];
       
-      setSelectedPoint(filename);
       if (onPointSelect) {
         onPointSelect(filename, coordinates);
       }
     }
   }, [onPointSelect, is3D]);
+
+  // Zoom control functions
+  const handleZoomIn = useCallback(() => {
+    if (plotRef.current) {
+      const plot = plotRef.current;
+      if (is3D) {
+        // For 3D plots, adjust camera distance
+        const currentEye = plot.layout.scene?.camera?.eye || { x: 1.5, y: 1.5, z: 1.5 };
+        const newEye = {
+          x: currentEye.x * 0.8,
+          y: currentEye.y * 0.8,
+          z: currentEye.z * 0.8
+        };
+        plot.relayout({ 'scene.camera.eye': newEye });
+      } else {
+        // For 2D plots, use Plotly's zoom functionality
+        plot.relayout({
+          'xaxis.range': plot._fullLayout.xaxis.range ? 
+            [plot._fullLayout.xaxis.range[0] * 0.8, plot._fullLayout.xaxis.range[1] * 0.8] : undefined,
+          'yaxis.range': plot._fullLayout.yaxis.range ?
+            [plot._fullLayout.yaxis.range[0] * 0.8, plot._fullLayout.yaxis.range[1] * 0.8] : undefined
+        });
+      }
+    }
+  }, [is3D]);
+
+  const handleZoomOut = useCallback(() => {
+    if (plotRef.current) {
+      const plot = plotRef.current;
+      if (is3D) {
+        // For 3D plots, adjust camera distance
+        const currentEye = plot.layout.scene?.camera?.eye || { x: 1.5, y: 1.5, z: 1.5 };
+        const newEye = {
+          x: currentEye.x * 1.25,
+          y: currentEye.y * 1.25,
+          z: currentEye.z * 1.25
+        };
+        plot.relayout({ 'scene.camera.eye': newEye });
+      } else {
+        // For 2D plots, use Plotly's zoom functionality
+        plot.relayout({
+          'xaxis.range': plot._fullLayout.xaxis.range ? 
+            [plot._fullLayout.xaxis.range[0] * 1.25, plot._fullLayout.xaxis.range[1] * 1.25] : undefined,
+          'yaxis.range': plot._fullLayout.yaxis.range ?
+            [plot._fullLayout.yaxis.range[0] * 1.25, plot._fullLayout.yaxis.range[1] * 1.25] : undefined
+        });
+      }
+    }
+  }, [is3D]);
+
+  const handleResetZoom = useCallback(() => {
+    if (plotRef.current) {
+      const plot = plotRef.current;
+      if (is3D) {
+        plot.relayout({ 
+          'scene.camera.eye': { x: 1.5, y: 1.5, z: 1.5 },
+          'scene.camera.center': { x: 0, y: 0, z: 0 }
+        });
+      } else {
+        plot.relayout({
+          'xaxis.autorange': true,
+          'yaxis.autorange': true
+        });
+      }
+    }
+  }, [is3D]);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen(!isFullscreen);
+  }, [isFullscreen]);
 
   // Use real embedding data if available, otherwise fall back to mock data
   const getPlotData = () => {
@@ -54,16 +127,43 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
         : undefined;
       const text = embeddingData.reduced_embeddings.map(point => point.filename);
       
-      // Generate colors based on filename patterns or use default
-      const colors = embeddingData.reduced_embeddings.map(point => {
+      // Enhanced color mapping with spatial clustering
+      const colors = embeddingData.reduced_embeddings.map((point, index) => {
         const filename = point.filename.toLowerCase();
-        if (filename.includes('neutral')) return 'neutral';
-        if (filename.includes('happy') || filename.includes('joy')) return 'happy';
-        if (filename.includes('sad') || filename.includes('sadness')) return 'sad';
-        if (filename.includes('angry') || filename.includes('anger')) return 'angry';
-        if (filename.includes('fear') || filename.includes('afraid')) return 'fear';
-        if (filename.includes('disgust')) return 'disgust';
-        if (filename.includes('surprise')) return 'surprise';
+        
+        // First try emotion-based coloring from RAVDESS dataset
+        if (filename.includes('01-01') || filename.includes('neutral')) return 'neutral';
+        if (filename.includes('01-03') || filename.includes('happy') || filename.includes('joy')) return 'happy';
+        if (filename.includes('01-04') || filename.includes('sad') || filename.includes('sadness')) return 'sad';
+        if (filename.includes('01-05') || filename.includes('angry') || filename.includes('anger')) return 'angry';
+        if (filename.includes('01-06') || filename.includes('fear') || filename.includes('afraid')) return 'fear';
+        if (filename.includes('01-07') || filename.includes('disgust')) return 'disgust';
+        if (filename.includes('01-08') || filename.includes('surprise')) return 'surprise';
+        if (filename.includes('01-02') || filename.includes('calm')) return 'calm';
+        
+        // For Common Voice or other datasets, use spatial clustering
+        const coords = point.coordinates;
+        if (coords.length >= 2) {
+          const [px, py] = coords;
+          
+          // Calculate quartiles for better spatial distribution
+          const sortedX = x.slice().sort((a, b) => a - b);
+          const sortedY = y.slice().sort((a, b) => a - b);
+          const q1X = sortedX[Math.floor(sortedX.length * 0.25)];
+          const q3X = sortedX[Math.floor(sortedX.length * 0.75)];
+          const q1Y = sortedY[Math.floor(sortedY.length * 0.25)];
+          const q3Y = sortedY[Math.floor(sortedY.length * 0.75)];
+          
+          // Assign colors based on spatial regions
+          if (px > q3X && py > q3Y) return 'region1'; // Top-right
+          if (px < q1X && py > q3Y) return 'region2'; // Top-left
+          if (px < q1X && py < q1Y) return 'region3'; // Bottom-left
+          if (px > q3X && py < q1Y) return 'region4'; // Bottom-right
+          if (px >= q1X && px <= q3X && py >= q1Y && py <= q3Y) return 'center'; // Center
+          if (px >= q1X && px <= q3X) return 'mid_vertical'; // Middle band
+          if (py >= q1Y && py <= q3Y) return 'mid_horizontal'; // Middle band
+        }
+        
         return 'unknown';
       });
       
@@ -83,16 +183,27 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
   const { x, y, colors, text } = plotData;
   const z = 'z' in plotData ? plotData.z : undefined;
 
-  // Create color mapping for categorical colors
+  // Enhanced color mapping for emotions and spatial regions
   const colorMap = {
-    'neutral': '#94a3b8',
-    'happy': '#fbbf24',
-    'sad': '#3b82f6',
-    'angry': '#ef4444',
-    'fear': '#8b5cf6',
-    'disgust': '#10b981',
-    'surprise': '#f97316',
-    'unknown': '#6b7280'
+    // Emotion-based colors (vibrant and distinct)
+    'neutral': '#94a3b8',      // Slate gray
+    'happy': '#fbbf24',        // Amber
+    'sad': '#3b82f6',          // Blue
+    'angry': '#ef4444',        // Red
+    'fear': '#8b5cf6',         // Purple
+    'disgust': '#10b981',      // Emerald
+    'surprise': '#f97316',     // Orange
+    'calm': '#06b6d4',         // Cyan
+    
+    // Spatial region colors (cooler palette for non-emotion data)
+    'region1': '#ec4899',      // Pink - Top-right
+    'region2': '#8b5cf6',      // Purple - Top-left
+    'region3': '#06b6d4',      // Cyan - Bottom-left
+    'region4': '#10b981',      // Emerald - Bottom-right
+    'center': '#f59e0b',       // Amber - Center
+    'mid_vertical': '#6366f1',  // Indigo - Middle vertical
+    'mid_horizontal': '#84cc16', // Lime - Middle horizontal
+    'unknown': '#6b7280'       // Gray
   };
 
   const numericColors = colors.map(color => {
@@ -124,7 +235,7 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
 
   // Create marker sizes based on selection
   const markerSizes = text.map(filename => 
-    selectedPoint === filename ? 12 : 8
+    selectedFile === filename ? 12 : 8
   );
 
   // Create trace data
@@ -154,22 +265,25 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
   // Add Z coordinate for 3D plots
   if (is3D && z) {
     traceData.z = z;
-    traceData.hovertemplate = '<b>%{text}</b><br>X: %{x:.3f}<br>Y: %{y:.3f}<br>Z: %{z:.3f}<br>Category: %{customdata}<extra></extra>';
+    traceData.hovertemplate = '<b>%{text}</b><extra></extra>';
   } else {
-    traceData.hovertemplate = '<b>%{text}</b><br>X: %{x:.3f}<br>Y: %{y:.3f}<br>Category: %{customdata}<extra></extra>';
+    traceData.hovertemplate = '<b>%{text}</b><extra></extra>';
   }
 
   // Layout configuration
   const layout: any = {
     autosize: true,
-    margin: { l: 30, r: 30, t: 30, b: 30 },
-    plot_bgcolor: 'transparent',
-    paper_bgcolor: 'transparent',
+    margin: { l: 35, r: 35, t: 35, b: 35 },
+    plot_bgcolor: 'white',
+    paper_bgcolor: 'white',
     showlegend: false,
     font: {
-      size: 10,
-      color: 'hsl(var(--foreground))'
-    }
+      size: 11,
+      color: '#374151'
+    },
+    dragmode: is3D ? 'orbit' : 'zoom',
+    hovermode: 'closest',
+    uirevision: true // Maintains UI state on data updates
   };
 
   if (is3D) {
@@ -177,72 +291,107 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     layout.scene = {
       xaxis: {
         showgrid: true,
-        gridcolor: 'hsl(var(--border))',
+        gridcolor: '#e5e7eb',
         showticklabels: false,
-        title: embeddingData?.reduction_method?.toUpperCase() + ' 1' || 'Component 1'
+        title: { text: 'X', font: { size: 10 } },
+        backgroundcolor: 'white',
+        showspikes: false
       },
       yaxis: {
         showgrid: true,
-        gridcolor: 'hsl(var(--border))',
+        gridcolor: '#e5e7eb',
         showticklabels: false,
-        title: embeddingData?.reduction_method?.toUpperCase() + ' 2' || 'Component 2'
+        title: { text: 'Y', font: { size: 10 } },
+        backgroundcolor: 'white',
+        showspikes: false
       },
       zaxis: {
         showgrid: true,
-        gridcolor: 'hsl(var(--border))',
+        gridcolor: '#e5e7eb',
         showticklabels: false,
-        title: embeddingData?.reduction_method?.toUpperCase() + ' 3' || 'Component 3'
+        title: { text: 'Z', font: { size: 10 } },
+        backgroundcolor: 'white',
+        showspikes: false
       },
-      bgcolor: 'transparent',
+      bgcolor: 'white',
       camera: {
-        eye: { x: 1.5, y: 1.5, z: 1.5 }
-      }
+        eye: { x: 1.5, y: 1.5, z: 1.5 },
+        center: { x: 0, y: 0, z: 0 },
+        up: { x: 0, y: 0, z: 1 }
+      },
+      aspectmode: 'cube',
+      dragmode: 'orbit'
     };
   } else {
-    // 2D axis configuration
+    // 2D axis configuration with enhanced zoom support
     layout.xaxis = {
       showgrid: true,
-      gridcolor: 'hsl(var(--border))',
+      gridcolor: '#e5e7eb',
       showticklabels: false,
-      title: embeddingData?.reduction_method?.toUpperCase() + ' 1' || 'Component 1'
+      title: { text: 'X', font: { size: 10 } },
+      zeroline: true,
+      zerolinecolor: '#d1d5db',
+      zerolinewidth: 1,
+      fixedrange: false // Allow zoom
     };
     layout.yaxis = {
       showgrid: true,
-      gridcolor: 'hsl(var(--border))',
+      gridcolor: '#e5e7eb',
       showticklabels: false,
-      title: embeddingData?.reduction_method?.toUpperCase() + ' 2' || 'Component 2'
+      title: { text: 'Y', font: { size: 10 } },
+      zeroline: true,
+      zerolinecolor: '#d1d5db',
+      zerolinewidth: 1,
+      fixedrange: false // Allow zoom
     };
   }
 
-  // Add annotation
+  // Add compact annotation
   if (embeddingData) {
     layout.annotations = [{
-      text: `${embeddingData.total_files} files • ${embeddingData.original_dimension}D → ${is3D ? '3D' : '2D'}${selectedPoint ? ` • Selected: ${selectedPoint}` : ''}`,
+      text: `${embeddingData.total_files} files • ${is3D ? '3D' : '2D'}`,
       xref: 'paper',
       yref: 'paper',
       x: 0.02,
       y: 0.98,
       xanchor: 'left',
       yanchor: 'top',
-      font: { size: 9, color: 'hsl(var(--muted-foreground))' },
+      font: { size: 9, color: '#6b7280' },
       showarrow: false,
-      bgcolor: 'rgba(0,0,0,0)',
+      bgcolor: 'rgba(255,255,255,0.8)',
+      bordercolor: '#e5e7eb',
+      borderwidth: 1,
+      borderpad: 2
     }];
   }
 
   return (
-    <div className="h-full">
+    <div className="w-full h-full min-h-0">
       <Plot
         data={[traceData]}
         layout={layout}
         onClick={handlePointClick}
         config={{
           displayModeBar: true,
-          modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d', 'autoScale2d'],
+          modeBarButtonsToRemove: is3D 
+            ? ['pan2d', 'lasso2d', 'select2d'] 
+            : [],
           displaylogo: false,
-          responsive: true
+          responsive: true,
+          autosizable: true,
+          scrollZoom: true,
+          doubleClick: 'reset+autosize',
+          showTips: true,
+          toImageButtonOptions: {
+            format: 'png',
+            filename: `embeddings_${selectedMethod}_${is3D ? '3D' : '2D'}`,
+            height: 800,
+            width: 800,
+            scale: 2
+          }
         }}
         style={{ width: '100%', height: '100%' }}
+        useResizeHandler={true}
       />
     </div>
   );

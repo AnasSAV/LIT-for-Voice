@@ -234,6 +234,8 @@ async def extract_embeddings_endpoint(
     if not embeddings_list:
         raise HTTPException(status_code=400, detail="No valid embeddings could be extracted")
     
+    logger.info(f"Successfully extracted embeddings for {len(embeddings_list)} files")
+    
     # Perform dimensionality reduction if requested
     reduced_embeddings = None
     if reduction_method and len(embeddings_list) > 1:
@@ -244,6 +246,13 @@ async def extract_embeddings_endpoint(
             logger.info(f"Reduced {len(embeddings_list)} embeddings from {embeddings_list[0].shape[0]}D to {n_components}D using {reduction_method}")
         except Exception as e:
             logger.warning(f"Dimensionality reduction failed: {str(e)}")
+            # Return error details for debugging
+            response_error = {
+                "error": f"Dimensionality reduction failed: {str(e)}",
+                "embeddings_count": len(embeddings_list),
+                "embedding_dimension": embeddings_list[0].shape[0] if embeddings_list else 0
+            }
+            raise HTTPException(status_code=500, detail=response_error)
     
     # Prepare response
     response = {
