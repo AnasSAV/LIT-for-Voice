@@ -46,6 +46,11 @@ interface WhisperBatchAnalysis {
     unique_words: number;
     avg_words_per_file: number;
   };
+  cache_info: {
+    cached_count: number;
+    missing_count: number;
+    cache_hit_rate: number;
+  };
 }
 
 export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationProps) => {
@@ -420,6 +425,16 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                         <div>Avg/File: {whisperAnalysis.summary.avg_words_per_file.toFixed(1)}</div>
                         <div>Files: {whisperAnalysis.summary.total_files}</div>
                       </div>
+                      {whisperAnalysis.cache_info && (
+                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          Cache: {whisperAnalysis.cache_info.cached_count} found, {whisperAnalysis.cache_info.missing_count} missing
+                          {whisperAnalysis.cache_info.missing_count > 0 && (
+                            <div className="text-blue-700 mt-1">
+                              Run inference first for missing files to get complete analysis
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Top Common Terms */}

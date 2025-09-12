@@ -173,7 +173,7 @@ async def run_inference(
 @router.post("/inferences/whisper-batch")
 async def batch_whisper_analysis(request: Request):
     """
-    Get batch whisper transcripts and analyze common terms
+    Get batch whisper transcripts from cache and analyze common terms
     """
     try:
         body = await request.json()
@@ -187,50 +187,67 @@ async def batch_whisper_analysis(request: Request):
         if len(filenames) > 50:  # Limit batch size
             raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
         
-        # Select transcription function based on model
-        if model == "whisper-large":
-            transcribe_func = transcribe_whisper_large
-        else:
-            transcribe_func = transcribe_whisper_base
-        
-        # Process each file
+        # Process each file - try to get from cache first
         individual_transcripts = []
         all_words = []
+        cached_count = 0
+        missing_count = 0
         
         for filename in filenames:
             try:
-                # Get file path using resolve_file
+                # Get file path and create cache key
                 if dataset:
                     file_path = resolve_file(dataset, filename)
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():
                         print(f"Warning: File not found: {file_path}")
+                        missing_count += 1
                         continue
                 
-                # Get transcript
-                transcript = transcribe_func(str(file_path))
+                # Create cache key (same as used in regular inference)
+                file_content_hash = hashlib.md5(str(file_path).encode()).hexdigest()
+                cache_key = f"{model}_{file_content_hash}"
                 
-                # Clean and tokenize transcript
-                words = transcript.lower().split()
-                # Remove common stop words and punctuation
-                stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'}
-                filtered_words = [word.strip('.,!?";:()[]{}').lower() for word in words if word.strip('.,!?";:()[]{}').lower() not in stop_words and len(word.strip('.,!?";:()[]{}')) > 2]
+                # Try to get from cache first
+                cached_result = await get_result(model, cache_key)
                 
-                individual_transcripts.append({
-                    "filename": filename,
-                    "transcript": transcript,
-                    "word_count": len(words)
-                })
+                transcript = None
+                if cached_result is not None:
+                    # Extract transcript from cached result
+                    if isinstance(cached_result, dict):
+                        transcript = cached_result.get("prediction", cached_result.get("transcript"))
+                    else:
+                        transcript = cached_result
+                    cached_count += 1
+                else:
+                    # Not in cache - skip this file for now
+                    print(f"No cached transcript found for {filename}")
+                    missing_count += 1
+                    continue
                 
-                all_words.extend(filtered_words)
+                if transcript:
+                    # Clean and tokenize transcript
+                    words = transcript.lower().split()
+                    # Remove common stop words and punctuation
+                    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'}
+                    filtered_words = [word.strip('.,!?";:()[]{}').lower() for word in words if word.strip('.,!?";:()[]{}').lower() not in stop_words and len(word.strip('.,!?";:()[]{}')) > 2]
+                    
+                    individual_transcripts.append({
+                        "filename": filename,
+                        "transcript": transcript,
+                        "word_count": len(words)
+                    })
+                    
+                    all_words.extend(filtered_words)
                     
             except Exception as file_error:
                 print(f"Error processing {filename}: {file_error}")
+                missing_count += 1
                 continue
         
         if not individual_transcripts:
-            raise HTTPException(status_code=404, detail="No valid files could be processed")
+            raise HTTPException(status_code=404, detail=f"No cached transcripts found for the selected files. Found {cached_count} cached, {missing_count} missing. Please run inference on these files first.")
         
         # Calculate word frequency
         from collections import Counter
@@ -255,6 +272,11 @@ async def batch_whisper_analysis(request: Request):
                 "total_words": total_words,
                 "unique_words": len(word_counts),
                 "avg_words_per_file": sum(t["word_count"] for t in individual_transcripts) / len(individual_transcripts)
+            },
+            "cache_info": {
+                "cached_count": cached_count,
+                "missing_count": missing_count,
+                "cache_hit_rate": cached_count / len(filenames) if filenames else 0
             }
         }
         
