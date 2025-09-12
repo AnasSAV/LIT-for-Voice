@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request
 import inspect
 import asyncio
 import logging
@@ -19,6 +19,16 @@ from app.services.dataset_service import resolve_file
 from app.core.redis import get_result, cache_result
 
 router = APIRouter()
+
+# Define paths
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+UPLOAD_DIR = Path("uploads")
+
+# Dataset directories
+DATASET_DIRS = {
+    "common-voice": DATA_DIR / "common_voice_valid_dev",
+    "ravdess": DATA_DIR / "ravdess_subset",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -158,6 +168,85 @@ async def run_inference(
     logger.info(f"Cached prediction for {resolved_path}")
 
     return prediction
+
+
+@router.post("/inferences/wav2vec2-batch")
+async def batch_wav2vec2_prediction(request: Request):
+    """
+    Get batch wav2vec2 predictions for multiple files and calculate aggregated probabilities
+    """
+    try:
+        body = await request.json()
+        filenames = body.get("filenames", [])
+        dataset = body.get("dataset")
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+        
+        if len(filenames) > 50:  # Limit batch size
+            raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
+        
+        # Process each file
+        individual_predictions = []
+        all_probabilities = {}
+        
+        for filename in filenames:
+            try:
+                # Load and predict for each file
+                if dataset:
+                    file_path = resolve_file(dataset, filename)
+                else:
+                    file_path = UPLOAD_DIR / filename
+                    if not file_path.exists():
+                        print(f"Warning: File not found: {file_path}")
+                        continue
+                
+                # Get detailed prediction
+                result = predict_emotion_wave2vec(str(file_path))
+                
+                individual_predictions.append({
+                    "filename": filename,
+                    "predicted_emotion": result["predicted_emotion"],
+                    "probabilities": result["probabilities"], 
+                    "confidence": result["confidence"]
+                })
+                
+                # Accumulate probabilities for aggregation
+                for emotion, prob in result["probabilities"].items():
+                    if emotion not in all_probabilities:
+                        all_probabilities[emotion] = []
+                    all_probabilities[emotion].append(prob)
+                    
+            except Exception as file_error:
+                print(f"Error processing {filename}: {file_error}")
+                continue
+        
+        if not individual_predictions:
+            raise HTTPException(status_code=404, detail="No valid files could be processed")
+        
+        # Calculate aggregated probabilities (mean across all files)
+        aggregated_probabilities = {}
+        for emotion, probs in all_probabilities.items():
+            aggregated_probabilities[emotion] = sum(probs) / len(probs)
+        
+        # Find dominant emotion
+        dominant_emotion = max(aggregated_probabilities.items(), key=lambda x: x[1])
+        
+        return {
+            "aggregated_probabilities": aggregated_probabilities,
+            "individual_predictions": individual_predictions,
+            "summary": {
+                "total_files": len(individual_predictions),
+                "dominant_emotion": dominant_emotion[0],
+                "dominant_confidence": dominant_emotion[1]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in batch wav2vec2 prediction: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch prediction failed: {str(e)}")
 
 
 @router.post("/inferences/wav2vec2-detailed")

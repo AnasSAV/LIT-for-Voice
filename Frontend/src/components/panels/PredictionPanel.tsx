@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
+import { ScalersVisualization } from "../visualization/ScalersVisualization";
 import { useState, useEffect } from "react";
 
 interface UploadedFile {
@@ -93,8 +94,9 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="predictions" className="h-full">
         <div className="panel-header border-b panel-border px-3 py-2">
-          <TabsList className="h-7 grid grid-cols-4 w-full">
+          <TabsList className="h-7 grid grid-cols-5 w-full">
             <TabsTrigger value="predictions" className="text-xs">Predictions</TabsTrigger>
+            <TabsTrigger value="scalers" className="text-xs">Scalers</TabsTrigger>
             <TabsTrigger value="saliency" className="text-xs">Saliency</TabsTrigger>
             <TabsTrigger value="attention" className="text-xs">Attention</TabsTrigger>
             <TabsTrigger value="perturbation" className="text-xs">Perturbation</TabsTrigger>
@@ -221,6 +223,15 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                   ) : null}
                 </CardContent>
               </Card>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="scalers" className="m-0 h-full">
+            <div className="p-3 h-full">
+              <ScalersVisualization 
+                model={model}
+                dataset={dataset}
+              />
             </div>
           </TabsContent>
           
