@@ -58,7 +58,7 @@ async def upload_audio_file(file: UploadFile = File(...),model: str = Form(...))
         
 
         try:
-            prediction = await run_inference(model,file_path)
+            prediction = await run_inference(model, str(file_path))
             
         except Exception as e:
             print("Prediction API failed:", e)

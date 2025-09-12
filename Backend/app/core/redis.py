@@ -1,9 +1,18 @@
 import json, uuid
 from typing import Any
 from redis.asyncio import from_url
+from redis.exceptions import RedisError
 from .settings import settings
 
-redis = from_url(settings.REDIS_URL, decode_responses=True)
+# Initialize Redis connection with connection pool
+redis = from_url(
+    settings.REDIS_URL, 
+    decode_responses=True,
+    max_connections=20,
+    retry_on_timeout=True,
+    socket_connect_timeout=5,
+    socket_timeout=5
+)
 
 def k_sess(sid: str) -> str:  return f"sess:{sid}"
 def k_queue(sid: str) -> str: return f"{k_sess(sid)}:queue"

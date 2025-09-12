@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useCallback, useEffect } from "react";
 
 interface UploadedFile {
   file_id: string;
@@ -44,25 +45,30 @@ interface AudioDataTableProps {
   datasetMetadata?: Record<string, string | number>[];
   uploadedFiles?: UploadedFile[];
   onFilePlay?: (file: UploadedFile) => void;
+  predictionMap?: Record<string, string>;
+  inferenceStatus?: Record<string, 'idle' | 'loading' | 'done' | 'error'>;
+  onVisibleRowIdsChange?: (rowIds: string[]) => void;
 }
 
-export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, model, dataset, datasetMetadata, uploadedFiles, onFilePlay }: AudioDataTableProps) => {
+export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, model, dataset, datasetMetadata, uploadedFiles, onFilePlay, predictionMap, inferenceStatus, onVisibleRowIdsChange }: AudioDataTableProps) => {
   // Branch: dataset mode vs custom uploads
   const isDatasetMode = dataset !== "custom" && (datasetMetadata?.length || 0) > 0;
 
   // Custom uploads data and columns
-  const customTableData: AudioData[] = (uploadedFiles?.map(file => ({
-    id: file.file_id,
-    filename: file.filename,
-    prediction: file.prediction,
-    groundTruthLabel: "",
-    confidence: 0.85,
-    duration: file.duration || 0,
-    file_path: file.file_path,
-    size: file.size
-  })) || []);
+  const customTableData: AudioData[] = useMemo(() => (
+    uploadedFiles?.map(file => ({
+      id: file.file_id,
+      filename: file.filename,
+      prediction: file.prediction,
+      groundTruthLabel: "",
+      confidence: 0,
+      duration: file.duration || 0,
+      file_path: file.file_path,
+      size: file.size
+    })) || []
+  ), [uploadedFiles]);
 
-  const customColumns: ColumnDef<unknown, unknown>[] = [
+  const customColumns: ColumnDef<unknown, unknown>[] = useMemo(() => [
     {
       id: "filename",
       header: "Filename",
@@ -72,10 +78,15 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
         return (
           <div className="flex items-center gap-2">
             <Button
+              type="button"
               size="sm"
               variant="ghost"
               className="h-6 w-6 p-0"
-              onClick={() => file && onFilePlay && onFilePlay(file)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (file && onFilePlay) onFilePlay(file);
+              }}
             >
               <Play className="h-3 w-3" />
             </Button>
@@ -89,11 +100,14 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       header: model.startsWith("whisper") ? "Predicted Transcript" : "Predicted Label",
       cell: ({ row }) => {
         const data = row.original as AudioData;
-        return (
-          <Badge variant="outline" className="text-xs">
-            {data.prediction}
-          </Badge>
-        );
+        const rowId = row.id as string;
+        const status = inferenceStatus?.[rowId];
+        if (status === 'loading') {
+          return "";
+        }
+        const pred = predictionMap?.[rowId] ?? data.prediction ?? "";
+        if (!pred) return "";
+        return <Badge variant="outline" className="text-xs">{pred}</Badge>;
       },
     },
     {
@@ -101,11 +115,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       header: "Ground Truth",
       cell: ({ row }) => {
         const data = row.original as AudioData;
-        return (
-          <Badge variant="secondary" className="text-xs">
-            {data.groundTruthLabel}
-          </Badge>
-        );
+        return <span className="text-xs">{data.groundTruthLabel}</span>;
       },
     },
     {
@@ -113,7 +123,9 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       header: "Confidence",
       cell: ({ row }) => {
         const data = row.original as AudioData;
-        return <span className="text-xs">{data.confidence}%</span>;
+        // Don't display confidence if it's 0
+        if (data.confidence === 0) return null;
+        return <span className="text-xs">{data.confidence}</span>;
       },
     },
     {
@@ -124,26 +136,26 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
         return <span className="text-xs">{data.duration.toFixed(2)}s</span>;
       },
     },
-  ];
+  ], [model, uploadedFiles, onFilePlay, predictionMap, inferenceStatus]);
 
   // Dataset metadata data and columns
   type DatasetRow = Record<string, string | number | null | undefined>;
-  const datasetRows: DatasetRow[] = (datasetMetadata || []).map((r) => r);
+  const datasetRows: DatasetRow[] = useMemo(() => datasetMetadata ?? [], [datasetMetadata]);
 
-  const getFrom = (row: DatasetRow, keys: string[], fallback = ""): string => {
+  const getFrom = useCallback((row: DatasetRow, keys: string[], fallback = ""): string => {
     for (const k of keys) {
       const v = row[k];
       if (v !== undefined && v !== null && String(v).length > 0) return String(v);
     }
     return fallback;
-  };
+  }, []);
 
-  const getDatasetRowId = (row: DatasetRow, fallback: string): string => {
+  const getDatasetRowId = useCallback((row: DatasetRow, fallback: string): string => {
     const v = row["id"] ?? row["path"] ?? row["filepath"] ?? row["file"] ?? row["filename"];
     return v !== undefined && v !== null && String(v).length > 0 ? String(v) : fallback;
-  };
+  }, []);
 
-  const datasetColumnsCommonVoice: ColumnDef<unknown, unknown>[] = [
+  const datasetColumnsCommonVoice: ColumnDef<unknown, unknown>[] = useMemo(() => [
     {
       id: "filename",
       header: "Filename",
@@ -155,8 +167,21 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       },
     },
     {
-      id: "sentence",
-      header: "Transcript",
+      id: "prediction",
+      header: model.startsWith("whisper") ? "Predicted Transcript" : "Predicted Label",
+      cell: ({ row }) => {
+        const rowId = row.id as string;
+        const status = inferenceStatus?.[rowId];
+        if (status !== 'done') {
+          return <span className="text-xs"></span>;
+        }
+        const pred = predictionMap?.[rowId] ?? "";
+        return <span className="text-xs">{pred}</span>;
+      },
+    },
+    {
+      id: "ground_truth",
+      header: "Ground Truth",
       cell: ({ row }) => {
         const data = row.original as DatasetRow;
         return <span className="text-xs">{getFrom(data, ["sentence", "transcript", "text"], "")}</span>;
@@ -171,9 +196,9 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
         return <span className="text-xs">{isNaN(d) ? "" : `${d.toFixed(2)}s`}</span>;
       },
     },
-  ];
+  ], [getFrom, model, predictionMap, inferenceStatus]);
 
-  const datasetColumnsRavdess: ColumnDef<unknown, unknown>[] = [
+  const datasetColumnsRavdess: ColumnDef<unknown, unknown>[] = useMemo(() => [
     {
       id: "filename",
       header: "Filename",
@@ -185,11 +210,24 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       },
     },
     {
-      id: "emotion",
-      header: "Emotion",
+      id: "prediction",
+      header: model.startsWith("whisper") ? "Predicted Transcript" : "Predicted Label",
+      cell: ({ row }) => {
+        const rowId = row.id as string;
+        const status = inferenceStatus?.[rowId];
+        if (status !== 'done') {
+          return <span className="text-xs"></span>;
+        }
+        const pred = predictionMap?.[rowId] ?? "";
+        return <span className="text-xs">{pred}</span>;
+      },
+    },
+    {
+      id: "ground_truth",
+      header: "Ground Truth",
       cell: ({ row }) => {
         const data = row.original as DatasetRow;
-        return <Badge variant="secondary" className="text-xs">{getFrom(data, ["emotion", "label"], "")}</Badge>;
+        return <span className="text-xs">{getFrom(data, ["emotion", "label"], "")}</span>;
       },
     },
     {
@@ -197,15 +235,29 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       header: "Duration",
       cell: ({ row }) => {
         const data = row.original as DatasetRow;
-        const d = Number(getFrom(data, ["duration"], "0"));
-        return <span className="text-xs">{isNaN(d) ? "" : `${d.toFixed(2)}s`}</span>;
+        // Ravdess dataset doesn't have duration in metadata, so we'll show "N/A"
+        const d = Number(getFrom(data, ["duration", "length"], "0"));
+        if (d > 0) {
+          return <span className="text-xs">{d.toFixed(2)}s</span>;
+        }
+        return <span className="text-xs text-muted-foreground">N/A</span>;
       },
     },
-  ];
+  ], [getFrom, model, predictionMap, inferenceStatus]);
 
   // Build table config based on mode
-  const data: unknown[] = isDatasetMode ? datasetRows : customTableData;
-  const columns: ColumnDef<unknown, unknown>[] = isDatasetMode ? (dataset === "ravdess" ? datasetColumnsRavdess : datasetColumnsCommonVoice) : customColumns;
+  const data: unknown[] = useMemo(() => (isDatasetMode ? datasetRows : customTableData), [isDatasetMode, datasetRows, customTableData]);
+  const columns: ColumnDef<unknown, unknown>[] = useMemo(
+    () => (isDatasetMode ? (dataset === "ravdess" ? datasetColumnsRavdess : datasetColumnsCommonVoice) : customColumns),
+    [isDatasetMode, dataset, datasetColumnsRavdess, datasetColumnsCommonVoice, customColumns]
+  );
+
+  const getRowId = useCallback((row: unknown, index?: number) => {
+    if (isDatasetMode) {
+      return getDatasetRowId(row as DatasetRow, String(index ?? ""));
+    }
+    return (row as AudioData).id;
+  }, [isDatasetMode, getDatasetRowId]);
 
   const table = useReactTable<unknown>({
     data,
@@ -223,7 +275,16 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
         pageSize: 20,
       },
     },
+    getRowId,
   });
+
+  // Notify parent of currently visible row ids (for sequential per-page inference)
+  useEffect(() => {
+    if (!onVisibleRowIdsChange) return;
+    const rows = table.getRowModel().rows;
+    const ids = rows.map(r => String(r.id));
+    onVisibleRowIdsChange(ids);
+  }, [onVisibleRowIdsChange, searchQuery, dataset, model, isDatasetMode]);
 
   return (
     <div className="h-full flex flex-col">
@@ -256,7 +317,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
                       : (row.original as AudioData).id;
                     return selectedRow === rowId ? "selected" : undefined;
                   })()}
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 data-[state=selected]:bg-blue-50 data-[state=selected]:border-blue-200 data-[state=selected]:shadow-sm"
                   onClick={() => {
                     const rowId: string = isDatasetMode
                       ? getDatasetRowId(row.original as DatasetRow, String(row.id))

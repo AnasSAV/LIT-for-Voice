@@ -30,6 +30,7 @@ interface ToolbarProps {
   setModel: (model: string) => void; // important for lifting state
   dataset: string;
   setDataset: (dataset: string) => void;
+  onBatchInference?: (model: string, dataset: string) => void; // New callback for batch inference
 }
 const modelDatasetMap: Record<string, string[]> = {
   "whisper-base": ["common-voice", "custom"],
@@ -43,52 +44,38 @@ const defaultDatasetForModel: Record<string, string> = {
   "wav2vec2": "ravdess",
 };
 
-export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset}: ToolbarProps) => {
+export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset, onBatchInference}: ToolbarProps) => {
 
 let abortController: AbortController | null = null;
 const onModelChange = async (value: string) => {
   setModel(value);
-    if (abortController) {
-    abortController.abort();
-  }
-  abortController = new AbortController();
   
   // Update dataset based on model
   const allowedDatasets = modelDatasetMap[value] || ["custom"];
   const defaultDataset = defaultDatasetForModel[value] || "custom";
 
+  let finalDataset = dataset;
   if (!allowedDatasets.includes(dataset)) {
+    finalDataset = defaultDataset;
     setDataset(defaultDataset);
   }
 
   console.log("Model selected:", value);
 
-  try {
-    let url = `http://localhost:8000/inferences/run?model=${value}`;
-    
-    // If there's a selected file, include it in the API call
-    if (selectedFile) {
-      url += `&file_path=${encodeURIComponent(selectedFile.file_path)}`;
-      console.log("Using uploaded file:", selectedFile.filename);
-    } else {
-      console.log("Using default sample file");
-    }
-    
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`);
-    }
-    const data = await res.json();
-    setApiData(data);
-    console.log("API response:", data);
-  } catch (error) {
-    console.error("Failed to run inference:", error);
+  // Trigger batch inference for dataset when model changes (except for custom)
+  if (finalDataset !== 'custom' && onBatchInference) {
+    onBatchInference(value, finalDataset);
   }
 };
 
   const onDatasetChange = (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
+    
+    // Trigger batch inference when dataset changes (except for custom)
+    if (value !== 'custom' && onBatchInference) {
+      onBatchInference(model, value);
+    }
   };
 
   // Get datasets allowed for current model
@@ -99,7 +86,7 @@ const onModelChange = async (value: string) => {
       {/* Left side: Model and Dataset selectors */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">LIT for Voice</span>
+          <span className="text-sm font-bold text-foreground">LIT for Voice</span>
           <Badge variant="outline" className="text-xs">
             v1.0
           </Badge>
@@ -172,24 +159,10 @@ const onModelChange = async (value: string) => {
 
       {/* Right side: Action buttons */}
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" className="h-8">
-          <Filter className="h-4 w-4 mr-2" />
-          Filters
-        </Button>
-
-        <Button variant="outline" size="sm" className="h-8">
-          <Pin className="h-4 w-4 mr-2" />
-          Pin
-        </Button>
 
         <Button variant="outline" size="sm" className="h-8">
           <Upload className="h-4 w-4 mr-2" />
           Upload
-        </Button>
-
-        <Button variant="outline" size="sm" className="h-8">
-          <Download className="h-4 w-4 mr-2" />
-          Export
         </Button>
 
         <Button 
@@ -209,10 +182,6 @@ const onModelChange = async (value: string) => {
           }}
         >
           Test Backend
-        </Button>
-
-        <Button variant="outline" size="sm" className="h-8">
-          <Settings className="h-4 w-4" />
         </Button>
       </div>
     </div>

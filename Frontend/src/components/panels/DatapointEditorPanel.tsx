@@ -20,16 +20,24 @@ interface UploadedFile {
 
 interface DatapointEditorPanelProps {
   selectedFile?: UploadedFile | null;
+  dataset?: string; // "custom" | dataset key
 }
 
-export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps) => {
+export const DatapointEditorPanel = ({ selectedFile, dataset = "custom" }: DatapointEditorPanelProps) => {
   const [selectedLabel, setSelectedLabel] = useState<string>("neutral");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
 
-  const audioUrl = selectedFile ? `http://localhost:8000/upload/file/${selectedFile.file_id}` : undefined;
+  const audioUrl = (() => {
+    if (!selectedFile) return undefined;
+    if (dataset && dataset !== "custom") {
+      const filename = encodeURIComponent(selectedFile.filename);
+      return `http://localhost:8000/${dataset}/file/${filename}`;
+    }
+    return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+  })();
 
   // Debug logging for selectedFile and audioUrl
   useEffect(() => {
@@ -47,7 +55,7 @@ export const DatapointEditorPanel = ({ selectedFile }: DatapointEditorPanelProps
     if (wavesurferRef.current) {
       wavesurferRef.current.stop();
     }
-  }, [selectedFile?.file_id]);
+  }, [selectedFile?.file_id, dataset]);
   
   return (
     <div className="h-full panel-background border-l panel-border flex flex-col">
