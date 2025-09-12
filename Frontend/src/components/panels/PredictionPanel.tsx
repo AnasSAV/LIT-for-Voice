@@ -221,24 +221,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                   ) : null}
                 </CardContent>
               </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Token-level Predictions (ASR)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-xs space-y-1">
-                    {["The", "quick", "brown", "fox", "jumps"].map((token, idx) => (
-                      <div key={idx} className="flex items-center justify-between">
-                        <span className="font-mono">{token}</span>
-                        <span className="text-muted-foreground">
-                          {(0.95 - idx * 0.02).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           </TabsContent>
           
