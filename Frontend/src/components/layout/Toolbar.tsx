@@ -86,7 +86,7 @@ const onModelChange = async (value: string) => {
       {/* Left side: Model and Dataset selectors */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">LIT for Voice</span>
+          <span className="text-sm font-bold text-foreground">LIT for Voice</span>
           <Badge variant="outline" className="text-xs">
             v1.0
           </Badge>
