@@ -1,3 +1,4 @@
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +7,20 @@ import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
 
-export const PredictionPanel = () => {
+interface UploadedFile {
+  file_id: string;
+  filename: string;
+  file_path: string;
+  message: string;
+  size?: number;
+  duration?: number;
+  sample_rate?: number;
+}
+
+type PredictionPanelProps = {
+  selectedFile: UploadedFile | null;  // adjust type depending on what you store
+};
+export const PredictionPanel: React.FC<PredictionPanelProps> = ({ selectedFile }) => {
   return (
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="predictions" className="h-full">
@@ -84,7 +98,7 @@ export const PredictionPanel = () => {
           
           <TabsContent value="perturbation" className="m-0 h-full">
             <div className="p-3">
-              <PerturbationTools />
+              <PerturbationTools selectedFile={selectedFile} />
             </div>
           </TabsContent>
         </div>

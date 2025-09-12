@@ -75,7 +75,7 @@ export const MainLayout = () => {
               
               {/* Bottom Panel: Predictions */}
               <Panel defaultSize={30} minSize={20}>
-                <PredictionPanel />
+                <PredictionPanel selectedFile={selectedFile}/>
               </Panel>
             </PanelGroup>
           </Panel>

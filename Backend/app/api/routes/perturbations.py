@@ -9,10 +9,8 @@ class Perturbation(BaseModel):
     params: Dict[str, Any] = {}
 
 class PerturbRequest(BaseModel):
-    session_id: str
-    audio_id: str
+    file_path: str
     perturbations: List[Perturbation]
-    preview: Optional[bool] = False
 
 # --- Response schema ---
 class PerturbResponse(BaseModel):
@@ -22,7 +20,7 @@ class PerturbResponse(BaseModel):
     applied: List[Perturbation]
 
 # --- Endpoint ---
-@app.post("/api/perturb", response_model=PerturbResponse)
+@router.post("/perturb", response_model=PerturbResponse)
 def apply_perturbations(request: PerturbRequest):
     """
     Apply multiple perturbations to the given audio in one request.
