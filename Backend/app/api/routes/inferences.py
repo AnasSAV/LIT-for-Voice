@@ -3,9 +3,13 @@ import inspect
 import asyncio
 import logging
 import hashlib
+import difflib
+import re
+import string
 from pathlib import Path
 from typing import Optional
 import numpy as np
+import pandas as pd
 from app.services.model_loader_service import (
     transcribe_whisper_base,
     transcribe_whisper_large,
@@ -285,6 +289,189 @@ async def batch_whisper_analysis(request: Request):
     except Exception as e:
         print(f"Error in batch whisper analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
+
+
+@router.post("/inferences/whisper-accuracy")
+async def get_whisper_accuracy(request: Request):
+    """
+    Get whisper prediction from cache and compare with ground truth
+    """
+    try:
+        body = await request.json()
+        model = body.get("model", "whisper-base")
+        dataset = body.get("dataset")
+        dataset_file = body.get("dataset_file")
+        file_path = body.get("file_path")
+        
+        if not dataset_file and not file_path:
+            raise HTTPException(status_code=400, detail="Either dataset_file or file_path must be provided")
+        
+        # Get file path
+        if file_path:
+            resolved_path = Path(file_path)
+        else:
+            resolved_path = resolve_file(dataset, dataset_file)
+        
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail="Audio file not found")
+        
+        # Create cache key and get cached prediction
+        file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+        cache_key = f"{model}_{file_content_hash}"
+        
+        cached_result = await get_result(model, cache_key)
+        
+        print(f"DEBUG: Looking for cache key: {cache_key}")
+        print(f"DEBUG: Cached result found: {cached_result is not None}")
+        
+        if cached_result is None:
+            raise HTTPException(status_code=404, detail=f"No cached prediction found for {dataset_file}. Please run inference first. Cache key: {cache_key}")
+        
+        # Extract transcript from cached result
+        if isinstance(cached_result, dict):
+            predicted_transcript = cached_result.get("prediction", cached_result.get("transcript", ""))
+        else:
+            predicted_transcript = str(cached_result)
+        
+        # Get ground truth from dataset metadata
+        ground_truth = ""
+        if dataset and dataset_file:
+            # Load dataset metadata
+            if dataset == "common-voice":
+                metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
+            elif dataset == "ravdess":
+                metadata_path = DATA_DIR / "ravdess_subset" / "metadata.csv"
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
+            
+            if metadata_path.exists():
+                df = pd.read_csv(metadata_path)
+                # Find the row for this file
+                # Try both with and without path prefix
+                file_rows = df[df['filename'] == dataset_file]
+                if file_rows.empty:
+                    # Try with path prefix for common-voice
+                    if dataset == "common-voice":
+                        file_rows = df[df['filename'] == f"cv-valid-dev/{dataset_file}"]
+                
+                if not file_rows.empty:
+                    # Try different column names for transcript/text
+                    for col in ['text', 'transcript', 'sentence', 'label']:
+                        if col in df.columns:
+                            ground_truth = str(file_rows.iloc[0][col])
+                            break
+        
+        if not ground_truth:
+            # More specific error message for debugging
+            error_msg = f"Ground truth not found in dataset metadata. Dataset: {dataset}, File: {dataset_file}"
+            if dataset and dataset_file:
+                metadata_path = DATA_DIR / f"{dataset}_valid_dev" / f"{dataset}_valid_data_metadata.csv" if dataset == "common-voice" else DATA_DIR / f"{dataset}_subset" / "metadata.csv"
+                error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
+            print(f"DEBUG: {error_msg}")
+            raise HTTPException(status_code=404, detail=error_msg)
+        
+        # Calculate accuracy metrics
+        def calculate_accuracy(predicted, ground_truth):
+            # Clean and normalize both strings
+            def clean_text(text):
+                # Convert to lowercase
+                text = text.lower()
+                # Remove punctuation
+                text = text.translate(str.maketrans('', '', string.punctuation))
+                # Remove extra whitespace and normalize
+                text = re.sub(r'\s+', ' ', text).strip()
+                return text
+            
+            pred_clean = clean_text(predicted)
+            truth_clean = clean_text(ground_truth)
+            
+            print(f"DEBUG: Predicted clean: '{pred_clean}'")
+            print(f"DEBUG: Truth clean: '{truth_clean}'")
+            
+            # Split into words for word-based metrics
+            pred_words = pred_clean.split()
+            truth_words = truth_clean.split()
+            
+            # Character-based similarity (after cleaning)
+            char_similarity = difflib.SequenceMatcher(None, pred_clean, truth_clean).ratio()
+            
+            # Word-based similarity (after cleaning)
+            word_similarity = difflib.SequenceMatcher(None, pred_words, truth_words).ratio()
+            
+            # Exact match accuracy
+            exact_match = 1.0 if pred_clean == truth_clean else 0.0
+            
+            # Levenshtein distance (character-level)
+            def levenshtein_distance(s1, s2):
+                if len(s1) < len(s2):
+                    return levenshtein_distance(s2, s1)
+                if len(s2) == 0:
+                    return len(s1)
+                
+                previous_row = list(range(len(s2) + 1))
+                for i, c1 in enumerate(s1):
+                    current_row = [i + 1]
+                    for j, c2 in enumerate(s2):
+                        insertions = previous_row[j + 1] + 1
+                        deletions = current_row[j] + 1
+                        substitutions = previous_row[j] + (c1 != c2)
+                        current_row.append(min(insertions, deletions, substitutions))
+                    previous_row = current_row
+                
+                return previous_row[-1]
+            
+            lev_dist = levenshtein_distance(pred_clean, truth_clean)
+            
+            # Word Error Rate (WER) - standard ASR metric
+            def calculate_wer(predicted_words, reference_words):
+                # This is a simplified WER calculation using edit distance on word level
+                if len(reference_words) == 0:
+                    return 1.0 if len(predicted_words) > 0 else 0.0
+                
+                # Calculate word-level edit distance
+                word_lev_dist = levenshtein_distance(predicted_words, reference_words)
+                wer = word_lev_dist / len(reference_words)
+                return min(wer, 1.0)  # Cap at 1.0
+            
+            # Character Error Rate (CER)
+            def calculate_cer(predicted_chars, reference_chars):
+                if len(reference_chars) == 0:
+                    return 1.0 if len(predicted_chars) > 0 else 0.0
+                
+                char_lev_dist = levenshtein_distance(predicted_chars, reference_chars)
+                cer = char_lev_dist / len(reference_chars)
+                return min(cer, 1.0)  # Cap at 1.0
+            
+            wer = calculate_wer(pred_words, truth_words)
+            cer = calculate_cer(pred_clean, truth_clean)
+            
+            # Overall accuracy based on word similarity (most intuitive)
+            accuracy_percentage = word_similarity * 100
+            
+            return {
+                "accuracy_percentage": accuracy_percentage,
+                "word_error_rate": wer,
+                "character_error_rate": cer,
+                "levenshtein_distance": lev_dist,
+                "exact_match": exact_match,
+                "character_similarity": char_similarity * 100,
+                "word_count_predicted": len(pred_words),
+                "word_count_truth": len(truth_words)
+            }
+        
+        accuracy_metrics = calculate_accuracy(predicted_transcript, ground_truth)
+        
+        return {
+            "predicted_transcript": predicted_transcript,
+            "ground_truth": ground_truth,
+            **accuracy_metrics
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in whisper accuracy calculation: {e}")
+        raise HTTPException(status_code=500, detail=f"Accuracy calculation failed: {str(e)}")
 
 
 @router.post("/inferences/wav2vec2-batch")

@@ -24,6 +24,19 @@ interface Wav2Vec2Prediction {
   confidence: number;
 }
 
+interface WhisperPrediction {
+  predicted_transcript: string;
+  ground_truth: string;
+  accuracy_percentage: number;
+  word_error_rate: number;
+  character_error_rate: number;
+  levenshtein_distance: number;
+  exact_match: number;
+  character_similarity: number;
+  word_count_predicted: number;
+  word_count_truth: number;
+}
+
 interface PredictionPanelProps {
   selectedFile?: UploadedFile | null;
   selectedEmbeddingFile?: string | null;
@@ -33,6 +46,7 @@ interface PredictionPanelProps {
 
 export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, dataset }: PredictionPanelProps) => {
   const [wav2vecPrediction, setWav2vecPrediction] = useState<Wav2Vec2Prediction | null>(null);
+  const [whisperPrediction, setWhisperPrediction] = useState<WhisperPrediction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +104,64 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
 
     fetchWav2vecPrediction();
   }, [selectedFile, selectedEmbeddingFile, model, dataset]);
+
+  // Fetch whisper prediction when model includes whisper and file is selected
+  useEffect(() => {
+    const fetchWhisperPrediction = async () => {
+      if (!model?.includes("whisper") || (!selectedFile && !selectedEmbeddingFile)) {
+        setWhisperPrediction(null);
+        setError(null);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        let requestBody: any = {
+          model: model
+        };
+        
+        if (selectedFile) {
+          // Use selectedFile if available
+          if (dataset === "custom") {
+            requestBody.file_path = selectedFile.file_path;
+          } else {
+            requestBody.dataset = dataset;
+            requestBody.dataset_file = selectedFile.filename;
+          }
+        } else if (selectedEmbeddingFile && dataset) {
+          // Use embedding file selection
+          requestBody.dataset = dataset;
+          requestBody.dataset_file = selectedEmbeddingFile;
+        }
+
+        const response = await fetch("http://localhost:8000/inferences/whisper-accuracy", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch whisper prediction: ${response.status}`);
+        }
+
+        const prediction = await response.json();
+        setWhisperPrediction(prediction);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        setError(errorMessage);
+        console.error("Error fetching whisper prediction:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWhisperPrediction();
+  }, [selectedFile, selectedEmbeddingFile, model, dataset]);
+
   return (
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="predictions" className="h-full">
@@ -155,10 +227,15 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">
-                    Classification Results
+                    {model === "wav2vec2" ? "Classification Results" : model?.includes("whisper") ? "Transcription Results" : "Prediction Results"}
                     {model === "wav2vec2" && (
                       <Badge variant="secondary" className="ml-2 text-[10px]">
                         Wav2Vec2 Emotion
+                      </Badge>
+                    )}
+                    {model?.includes("whisper") && (
+                      <Badge variant="secondary" className="ml-2 text-[10px]">
+                        {model.includes("large") ? "Whisper Large" : "Whisper Base"}
                       </Badge>
                     )}
                   </CardTitle>
@@ -198,7 +275,42 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                           </div>
                         );
                       })
-                  ) : model !== "wav2vec2" ? (
+                  ) : model?.includes("whisper") && whisperPrediction && !isLoading ? (
+                    // Display whisper transcription accuracy
+                    <div className="space-y-3">
+                      {/* Accuracy Metrics */}
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                        <div>WER: {whisperPrediction.word_error_rate.toFixed(3)}</div>
+                        <div>CER: {whisperPrediction.character_error_rate.toFixed(3)}</div>
+                        <div>Words P: {whisperPrediction.word_count_predicted}</div>
+                        <div>Words T: {whisperPrediction.word_count_truth}</div>
+                        <div>Accuracy: {whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
+                        <div>Levenshtein: {whisperPrediction.levenshtein_distance}</div>
+                      </div>
+
+                      {/* Predicted Transcript */}
+                      <div className="space-y-1">
+                        <div className="text-xs font-medium flex items-center gap-2">
+                          Predicted
+                          <Badge variant="outline" className="text-[10px] px-1">P</Badge>
+                        </div>
+                        <div className="text-xs p-2 bg-blue-50 rounded border font-mono">
+                          "{whisperPrediction.predicted_transcript}"
+                        </div>
+                      </div>
+
+                      {/* Ground Truth */}
+                      <div className="space-y-1">
+                        <div className="text-xs font-medium flex items-center gap-2">
+                          Ground Truth
+                          <Badge variant="outline" className="text-[10px] px-1">T</Badge>
+                        </div>
+                        <div className="text-xs p-2 bg-green-50 rounded border font-mono">
+                          "{whisperPrediction.ground_truth}"
+                        </div>
+                      </div>
+                    </div>
+                  ) : !model?.includes("whisper") && model !== "wav2vec2" ? (
                     // Display placeholder/mock data for other models
                     [
                       { label: "Neutral", probability: 0.87, isTrue: true, isPredicted: true },
