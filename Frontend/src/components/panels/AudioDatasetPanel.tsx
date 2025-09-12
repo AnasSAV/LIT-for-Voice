@@ -60,6 +60,31 @@ export const AudioDatasetPanel = ({
   const [currentModelDataset, setCurrentModelDataset] = useState<string>("");
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Sync selectedRow when selectedFile changes from external selection (e.g., embeddings)
+  useEffect(() => {
+    if (selectedFile) {
+      // For uploaded files, use file_id
+      if (uploadedFiles.some(f => f.file_id === selectedFile.file_id)) {
+        setSelectedRow(selectedFile.file_id);
+        return;
+      }
+      
+      // For dataset files, find matching row by filename
+      if (datasetMetadata.length > 0) {
+        const matchingRow = datasetMetadata.find(row => {
+          const pathVal = (row["path"] || row["filepath"] || row["file"] || row["filename"]) as string;
+          const filename = pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : String(row["id"]);
+          return filename === selectedFile.filename;
+        });
+        
+        if (matchingRow) {
+          const rowId = String(matchingRow["id"] || matchingRow["path"] || matchingRow["filepath"] || matchingRow["file"] || matchingRow["filename"]);
+          setSelectedRow(rowId);
+        }
+      }
+    }
+  }, [selectedFile, uploadedFiles, datasetMetadata]);
+
   // Stable handlers to prevent downstream re-renders
   const handleRowSelect = useCallback((id: string) => {
     setSelectedRow(id);

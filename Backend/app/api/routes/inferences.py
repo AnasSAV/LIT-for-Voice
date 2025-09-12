@@ -1,11 +1,15 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request
 import inspect
 import asyncio
 import logging
 import hashlib
+import difflib
+import re
+import string
 from pathlib import Path
 from typing import Optional
 import numpy as np
+import pandas as pd
 from app.services.model_loader_service import (
     transcribe_whisper_base,
     transcribe_whisper_large,
@@ -13,11 +17,22 @@ from app.services.model_loader_service import (
     extract_whisper_embeddings,
     extract_wav2vec2_embeddings,
     reduce_dimensions,
+    predict_emotion_wave2vec,
 )
 from app.services.dataset_service import resolve_file
 from app.core.redis import get_result, cache_result
 
 router = APIRouter()
+
+# Define paths
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+UPLOAD_DIR = Path("uploads")
+
+# Dataset directories
+DATASET_DIRS = {
+    "common-voice": DATA_DIR / "common_voice_valid_dev",
+    "ravdess": DATA_DIR / "ravdess_subset",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -157,6 +172,445 @@ async def run_inference(
     logger.info(f"Cached prediction for {resolved_path}")
 
     return prediction
+
+
+@router.post("/inferences/whisper-batch")
+async def batch_whisper_analysis(request: Request):
+    """
+    Get batch whisper transcripts from cache and analyze common terms
+    """
+    try:
+        body = await request.json()
+        filenames = body.get("filenames", [])
+        model = body.get("model", "whisper-base")
+        dataset = body.get("dataset")
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+        
+        if len(filenames) > 50:  # Limit batch size
+            raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
+        
+        # Process each file - try to get from cache first
+        individual_transcripts = []
+        all_words = []
+        cached_count = 0
+        missing_count = 0
+        
+        for filename in filenames:
+            try:
+                # Get file path and create cache key
+                if dataset:
+                    file_path = resolve_file(dataset, filename)
+                else:
+                    file_path = UPLOAD_DIR / filename
+                    if not file_path.exists():
+                        print(f"Warning: File not found: {file_path}")
+                        missing_count += 1
+                        continue
+                
+                # Create cache key (same as used in regular inference)
+                file_content_hash = hashlib.md5(str(file_path).encode()).hexdigest()
+                cache_key = f"{model}_{file_content_hash}"
+                
+                # Try to get from cache first
+                cached_result = await get_result(model, cache_key)
+                
+                transcript = None
+                if cached_result is not None:
+                    # Extract transcript from cached result
+                    if isinstance(cached_result, dict):
+                        transcript = cached_result.get("prediction", cached_result.get("transcript"))
+                    else:
+                        transcript = cached_result
+                    cached_count += 1
+                else:
+                    # Not in cache - skip this file for now
+                    print(f"No cached transcript found for {filename}")
+                    missing_count += 1
+                    continue
+                
+                if transcript:
+                    # Clean and tokenize transcript
+                    words = transcript.lower().split()
+                    # Remove common stop words and punctuation
+                    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'}
+                    filtered_words = [word.strip('.,!?";:()[]{}').lower() for word in words if word.strip('.,!?";:()[]{}').lower() not in stop_words and len(word.strip('.,!?";:()[]{}')) > 2]
+                    
+                    individual_transcripts.append({
+                        "filename": filename,
+                        "transcript": transcript,
+                        "word_count": len(words)
+                    })
+                    
+                    all_words.extend(filtered_words)
+                    
+            except Exception as file_error:
+                print(f"Error processing {filename}: {file_error}")
+                missing_count += 1
+                continue
+        
+        if not individual_transcripts:
+            raise HTTPException(status_code=404, detail=f"No cached transcripts found for the selected files. Found {cached_count} cached, {missing_count} missing. Please run inference on these files first.")
+        
+        # Calculate word frequency
+        from collections import Counter
+        word_counts = Counter(all_words)
+        total_words = len(all_words)
+        
+        # Get top terms with percentages
+        common_terms = []
+        for word, count in word_counts.most_common(10):  # Get top 10, frontend will show top 5
+            percentage = (count / total_words) * 100
+            common_terms.append({
+                "term": word,
+                "count": count,
+                "percentage": percentage
+            })
+        
+        return {
+            "common_terms": common_terms,
+            "individual_transcripts": individual_transcripts,
+            "summary": {
+                "total_files": len(individual_transcripts),
+                "total_words": total_words,
+                "unique_words": len(word_counts),
+                "avg_words_per_file": sum(t["word_count"] for t in individual_transcripts) / len(individual_transcripts)
+            },
+            "cache_info": {
+                "cached_count": cached_count,
+                "missing_count": missing_count,
+                "cache_hit_rate": cached_count / len(filenames) if filenames else 0
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in batch whisper analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
+
+
+@router.post("/inferences/whisper-accuracy")
+async def get_whisper_accuracy(request: Request):
+    """
+    Get whisper prediction from cache and compare with ground truth
+    """
+    try:
+        body = await request.json()
+        model = body.get("model", "whisper-base")
+        dataset = body.get("dataset")
+        dataset_file = body.get("dataset_file")
+        file_path = body.get("file_path")
+        
+        if not dataset_file and not file_path:
+            raise HTTPException(status_code=400, detail="Either dataset_file or file_path must be provided")
+        
+        # Get file path
+        if file_path:
+            resolved_path = Path(file_path)
+        else:
+            resolved_path = resolve_file(dataset, dataset_file)
+        
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail="Audio file not found")
+        
+        # Create cache key and get cached prediction
+        file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+        cache_key = f"{model}_{file_content_hash}"
+        
+        cached_result = await get_result(model, cache_key)
+        
+        print(f"DEBUG: Looking for cache key: {cache_key}")
+        print(f"DEBUG: Cached result found: {cached_result is not None}")
+        
+        if cached_result is None:
+            raise HTTPException(status_code=404, detail=f"No cached prediction found for {dataset_file}. Please run inference first. Cache key: {cache_key}")
+        
+        # Extract transcript from cached result
+        if isinstance(cached_result, dict):
+            predicted_transcript = cached_result.get("prediction", cached_result.get("transcript", ""))
+        else:
+            predicted_transcript = str(cached_result)
+        
+        # Get ground truth from dataset metadata
+        ground_truth = ""
+        if dataset and dataset_file:
+            # Load dataset metadata
+            if dataset == "common-voice":
+                metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
+            elif dataset == "ravdess":
+                metadata_path = DATA_DIR / "ravdess_subset" / "metadata.csv"
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
+            
+            if metadata_path.exists():
+                df = pd.read_csv(metadata_path)
+                # Find the row for this file
+                # Try both with and without path prefix
+                file_rows = df[df['filename'] == dataset_file]
+                if file_rows.empty:
+                    # Try with path prefix for common-voice
+                    if dataset == "common-voice":
+                        file_rows = df[df['filename'] == f"cv-valid-dev/{dataset_file}"]
+                
+                if not file_rows.empty:
+                    # Try different column names for transcript/text
+                    for col in ['text', 'transcript', 'sentence', 'label']:
+                        if col in df.columns:
+                            ground_truth = str(file_rows.iloc[0][col])
+                            break
+        
+        if not ground_truth:
+            # More specific error message for debugging
+            error_msg = f"Ground truth not found in dataset metadata. Dataset: {dataset}, File: {dataset_file}"
+            if dataset and dataset_file:
+                metadata_path = DATA_DIR / f"{dataset}_valid_dev" / f"{dataset}_valid_data_metadata.csv" if dataset == "common-voice" else DATA_DIR / f"{dataset}_subset" / "metadata.csv"
+                error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
+            print(f"DEBUG: {error_msg}")
+            raise HTTPException(status_code=404, detail=error_msg)
+        
+        # Calculate accuracy metrics
+        def calculate_accuracy(predicted, ground_truth):
+            # Clean and normalize both strings
+            def clean_text(text):
+                # Convert to lowercase
+                text = text.lower()
+                # Remove punctuation
+                text = text.translate(str.maketrans('', '', string.punctuation))
+                # Remove extra whitespace and normalize
+                text = re.sub(r'\s+', ' ', text).strip()
+                return text
+            
+            pred_clean = clean_text(predicted)
+            truth_clean = clean_text(ground_truth)
+            
+            print(f"DEBUG: Predicted clean: '{pred_clean}'")
+            print(f"DEBUG: Truth clean: '{truth_clean}'")
+            
+            # Split into words for word-based metrics
+            pred_words = pred_clean.split()
+            truth_words = truth_clean.split()
+            
+            # Character-based similarity (after cleaning)
+            char_similarity = difflib.SequenceMatcher(None, pred_clean, truth_clean).ratio()
+            
+            # Word-based similarity (after cleaning)
+            word_similarity = difflib.SequenceMatcher(None, pred_words, truth_words).ratio()
+            
+            # Exact match accuracy
+            exact_match = 1.0 if pred_clean == truth_clean else 0.0
+            
+            # Levenshtein distance (character-level)
+            def levenshtein_distance(s1, s2):
+                if len(s1) < len(s2):
+                    return levenshtein_distance(s2, s1)
+                if len(s2) == 0:
+                    return len(s1)
+                
+                previous_row = list(range(len(s2) + 1))
+                for i, c1 in enumerate(s1):
+                    current_row = [i + 1]
+                    for j, c2 in enumerate(s2):
+                        insertions = previous_row[j + 1] + 1
+                        deletions = current_row[j] + 1
+                        substitutions = previous_row[j] + (c1 != c2)
+                        current_row.append(min(insertions, deletions, substitutions))
+                    previous_row = current_row
+                
+                return previous_row[-1]
+            
+            lev_dist = levenshtein_distance(pred_clean, truth_clean)
+            
+            # Word Error Rate (WER) - standard ASR metric
+            def calculate_wer(predicted_words, reference_words):
+                # This is a simplified WER calculation using edit distance on word level
+                if len(reference_words) == 0:
+                    return 1.0 if len(predicted_words) > 0 else 0.0
+                
+                # Calculate word-level edit distance
+                word_lev_dist = levenshtein_distance(predicted_words, reference_words)
+                wer = word_lev_dist / len(reference_words)
+                return min(wer, 1.0)  # Cap at 1.0
+            
+            # Character Error Rate (CER)
+            def calculate_cer(predicted_chars, reference_chars):
+                if len(reference_chars) == 0:
+                    return 1.0 if len(predicted_chars) > 0 else 0.0
+                
+                char_lev_dist = levenshtein_distance(predicted_chars, reference_chars)
+                cer = char_lev_dist / len(reference_chars)
+                return min(cer, 1.0)  # Cap at 1.0
+            
+            wer = calculate_wer(pred_words, truth_words)
+            cer = calculate_cer(pred_clean, truth_clean)
+            
+            # Overall accuracy based on word similarity (most intuitive)
+            accuracy_percentage = word_similarity * 100
+            
+            return {
+                "accuracy_percentage": accuracy_percentage,
+                "word_error_rate": wer,
+                "character_error_rate": cer,
+                "levenshtein_distance": lev_dist,
+                "exact_match": exact_match,
+                "character_similarity": char_similarity * 100,
+                "word_count_predicted": len(pred_words),
+                "word_count_truth": len(truth_words)
+            }
+        
+        accuracy_metrics = calculate_accuracy(predicted_transcript, ground_truth)
+        
+        return {
+            "predicted_transcript": predicted_transcript,
+            "ground_truth": ground_truth,
+            **accuracy_metrics
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in whisper accuracy calculation: {e}")
+        raise HTTPException(status_code=500, detail=f"Accuracy calculation failed: {str(e)}")
+
+
+@router.post("/inferences/wav2vec2-batch")
+async def batch_wav2vec2_prediction(request: Request):
+    """
+    Get batch wav2vec2 predictions for multiple files and calculate aggregated probabilities
+    """
+    try:
+        body = await request.json()
+        filenames = body.get("filenames", [])
+        dataset = body.get("dataset")
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+        
+        if len(filenames) > 50:  # Limit batch size
+            raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
+        
+        # Process each file
+        individual_predictions = []
+        predicted_emotions = []  # Store just the predicted emotions for distribution
+        
+        for filename in filenames:
+            try:
+                # Load and predict for each file
+                if dataset:
+                    file_path = resolve_file(dataset, filename)
+                else:
+                    file_path = UPLOAD_DIR / filename
+                    if not file_path.exists():
+                        print(f"Warning: File not found: {file_path}")
+                        continue
+                
+                # Get detailed prediction
+                result = predict_emotion_wave2vec(str(file_path))
+                
+                individual_predictions.append({
+                    "filename": filename,
+                    "predicted_emotion": result["predicted_emotion"],
+                    "probabilities": result["probabilities"], 
+                    "confidence": result["confidence"]
+                })
+                
+                # Store the predicted emotion for distribution calculation
+                predicted_emotions.append(result["predicted_emotion"])
+                    
+            except Exception as file_error:
+                print(f"Error processing {filename}: {file_error}")
+                continue
+        
+        if not individual_predictions:
+            raise HTTPException(status_code=404, detail="No valid files could be processed")
+        
+        # Calculate emotion distribution (percentage of files predicted as each emotion)
+        emotion_counts = {}
+        for emotion in predicted_emotions:
+            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+        
+        total_files = len(predicted_emotions)
+        emotion_distribution = {}
+        for emotion, count in emotion_counts.items():
+            emotion_distribution[emotion] = count / total_files
+        
+        # Find dominant emotion (most frequent prediction)
+        dominant_emotion = max(emotion_counts.items(), key=lambda x: x[1])
+        
+        return {
+            "emotion_distribution": emotion_distribution,  # Percentage of files predicted as each emotion
+            "emotion_counts": emotion_counts,  # Raw counts
+            "individual_predictions": individual_predictions,
+            "summary": {
+                "total_files": total_files,
+                "dominant_emotion": dominant_emotion[0],
+                "dominant_count": dominant_emotion[1],
+                "dominant_percentage": dominant_emotion[1] / total_files
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in batch wav2vec2 prediction: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch prediction failed: {str(e)}")
+
+
+@router.post("/inferences/wav2vec2-detailed")
+async def get_wav2vec2_detailed_prediction(
+    request: dict = Body(..., example={
+        "file_path": "/path/to/audio.wav",
+        "dataset": "common-voice", 
+        "dataset_file": "sample-001.mp3"
+    })
+):
+    """Get detailed wav2vec2 prediction with probabilities for all emotions"""
+    file_path = request.get("file_path")
+    dataset = request.get("dataset")
+    dataset_file = request.get("dataset_file")
+    
+    # Resolve file path
+    resolved_path = None
+    if file_path:
+        resolved_path = Path(file_path)
+    elif dataset and dataset_file:
+        try:
+            resolved_path = resolve_file(dataset, dataset_file)
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing audio reference. Provide either 'file_path' or 'dataset' + 'dataset_file'."
+        )
+    
+    if not resolved_path.exists():
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
+    
+    # Create cache key for detailed predictions
+    file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+    cache_key = f"wav2vec2_detailed_{file_content_hash}"
+    
+    # Check if result is cached
+    cached_result = await get_result("wav2vec2", cache_key)
+    if cached_result is not None:
+        logger.info(f"Returning cached detailed wav2vec2 result for {resolved_path}")
+        return cached_result.get("prediction", cached_result)
+    
+    # Get detailed prediction with probabilities
+    try:
+        detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
+        
+        # Cache the detailed result
+        await cache_result("wav2vec2", cache_key, {"prediction": detailed_result}, ttl=6*60*60)
+        logger.info(f"Cached detailed wav2vec2 prediction for {resolved_path}")
+        
+        return detailed_result
+        
+    except Exception as e:
+        logger.error(f"Error getting detailed wav2vec2 prediction: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @router.post("/inferences/embeddings")

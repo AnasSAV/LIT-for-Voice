@@ -3,6 +3,9 @@
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
 .logo {
@@ -35,8 +38,12 @@
 
 .card {
   padding: 2em;
+  font-size: 1.1rem;
+  line-height: 1.6;
 }
 
 .read-the-docs {
   color: #888;
+  font-size: 0.95rem;
+  font-weight: 400;
 }

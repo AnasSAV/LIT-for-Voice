@@ -72,13 +72,47 @@ def predict_emotion_wave2vec(audio_path):
         probs = torch.nn.functional.softmax(logits, dim=-1)
         pred = torch.argmax(probs, dim=-1)
         label_idx = int(pred.item())
-        # Map to label; fall back safely if out-of-range
-        emotion = emo_model.config.id2label.get(label_idx, str(label_idx)) if isinstance(emo_model.config.id2label, dict) else str(label_idx)
-        logger.debug("Emotion logits shape=%s, predicted=%s, label=%s", tuple(logits.shape), label_idx, emotion)
-    return emotion
+        
+        # Get all emotion labels and their probabilities
+        id2label = emo_model.config.id2label if isinstance(emo_model.config.id2label, dict) else {}
+        emotion_probs = {}
+        
+        for i, prob in enumerate(probs[0]):
+            emotion_label = id2label.get(i, f"emotion_{i}")
+            emotion_probs[emotion_label] = float(prob.item())
+        
+        # Get the predicted emotion
+        predicted_emotion = id2label.get(label_idx, str(label_idx))
+        
+        # Return both the prediction and all probabilities
+        result = {
+            "predicted_emotion": predicted_emotion,
+            "probabilities": emotion_probs,
+            "confidence": float(probs[0][label_idx].item())
+        }
+        
+        logger.debug("Emotion logits shape=%s, predicted=%s, label=%s", tuple(logits.shape), label_idx, predicted_emotion)
+    return result
 
-def wave2vec(audio_file_path: str) -> str:
-    return predict_emotion_wave2vec(audio_file_path)
+def wave2vec(audio_file_path: str, return_probabilities: bool = False):
+    """
+    Predict emotion using wav2vec2 model.
+    
+    Args:
+        audio_file_path: Path to the audio file
+        return_probabilities: If True, returns detailed results with probabilities
+    
+    Returns:
+        If return_probabilities=False: str (emotion label for backward compatibility)
+        If return_probabilities=True: dict with prediction and probabilities
+    """
+    result = predict_emotion_wave2vec(audio_file_path)
+    
+    if return_probabilities:
+        return result
+    else:
+        # Backward compatibility - return just the emotion string
+        return result["predicted_emotion"]
 
 
 # Whisper embeddings - Load models for embedding extraction
