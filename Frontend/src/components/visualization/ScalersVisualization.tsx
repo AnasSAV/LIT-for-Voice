@@ -13,7 +13,8 @@ interface ScalersVisualizationProps {
 }
 
 interface Wav2Vec2BatchPrediction {
-  aggregated_probabilities: Record<string, number>;
+  emotion_distribution: Record<string, number>;  // Percentage of files predicted as each emotion
+  emotion_counts: Record<string, number>;        // Raw counts for each emotion
   individual_predictions: Array<{
     filename: string;
     predicted_emotion: string;
@@ -23,7 +24,8 @@ interface Wav2Vec2BatchPrediction {
   summary: {
     total_files: number;
     dominant_emotion: string;
-    dominant_confidence: number;
+    dominant_count: number;
+    dominant_percentage: number;
   };
 }
 
@@ -203,16 +205,6 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
     <div className="h-full flex flex-col space-y-3">
       {/* Controls */}
       <div className="flex flex-wrap gap-2 items-center text-xs">
-        <Select value={reductionMethod} onValueChange={setReductionMethod}>
-          <SelectTrigger className="w-24 h-7">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pca">PCA</SelectItem>
-            <SelectItem value="umap">UMAP</SelectItem>
-            <SelectItem value="tsne">t-SNE</SelectItem>
-          </SelectContent>
-        </Select>
         
         <Select value={selectionMode} onValueChange={(value: "box" | "lasso") => setSelectionMode(value)}>
           <SelectTrigger className="w-20 h-7">
@@ -278,25 +270,25 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                           {batchPrediction.summary.dominant_emotion}
                         </Badge>
                         <span className="text-xs text-gray-600">
-                          {(batchPrediction.summary.dominant_confidence * 100).toFixed(1)}%
+                          {(batchPrediction.summary.dominant_percentage * 100).toFixed(1)}%
                         </span>
                       </div>
                     </div>
 
-                    {/* Aggregated Probabilities */}
+                    {/* Emotion Distribution */}
                     <div className="space-y-2">
-                      <div className="text-xs font-medium">Combined Probabilities</div>
+                      <div className="text-xs font-medium">Emotion Distribution</div>
                       <div className="space-y-1">
-                        {Object.entries(batchPrediction.aggregated_probabilities)
+                        {Object.entries(batchPrediction.emotion_distribution)
                           .sort(([,a], [,b]) => b - a)
-                          .map(([emotion, probability]) => (
+                          .map(([emotion, percentage]) => (
                             <div key={emotion} className="space-y-1">
                               <div className="flex justify-between text-xs">
                                 <span className="capitalize">{emotion}</span>
-                                <span>{(probability * 100).toFixed(1)}%</span>
+                                <span>{(percentage * 100).toFixed(1)}% ({batchPrediction.emotion_counts[emotion]} files)</span>
                               </div>
                               <Progress 
-                                value={probability * 100} 
+                                value={percentage * 100} 
                                 className="h-1"
                               />
                             </div>

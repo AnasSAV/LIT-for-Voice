@@ -188,7 +188,7 @@ async def batch_wav2vec2_prediction(request: Request):
         
         # Process each file
         individual_predictions = []
-        all_probabilities = {}
+        predicted_emotions = []  # Store just the predicted emotions for distribution
         
         for filename in filenames:
             try:
@@ -211,11 +211,8 @@ async def batch_wav2vec2_prediction(request: Request):
                     "confidence": result["confidence"]
                 })
                 
-                # Accumulate probabilities for aggregation
-                for emotion, prob in result["probabilities"].items():
-                    if emotion not in all_probabilities:
-                        all_probabilities[emotion] = []
-                    all_probabilities[emotion].append(prob)
+                # Store the predicted emotion for distribution calculation
+                predicted_emotions.append(result["predicted_emotion"])
                     
             except Exception as file_error:
                 print(f"Error processing {filename}: {file_error}")
@@ -224,21 +221,28 @@ async def batch_wav2vec2_prediction(request: Request):
         if not individual_predictions:
             raise HTTPException(status_code=404, detail="No valid files could be processed")
         
-        # Calculate aggregated probabilities (mean across all files)
-        aggregated_probabilities = {}
-        for emotion, probs in all_probabilities.items():
-            aggregated_probabilities[emotion] = sum(probs) / len(probs)
+        # Calculate emotion distribution (percentage of files predicted as each emotion)
+        emotion_counts = {}
+        for emotion in predicted_emotions:
+            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
         
-        # Find dominant emotion
-        dominant_emotion = max(aggregated_probabilities.items(), key=lambda x: x[1])
+        total_files = len(predicted_emotions)
+        emotion_distribution = {}
+        for emotion, count in emotion_counts.items():
+            emotion_distribution[emotion] = count / total_files
+        
+        # Find dominant emotion (most frequent prediction)
+        dominant_emotion = max(emotion_counts.items(), key=lambda x: x[1])
         
         return {
-            "aggregated_probabilities": aggregated_probabilities,
+            "emotion_distribution": emotion_distribution,  # Percentage of files predicted as each emotion
+            "emotion_counts": emotion_counts,  # Raw counts
             "individual_predictions": individual_predictions,
             "summary": {
-                "total_files": len(individual_predictions),
+                "total_files": total_files,
                 "dominant_emotion": dominant_emotion[0],
-                "dominant_confidence": dominant_emotion[1]
+                "dominant_count": dominant_emotion[1],
+                "dominant_percentage": dominant_emotion[1] / total_files
             }
         }
         
