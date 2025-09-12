@@ -170,6 +170,101 @@ async def run_inference(
     return prediction
 
 
+@router.post("/inferences/whisper-batch")
+async def batch_whisper_analysis(request: Request):
+    """
+    Get batch whisper transcripts and analyze common terms
+    """
+    try:
+        body = await request.json()
+        filenames = body.get("filenames", [])
+        model = body.get("model", "whisper-base")
+        dataset = body.get("dataset")
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+        
+        if len(filenames) > 50:  # Limit batch size
+            raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
+        
+        # Select transcription function based on model
+        if model == "whisper-large":
+            transcribe_func = transcribe_whisper_large
+        else:
+            transcribe_func = transcribe_whisper_base
+        
+        # Process each file
+        individual_transcripts = []
+        all_words = []
+        
+        for filename in filenames:
+            try:
+                # Get file path using resolve_file
+                if dataset:
+                    file_path = resolve_file(dataset, filename)
+                else:
+                    file_path = UPLOAD_DIR / filename
+                    if not file_path.exists():
+                        print(f"Warning: File not found: {file_path}")
+                        continue
+                
+                # Get transcript
+                transcript = transcribe_func(str(file_path))
+                
+                # Clean and tokenize transcript
+                words = transcript.lower().split()
+                # Remove common stop words and punctuation
+                stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'}
+                filtered_words = [word.strip('.,!?";:()[]{}').lower() for word in words if word.strip('.,!?";:()[]{}').lower() not in stop_words and len(word.strip('.,!?";:()[]{}')) > 2]
+                
+                individual_transcripts.append({
+                    "filename": filename,
+                    "transcript": transcript,
+                    "word_count": len(words)
+                })
+                
+                all_words.extend(filtered_words)
+                    
+            except Exception as file_error:
+                print(f"Error processing {filename}: {file_error}")
+                continue
+        
+        if not individual_transcripts:
+            raise HTTPException(status_code=404, detail="No valid files could be processed")
+        
+        # Calculate word frequency
+        from collections import Counter
+        word_counts = Counter(all_words)
+        total_words = len(all_words)
+        
+        # Get top terms with percentages
+        common_terms = []
+        for word, count in word_counts.most_common(10):  # Get top 10, frontend will show top 5
+            percentage = (count / total_words) * 100
+            common_terms.append({
+                "term": word,
+                "count": count,
+                "percentage": percentage
+            })
+        
+        return {
+            "common_terms": common_terms,
+            "individual_transcripts": individual_transcripts,
+            "summary": {
+                "total_files": len(individual_transcripts),
+                "total_words": total_words,
+                "unique_words": len(word_counts),
+                "avg_words_per_file": sum(t["word_count"] for t in individual_transcripts) / len(individual_transcripts)
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in batch whisper analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
+
+
 @router.post("/inferences/wav2vec2-batch")
 async def batch_wav2vec2_prediction(request: Request):
     """

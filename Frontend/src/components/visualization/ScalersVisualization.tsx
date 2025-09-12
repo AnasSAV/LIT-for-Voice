@@ -29,10 +29,30 @@ interface Wav2Vec2BatchPrediction {
   };
 }
 
+interface WhisperBatchAnalysis {
+  common_terms: Array<{
+    term: string;
+    count: number;
+    percentage: number;
+  }>;
+  individual_transcripts: Array<{
+    filename: string;
+    transcript: string;
+    word_count: number;
+  }>;
+  summary: {
+    total_files: number;
+    total_words: number;
+    unique_words: number;
+    avg_words_per_file: number;
+  };
+}
+
 export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationProps) => {
   const { embeddingData, isLoading, error } = useEmbedding();
   const [selectedPoints, setSelectedPoints] = useState<string[]>([]);
   const [batchPrediction, setBatchPrediction] = useState<Wav2Vec2BatchPrediction | null>(null);
+  const [whisperAnalysis, setWhisperAnalysis] = useState<WhisperBatchAnalysis | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
   const [reductionMethod, setReductionMethod] = useState("pca");
@@ -64,6 +84,50 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
   const clearSelection = () => {
     setSelectedPoints([]);
     setBatchPrediction(null);
+    setWhisperAnalysis(null);
+  };
+
+  // Fetch whisper batch analysis for selected points
+  const fetchWhisperAnalysis = async () => {
+    if (selectedPoints.length === 0 || !model?.includes('whisper')) return;
+
+    setPredictionLoading(true);
+    setPredictionError(null);
+    try {
+      const requestBody: any = {
+        filenames: selectedPoints,
+        model: model,
+      };
+
+      if (dataset) {
+        requestBody.dataset = dataset;
+      }
+
+      console.log('Fetching whisper analysis for:', requestBody);
+
+      const response = await fetch("http://localhost:8000/inferences/whisper-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Whisper analysis error:', response.status, errorText);
+        throw new Error(`Failed to fetch whisper analysis: ${response.status} - ${errorText}`);
+      }
+
+      const analysis = await response.json();
+      setWhisperAnalysis(analysis);
+    } catch (error) {
+      console.error("Error fetching whisper analysis:", error);
+      setPredictionError(error instanceof Error ? error.message : 'Unknown error occurred');
+      setWhisperAnalysis(null);
+    } finally {
+      setPredictionLoading(false);
+    }
   };
 
   // Fetch batch predictions for selected points
@@ -111,7 +175,11 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
   // Auto-fetch predictions when selection changes
   useEffect(() => {
     if (selectedPoints.length > 0) {
-      fetchBatchPredictions();
+      if (model === 'wav2vec2') {
+        fetchBatchPredictions();
+      } else if (model?.includes('whisper')) {
+        fetchWhisperAnalysis();
+      }
     }
   }, [selectedPoints, model, dataset]);
 
@@ -323,11 +391,86 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
             </Card>
           )}
 
-          {model !== 'wav2vec2' && selectedPoints.length > 0 && (
+          {model?.includes('whisper') && selectedPoints.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">
+                  Transcript Analysis ({selectedPoints.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {predictionLoading ? (
+                  <div className="text-xs text-gray-600">Loading transcript analysis...</div>
+                ) : predictionError ? (
+                  <div className="text-xs text-red-600">
+                    <div className="font-medium">Error loading analysis:</div>
+                    <div className="mt-1">{predictionError}</div>
+                    <div className="mt-2 text-gray-600">
+                      Make sure the backend server is running and the whisper-batch endpoint is available.
+                    </div>
+                  </div>
+                ) : whisperAnalysis ? (
+                  <>
+                    {/* Summary */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Summary</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                        <div>Total Words: {whisperAnalysis.summary.total_words}</div>
+                        <div>Unique Words: {whisperAnalysis.summary.unique_words}</div>
+                        <div>Avg/File: {whisperAnalysis.summary.avg_words_per_file.toFixed(1)}</div>
+                        <div>Files: {whisperAnalysis.summary.total_files}</div>
+                      </div>
+                    </div>
+
+                    {/* Top Common Terms */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Top 5 Common Terms</div>
+                      <div className="space-y-1">
+                        {whisperAnalysis.common_terms.slice(0, 5).map((term, index) => (
+                          <div key={index} className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="font-mono text-blue-700">"{term.term}"</span>
+                              <span>{term.percentage.toFixed(1)}% ({term.count}x)</span>
+                            </div>
+                            <Progress 
+                              value={term.percentage} 
+                              className="h-1"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Individual Transcripts */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Individual Transcripts</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {whisperAnalysis.individual_transcripts.map((transcript, index) => (
+                          <div key={index} className="text-xs p-2 bg-gray-50 rounded border">
+                            <div className="font-mono text-blue-700 truncate">
+                              {transcript.filename}
+                            </div>
+                            <div className="text-gray-600 mt-1 text-xs">
+                              {transcript.word_count} words
+                            </div>
+                            <div className="text-gray-800 mt-1 text-xs italic line-clamp-2">
+                              "{transcript.transcript}"
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
+
+          {!model?.includes('whisper') && model !== 'wav2vec2' && selectedPoints.length > 0 && (
             <Card>
               <CardContent className="pt-6">
                 <div className="text-xs text-gray-600 text-center">
-                  Batch analysis is currently only available for wav2vec2 model.
+                  Batch analysis is available for wav2vec2 (emotions) and whisper (transcripts) models.
                   <div className="mt-2">
                     Selected files: {selectedPoints.length}
                   </div>
