@@ -247,7 +247,8 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
           
           if (isUploadedFile) {
-            const predictionText = typeof prediction === 'string' ? prediction : prediction?.prediction || prediction?.emotion || JSON.stringify(prediction);
+            const predictionText = typeof prediction === 'string' ? prediction : 
+              prediction?.predicted_emotion || prediction?.prediction || prediction?.emotion || JSON.stringify(prediction);
             console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Wav2Vec2:", selectedFile.file_id, predictionText);
             onPredictionUpdate(selectedFile.file_id, predictionText);
           }
