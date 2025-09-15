@@ -1,4 +1,3 @@
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -477,46 +476,46 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                   )}
                   
                   {model === "wav2vec2" && wav2vecPrediction && !isLoading ? (
-                    // Display wav2vec2 emotion predictions with comparison
+                    // Display wav2vec2 emotion predictions with comparison in two columns
                     <div className="space-y-3">
-                      {/* Original Prediction */}
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium flex items-center gap-2">
-                          Original Audio
-                          <Badge variant="outline" className="text-[10px]">O</Badge>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Original Prediction */}
+                        <div className="space-y-2 border-r md:border-r border-gray-200 pr-2">
+                          <div className="text-xs font-medium flex items-center gap-2">
+                            Original Audio
+                            <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Original</span>
+                          </div>
+                          {Object.entries(wav2vecPrediction.probabilities)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([emotion, probability]) => {
+                              const isPredicted = emotion === wav2vecPrediction.predicted_emotion;
+                              return (
+                                <div key={emotion} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="capitalize">{emotion}</span>
+                                    {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-1 max-w-[120px]">
+                                    <Progress value={probability * 100} className="h-2" />
+                                    <span className="text-muted-foreground min-w-[2rem]">
+                                      {(probability * 100).toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
                         </div>
-                        {Object.entries(wav2vecPrediction.probabilities)
-                          .sort(([,a], [,b]) => b - a)
-                          .map(([emotion, probability]) => {
-                            const isPredicted = emotion === wav2vecPrediction.predicted_emotion;
-                            return (
-                              <div key={emotion} className="flex items-center justify-between text-xs">
-                                <div className="flex items-center gap-2">
-                                  <span className="capitalize">{emotion}</span>
-                                  {isPredicted && <Badge variant="default" className="text-[10px] px-1">P</Badge>}
-                                </div>
-                                <div className="flex items-center gap-2 flex-1 max-w-[120px]">
-                                  <Progress value={probability * 100} className="h-2" />
-                                  <span className="text-muted-foreground min-w-[2rem]">
-                                    {(probability * 100).toFixed(1)}%
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
 
-                      {/* Perturbed Prediction */}
-                      {perturbedPredictions && (
-                        <div className="space-y-2 border-t pt-3">
+                        {/* Perturbed Prediction */}
+                        <div className="space-y-2 pl-2">
                           <div className="text-xs font-medium flex items-center gap-2">
                             Perturbed Audio
-                            <Badge variant="secondary" className="text-[10px]">P</Badge>
+                            <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Perturbed</span>
                             {isLoadingPerturbed && (
-                              <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                              <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
                             )}
                           </div>
-                          {!isLoadingPerturbed && Object.entries((perturbedPredictions as Wav2Vec2Prediction).probabilities)
+                          {!isLoadingPerturbed && perturbedPredictions && Object.entries((perturbedPredictions as Wav2Vec2Prediction).probabilities)
                             .sort(([,a], [,b]) => b - a)
                             .map(([emotion, probability]) => {
                               const isPredicted = emotion === (perturbedPredictions as Wav2Vec2Prediction).predicted_emotion;
@@ -526,7 +525,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                                 <div key={emotion} className="flex items-center justify-between text-xs">
                                   <div className="flex items-center gap-2">
                                     <span className="capitalize">{emotion}</span>
-                                    {isPredicted && <Badge variant="secondary" className="text-[10px] px-1">P</Badge>}
+                                    {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
                                   </div>
                                   <div className="flex items-center gap-2 flex-1 max-w-[120px]">
                                     <Progress value={probability * 100} className="h-2" />
@@ -543,7 +542,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                               );
                             })}
                         </div>
-                      )}
+                      </div>
                     </div>
                   ) : model?.includes("whisper") && whisperPrediction && !isLoading ? (
                     // Display whisper transcription accuracy with comparison
