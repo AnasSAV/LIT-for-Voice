@@ -95,8 +95,17 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
     setIsLoading(true);
     setError(null);
     
-    // First, test if the URL is accessible
-    fetch(audioUrl, { method: 'HEAD' })
+    // First, test if the URL is accessible with proper credentials for cross-origin
+    const fetchOptions: RequestInit = { 
+      method: 'HEAD',
+      credentials: 'include',  // Include credentials for CORS
+      mode: 'cors',           // Explicit CORS mode
+      headers: {
+        'Accept': 'audio/*',
+      }
+    };
+    
+    fetch(audioUrl, fetchOptions)
       .then(response => {
         console.log('Audio URL HEAD response:', response.status, response.statusText);
         if (!response.ok) {
@@ -108,7 +117,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
           wavesurferRef.current?.load(audioUrl);
         } catch (err) {
           console.error('WaveSurfer load error:', err);
-          setError(`WaveSurfer failed to load: ${err.message}`);
+          setError(`WaveSurfer failed to load: ${err?.message || 'Unknown error'}`);
           setIsLoading(false);
         }
       })
@@ -118,7 +127,16 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
         setIsLoading(false);
         
         // Try with GET request as fallback
-        fetch(audioUrl, { method: 'GET' })
+        const getFallbackOptions: RequestInit = {
+          method: 'GET',
+          credentials: 'include',
+          mode: 'cors',
+          headers: {
+            'Accept': 'audio/*',
+          }
+        };
+        
+        fetch(audioUrl, getFallbackOptions)
           .then(response => {
             console.log('Audio URL GET fallback response:', response.status);
             if (response.ok) {
@@ -126,8 +144,8 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
               // Try loading anyway
               try {
                 wavesurferRef.current?.load(audioUrl);
-              } catch (wsErr) {
-                setError(`WaveSurfer error: ${wsErr.message}`);
+              } catch (wsErr: any) {
+                setError(`WaveSurfer error: ${wsErr?.message || 'Unknown error'}`);
               }
             }
           })

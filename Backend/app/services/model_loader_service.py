@@ -146,8 +146,16 @@ def get_whisper_large_models():
         
         # Load processor and model with optimizations
         _whisper_processor_large = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        _whisper_model_large = WhisperModel.from_pretrained("openai/whisper-large-v3")
-        _whisper_model_large = _whisper_model_large.to(device)
+        _whisper_model_large = WhisperModel.from_pretrained(
+            "openai/whisper-large-v3",
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None
+        )
+        
+        # Use to_empty() for models loaded with device_map to avoid meta tensor issues
+        if not torch.cuda.is_available() or device == "cpu":
+            # Only use .to() for CPU or when device_map is not used
+            _whisper_model_large = _whisper_model_large.to(device)
     return _whisper_processor_large, _whisper_model_large
 
 def extract_whisper_embeddings(audio_file_path: str, model_size: str = "base") -> np.ndarray:
