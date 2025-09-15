@@ -52,17 +52,30 @@ interface AudioDataTableProps {
 
 export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData, model, dataset, datasetMetadata, uploadedFiles, onFilePlay, predictionMap, inferenceStatus, onVisibleRowIdsChange }: AudioDataTableProps) => {
   // Branch: dataset mode vs custom uploads
-  const isDatasetMode = dataset !== "custom" && (datasetMetadata?.length || 0) > 0;
+  const hasDatasetMetadata = (datasetMetadata?.length || 0) > 0;
+  const hasUploadedFiles = uploadedFiles && uploadedFiles.length > 0;
+
+  // Dataset metadata data and columns
+  type DatasetRow = Record<string, string | number | null | undefined>;
+  const datasetRows: DatasetRow[] = useMemo(() => datasetMetadata ?? [], [datasetMetadata]);
+
+  const getFrom = useCallback((row: DatasetRow, keys: string[], fallback = ""): string => {
+    for (const k of keys) {
+      const v = row[k];
+      if (v !== undefined && v !== null && String(v).length > 0) return String(v);
+    }
+    return fallback;
+  }, []);
 
   // Custom uploads data and columns
   const customTableData: AudioData[] = useMemo(() => (
     uploadedFiles?.map(file => ({
       id: file.file_id,
       filename: file.filename,
-      prediction: file.prediction,
+      prediction: file.prediction || "",
       groundTruthLabel: "",
       confidence: 0,
-      duration: file.duration || 0,
+      duration: typeof file.duration === 'number' ? file.duration : 0,
       file_path: file.file_path,
       size: file.size
     })) || []
@@ -73,6 +86,9 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
       id: "filename",
       header: "Filename",
       cell: ({ row }) => {
+        // Handle both AudioData (uploaded files) and DatasetRow (dataset files)
+        if ('file_id' in (row.original as any)) {
+          // This is an uploaded file (AudioData)
         const data = row.original as AudioData;
         const file = uploadedFiles?.find(f => f.file_id === data.id);
         return (
@@ -93,62 +109,93 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
             <span className="font-mono text-xs">{data.filename}</span>
           </div>
         );
+        } else {
+          // This is a dataset file (DatasetRow)
+          const data = row.original as DatasetRow;
+          const path = getFrom(data, ["path", "filepath", "file", "filename"], "");
+          const filename = path.split("/").pop() || path;
+          return <span className="font-mono text-xs">{filename}</span>;
+        }
       },
     },
     {
       id: "prediction",
       header: model.startsWith("whisper") ? "Predicted Transcript" : "Predicted Label",
       cell: ({ row }) => {
-        const data = row.original as AudioData;
         const rowId = row.id as string;
         const status = inferenceStatus?.[rowId];
         if (status === 'loading') {
           return "";
         }
-        const pred = predictionMap?.[rowId] ?? data.prediction ?? "";
-        if (!pred) return "";
-        return <Badge variant="outline" className="text-xs">{pred}</Badge>;
+        
+        // Handle both AudioData and DatasetRow
+        if ('file_id' in (row.original as any)) {
+          // This is an uploaded file (AudioData) - use predictionMap like dataset files
+          const data = row.original as AudioData;
+          const pred = predictionMap?.[rowId] || data.prediction || "";
+          if (!pred) return "";
+          return <Badge variant="outline" className="text-xs">{pred}</Badge>;
+        } else {
+          // This is a dataset file (DatasetRow)
+          const pred = predictionMap?.[rowId] ?? "";
+          return <span className="text-xs">{pred}</span>;
+        }
       },
     },
     {
       id: "groundTruthLabel",
       header: "Ground Truth",
       cell: ({ row }) => {
+        // Handle both AudioData and DatasetRow
+        if ('file_id' in (row.original as any)) {
+          // This is an uploaded file (AudioData)
         const data = row.original as AudioData;
         return <span className="text-xs">{data.groundTruthLabel}</span>;
+        } else {
+          // This is a dataset file (DatasetRow)
+          const data = row.original as DatasetRow;
+          return <span className="text-xs">{getFrom(data, ["sentence", "transcript", "text", "emotion", "label"], "")}</span>;
+        }
       },
     },
     {
       id: "confidence",
       header: "Confidence",
       cell: ({ row }) => {
+        // Only show confidence for uploaded files (AudioData)
+        if ('file_id' in (row.original as any)) {
         const data = row.original as AudioData;
         // Don't display confidence if it's 0
         if (data.confidence === 0) return null;
         return <span className="text-xs">{data.confidence}</span>;
+        } else {
+          // For dataset files, show N/A or empty
+          return <span className="text-xs text-muted-foreground">N/A</span>;
+        }
       },
     },
     {
       id: "duration",
       header: "Duration",
       cell: ({ row }) => {
+        // Handle both AudioData and DatasetRow
+        if ('file_id' in (row.original as any)) {
+          // This is an uploaded file (AudioData)
         const data = row.original as AudioData;
-        return <span className="text-xs">{data.duration.toFixed(2)}s</span>;
+          const duration = typeof data.duration === 'number' ? data.duration : 0;
+          return <span className="text-xs">{duration.toFixed(2)}s</span>;
+        } else {
+          // This is a dataset file (DatasetRow)
+          const data = row.original as DatasetRow;
+          const d = Number(getFrom(data, ["duration", "length"], "0"));
+          if (d > 0) {
+            return <span className="text-xs">{d.toFixed(2)}s</span>;
+          }
+          return <span className="text-xs text-muted-foreground">N/A</span>;
+        }
       },
     },
-  ], [model, uploadedFiles, onFilePlay, predictionMap, inferenceStatus]);
-
-  // Dataset metadata data and columns
-  type DatasetRow = Record<string, string | number | null | undefined>;
-  const datasetRows: DatasetRow[] = useMemo(() => datasetMetadata ?? [], [datasetMetadata]);
-
-  const getFrom = useCallback((row: DatasetRow, keys: string[], fallback = ""): string => {
-    for (const k of keys) {
-      const v = row[k];
-      if (v !== undefined && v !== null && String(v).length > 0) return String(v);
-    }
-    return fallback;
-  }, []);
+  ], [model, uploadedFiles, onFilePlay, predictionMap, inferenceStatus, getFrom]);
 
   const getDatasetRowId = useCallback((row: DatasetRow, fallback: string): string => {
     const v = row["id"] ?? row["path"] ?? row["filepath"] ?? row["file"] ?? row["filename"];
@@ -246,18 +293,45 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
   ], [getFrom, model, predictionMap, inferenceStatus]);
 
   // Build table config based on mode
-  const data: unknown[] = useMemo(() => (isDatasetMode ? datasetRows : customTableData), [isDatasetMode, datasetRows, customTableData]);
+  const data: unknown[] = useMemo(() => {
+    if (hasUploadedFiles) {
+      // When there are uploaded files, show uploaded files at top, then dataset files
+      const combinedData: unknown[] = [...customTableData]; // Uploaded files first
+      if (hasDatasetMetadata) {
+        // Add dataset files after uploaded files
+        combinedData.push(...datasetRows);
+      }
+      return combinedData;
+    }
+    // When no uploaded files, use original logic
+    return hasDatasetMetadata ? datasetRows : customTableData;
+  }, [hasDatasetMetadata, hasUploadedFiles, datasetRows, customTableData]);
   const columns: ColumnDef<unknown, unknown>[] = useMemo(
-    () => (isDatasetMode ? (dataset === "ravdess" ? datasetColumnsRavdess : datasetColumnsCommonVoice) : customColumns),
-    [isDatasetMode, dataset, datasetColumnsRavdess, datasetColumnsCommonVoice, customColumns]
+    () => {
+      if (hasUploadedFiles) {
+        // When showing combined data, use custom columns that can handle both types
+        return customColumns;
+      }
+      // When no uploaded files, use original logic
+      return hasDatasetMetadata ? (dataset === "ravdess" ? datasetColumnsRavdess : datasetColumnsCommonVoice) : customColumns;
+    },
+    [hasUploadedFiles, hasDatasetMetadata, dataset, datasetColumnsRavdess, datasetColumnsCommonVoice, customColumns]
   );
 
   const getRowId = useCallback((row: unknown, index?: number) => {
-    if (isDatasetMode) {
+    if (hasUploadedFiles) {
+      // When showing combined data, check if it's a dataset row or uploaded file
+      if ('file_id' in (row as any)) {
+        return (row as AudioData).id;
+      } else {
+        return getDatasetRowId(row as DatasetRow, String(index ?? ""));
+      }
+    }
+    if (hasDatasetMetadata) {
       return getDatasetRowId(row as DatasetRow, String(index ?? ""));
     }
     return (row as AudioData).id;
-  }, [isDatasetMode, getDatasetRowId]);
+  }, [hasUploadedFiles, hasDatasetMetadata, getDatasetRowId]);
 
   const table = useReactTable<unknown>({
     data,
@@ -284,7 +358,7 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
     const rows = table.getRowModel().rows;
     const ids = rows.map(r => String(r.id));
     onVisibleRowIdsChange(ids);
-  }, [onVisibleRowIdsChange, searchQuery, dataset, model, isDatasetMode]);
+  }, [onVisibleRowIdsChange, searchQuery, dataset, model, hasDatasetMetadata]);
 
   return (
     <div className="h-full flex flex-col">
@@ -312,16 +386,36 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
                 <TableRow
                   key={row.id}
                   data-state={(() => {
-                    const rowId: string = isDatasetMode
-                      ? getDatasetRowId(row.original as DatasetRow, String(row.id))
-                      : (row.original as AudioData).id;
+                    let rowId: string;
+                    if (hasUploadedFiles) {
+                      // When showing combined data, check if it's a dataset row or uploaded file
+                      if ('file_id' in (row.original as any)) {
+                        rowId = (row.original as AudioData).id;
+                      } else {
+                        rowId = getDatasetRowId(row.original as DatasetRow, String(row.id));
+                      }
+                    } else if (hasDatasetMetadata) {
+                      rowId = getDatasetRowId(row.original as DatasetRow, String(row.id));
+                    } else {
+                      rowId = (row.original as AudioData).id;
+                    }
                     return selectedRow === rowId ? "selected" : undefined;
                   })()}
                   className="cursor-pointer hover:bg-muted/50 data-[state=selected]:bg-blue-50 data-[state=selected]:border-blue-200 data-[state=selected]:shadow-sm"
                   onClick={() => {
-                    const rowId: string = isDatasetMode
-                      ? getDatasetRowId(row.original as DatasetRow, String(row.id))
-                      : (row.original as AudioData).id;
+                    let rowId: string;
+                    if (hasUploadedFiles) {
+                      // When showing combined data, check if it's a dataset row or uploaded file
+                      if ('file_id' in (row.original as any)) {
+                        rowId = (row.original as AudioData).id;
+                      } else {
+                        rowId = getDatasetRowId(row.original as DatasetRow, String(row.id));
+                      }
+                    } else if (hasDatasetMetadata) {
+                      rowId = getDatasetRowId(row.original as DatasetRow, String(row.id));
+                    } else {
+                      rowId = (row.original as AudioData).id;
+                    }
                     onRowSelect(rowId);
                   }}
                 >

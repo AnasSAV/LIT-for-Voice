@@ -1,8 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from pathlib import Path
+import logging
+from app.services.pertubation_service import perturb_and_save
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 class Perturbation(BaseModel):
     type: str
@@ -11,27 +15,55 @@ class Perturbation(BaseModel):
 class PerturbRequest(BaseModel):
     file_path: str
     perturbations: List[Perturbation]
+    dataset: Optional[str] = None
 
 # --- Response schema ---
 class PerturbResponse(BaseModel):
-    audio_url: str
+    perturbed_file: str
+    filename: str
     duration_ms: int
-    metrics: Optional[Dict[str, float]] = None
-    applied: List[Perturbation]
+    sample_rate: int
+    applied_perturbations: List[Dict[str, Any]]
+    success: bool
+    error: Optional[str] = None
 
 # --- Endpoint ---
 @router.post("/perturb", response_model=PerturbResponse)
 def apply_perturbations(request: PerturbRequest):
     """
-    Apply multiple perturbations to the given audio in one request.
+    Apply multiple perturbations to the given audio file and save the result.
     """
-    # Here you’d load audio by request.audio_id + session_id
-    # Apply perturbations in order
-    # Save perturbed audio & return URL + metrics
-    
-    return PerturbResponse(
-        audio_url=f"https://server/sessions/{request.session_id}/audio/{request.audio_id}_perturbed.wav",
-        duration_ms=45000,
-        metrics={"wer_delta": 0.05, "conf_delta": -0.02},
-        applied=request.perturbations
-    )
+    try:
+        # Convert Pydantic models to dictionaries for the service
+        perturbations_list = []
+        for perturbation in request.perturbations:
+            perturbations_list.append({
+                "type": perturbation.type,
+                "params": perturbation.params
+            })
+        
+        # Apply perturbations and save (file validation happens inside the service)
+        result = perturb_and_save(
+            file_path=request.file_path,
+            perturbations=perturbations_list,
+            output_dir="uploads",
+            dataset=request.dataset
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=404, detail=result["error"])
+        
+        logger.info(f"Successfully applied perturbations to {request.file_path}")
+        
+        return PerturbResponse(
+            perturbed_file=result["perturbed_file"],
+            filename=result["filename"],
+            duration_ms=result["duration_ms"],
+            sample_rate=result["sample_rate"],
+            applied_perturbations=result["applied_perturbations"],
+            success=result["success"]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error applying perturbations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to apply perturbations: {str(e)}")
