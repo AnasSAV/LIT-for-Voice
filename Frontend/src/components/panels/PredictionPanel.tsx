@@ -247,7 +247,8 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
           
           if (isUploadedFile) {
-            const predictionText = typeof prediction === 'string' ? prediction : prediction?.prediction || prediction?.emotion || JSON.stringify(prediction);
+            const predictionText = typeof prediction === 'string' ? prediction : 
+              prediction?.predicted_emotion || prediction?.prediction || prediction?.emotion || JSON.stringify(prediction);
             console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Wav2Vec2:", selectedFile.file_id, predictionText);
             onPredictionUpdate(selectedFile.file_id, predictionText);
           }
@@ -281,9 +282,11 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           model: model
         };
         
+        let isUploadedFile = false;
+        
         if (selectedFile) {
           // Check if this is an uploaded file - more precise detection
-          const isUploadedFile = selectedFile.file_path && (
+          isUploadedFile = selectedFile.file_path && (
             selectedFile.file_path.includes('uploads/') || 
             selectedFile.file_path.startsWith('uploads/') ||
             selectedFile.message === "Perturbed file" ||
@@ -300,12 +303,23 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
             requestBody.dataset_file = selectedFile.filename;
           }
         } else if (selectedEmbeddingFile && dataset) {
-          // Use embedding file selection
+          // Use embedding file selection - this is a dataset file
           requestBody.dataset = originalDataset || dataset;
           requestBody.dataset_file = selectedEmbeddingFile;
+          isUploadedFile = false;
         }
 
-        const response = await fetch("http://localhost:8000/inferences/run", {
+        // Choose the correct endpoint based on file type
+        let endpoint: string;
+        if (isUploadedFile) {
+          // For uploaded files, use basic inference endpoint (no ground truth available)
+          endpoint = "http://localhost:8000/inferences/run";
+        } else {
+          // For dataset files, use accuracy endpoint to get ground truth and metrics
+          endpoint = "http://localhost:8000/inferences/whisper-accuracy";
+        }
+
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -318,35 +332,45 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         }
 
         const prediction = await response.json();
-        // Convert the prediction to the expected format for whisper prediction
-        const whisperPrediction = {
-          predicted_transcript: typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction),
-          ground_truth: "",
-          accuracy_percentage: 0,
-          word_error_rate: 0,
-          character_error_rate: 0,
-          levenshtein_distance: 0,
-          exact_match: 0,
-          character_similarity: 0,
-          word_count_predicted: 0,
-          word_count_truth: 0
-        };
+        
+        let whisperPrediction: WhisperPrediction;
+        
+        if (isUploadedFile) {
+          // For uploaded files, convert basic prediction to expected format
+          whisperPrediction = {
+            predicted_transcript: typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction),
+            ground_truth: "",
+            accuracy_percentage: 0,
+            word_error_rate: 0,
+            character_error_rate: 0,
+            levenshtein_distance: 0,
+            exact_match: 0,
+            character_similarity: 0,
+            word_count_predicted: 0,
+            word_count_truth: 0
+          };
+        } else {
+          // For dataset files, the accuracy endpoint returns all the metrics
+          whisperPrediction = {
+            predicted_transcript: prediction.predicted_transcript || "",
+            ground_truth: prediction.ground_truth || "",
+            accuracy_percentage: prediction.accuracy_percentage || 0,
+            word_error_rate: prediction.word_error_rate || 0,
+            character_error_rate: prediction.character_error_rate || 0,
+            levenshtein_distance: prediction.levenshtein_distance || 0,
+            exact_match: prediction.exact_match || 0,
+            character_similarity: prediction.character_similarity || 0,
+            word_count_predicted: prediction.word_count_predicted || 0,
+            word_count_truth: prediction.word_count_truth || 0
+          };
+        }
+        
         setWhisperPrediction(whisperPrediction);
         
         // Update predictionMap for uploaded files (same as dataset files)
-        if (selectedFile && onPredictionUpdate) {
-          const isUploadedFile = selectedFile.file_path && (
-            selectedFile.file_path.includes('uploads/') || 
-            selectedFile.file_path.startsWith('uploads/') ||
-            selectedFile.message === "Perturbed file" ||
-            selectedFile.message === "File uploaded successfully" ||
-            selectedFile.message === "File uploaded and processed successfully"
-          ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
-          
-          if (isUploadedFile) {
-            console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Whisper:", selectedFile.file_id, whisperPrediction.predicted_transcript);
-            onPredictionUpdate(selectedFile.file_id, whisperPrediction.predicted_transcript);
-          }
+        if (selectedFile && onPredictionUpdate && isUploadedFile) {
+          console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Whisper:", selectedFile.file_id, whisperPrediction.predicted_transcript);
+          onPredictionUpdate(selectedFile.file_id, whisperPrediction.predicted_transcript);
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -358,7 +382,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     };
 
     fetchWhisperPrediction();
-  }, [selectedFile, selectedEmbeddingFile, model, dataset]);
+  }, [selectedFile, selectedEmbeddingFile, model, dataset, originalDataset]);
 
   return (
     <div className="h-full panel-background border-t panel-border">
@@ -532,14 +556,16 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                         </div>
                         
                         {/* Accuracy Metrics */}
-                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                          <div>WER: {whisperPrediction.word_error_rate.toFixed(3)}</div>
-                          <div>CER: {whisperPrediction.character_error_rate.toFixed(3)}</div>
-                          <div>Words P: {whisperPrediction.word_count_predicted}</div>
-                          <div>Words T: {whisperPrediction.word_count_truth}</div>
-                          <div>Accuracy: {whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
-                          <div>Levenshtein: {whisperPrediction.levenshtein_distance}</div>
-                        </div>
+                        {whisperPrediction.ground_truth && (
+                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-2">
+                            <div>WER: {whisperPrediction.word_error_rate.toFixed(3)}</div>
+                            <div>CER: {whisperPrediction.character_error_rate.toFixed(3)}</div>
+                            <div>Words P: {whisperPrediction.word_count_predicted}</div>
+                            <div>Words T: {whisperPrediction.word_count_truth}</div>
+                            <div>Accuracy: {whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
+                            <div>Levenshtein: {whisperPrediction.levenshtein_distance}</div>
+                          </div>
+                        )}
 
                         {/* Predicted Transcript */}
                         <div className="space-y-1">
@@ -553,15 +579,17 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                         </div>
 
                         {/* Ground Truth */}
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium flex items-center gap-2">
-                            Ground Truth
-                            <Badge variant="outline" className="text-[10px] px-1">T</Badge>
+                        {whisperPrediction.ground_truth && (
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium flex items-center gap-2">
+                              Ground Truth
+                              <Badge variant="outline" className="text-[10px] px-1">T</Badge>
+                            </div>
+                            <div className="text-xs p-2 bg-green-50 rounded border font-mono">
+                              "{whisperPrediction.ground_truth}"
+                            </div>
                           </div>
-                          <div className="text-xs p-2 bg-green-50 rounded border font-mono">
-                            "{whisperPrediction.ground_truth}"
-                          </div>
-                        </div>
+                        )}
                       </div>
 
                       {/* Perturbed Prediction */}
@@ -589,7 +617,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                                 </div>
                               ) : (
                                 <div className="text-xs text-gray-600">
-                                  <div>Prediction: {perturbedPredictions}</div>
+                                  <div>Prediction: {typeof perturbedPredictions === 'string' ? perturbedPredictions : JSON.stringify(perturbedPredictions)}</div>
                                 </div>
                               )}
 

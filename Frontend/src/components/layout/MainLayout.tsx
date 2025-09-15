@@ -5,7 +5,7 @@ import { AudioDatasetPanel } from "../panels/AudioDatasetPanel";
 import { DatapointEditorPanel } from "../panels/DatapointEditorPanel";
 import { PredictionPanel } from "../panels/PredictionPanel";
 import { EmbeddingProvider } from "../../contexts/EmbeddingContext";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 interface UploadedFile {
   file_id: string;
@@ -125,6 +125,14 @@ export const MainLayout = () => {
     });
   };
 
+  const handleBatchInferenceStart = useCallback(() => {
+    setBatchInferenceStatus('running');
+  }, []);
+
+  const handleBatchInferenceComplete = useCallback(() => {
+    setBatchInferenceStatus('done');
+  }, []);
+
   const handleBatchInference = async (selectedModel: string, selectedDataset: string) => {
     if (selectedDataset === 'custom') return;
     
@@ -187,8 +195,8 @@ export const MainLayout = () => {
                     dataset={effectiveDataset}
                     originalDataset={dataset}
                     batchInferenceStatus={batchInferenceStatus}
-                    onBatchInferenceStart={() => setBatchInferenceStatus('running')}
-                    onBatchInferenceComplete={() => setBatchInferenceStatus('done')}
+                    onBatchInferenceStart={handleBatchInferenceStart}
+                    onBatchInferenceComplete={handleBatchInferenceComplete}
                     onAvailableFilesChange={setAvailableFiles}
                     onPredictionUpdate={handlePredictionUpdate}
                     predictionMap={predictionMap}

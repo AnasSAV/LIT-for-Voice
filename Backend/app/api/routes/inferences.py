@@ -325,7 +325,23 @@ async def get_whisper_accuracy(request: Request):
         print(f"DEBUG: Cached result found: {cached_result is not None}")
         
         if cached_result is None:
-            raise HTTPException(status_code=404, detail=f"No cached prediction found for {dataset_file}. Please run inference first. Cache key: {cache_key}")
+            # If not cached, run inference first
+            print(f"DEBUG: No cached result found, running inference for {dataset_file}")
+            try:
+                # Run inference to get the prediction and cache it
+                if dataset and dataset_file:
+                    inference_result = await run_inference(model, None, dataset, dataset_file)
+                else:
+                    inference_result = await run_inference(model, str(resolved_path), None, None)
+                
+                # Now try to get the cached result again
+                cached_result = await get_result(model, cache_key)
+                if cached_result is None:
+                    # If still not cached, use the inference result directly
+                    cached_result = {"prediction": inference_result}
+            except Exception as e:
+                print(f"DEBUG: Failed to run inference: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to run inference for {dataset_file}: {str(e)}")
         
         # Extract transcript from cached result
         if isinstance(cached_result, dict):
@@ -340,7 +356,7 @@ async def get_whisper_accuracy(request: Request):
             if dataset == "common-voice":
                 metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
             elif dataset == "ravdess":
-                metadata_path = DATA_DIR / "ravdess_subset" / "metadata.csv"
+                metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
             else:
                 raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
             
@@ -356,17 +372,31 @@ async def get_whisper_accuracy(request: Request):
                 
                 if not file_rows.empty:
                     # Try different column names for transcript/text
-                    for col in ['text', 'transcript', 'sentence', 'label']:
-                        if col in df.columns:
-                            ground_truth = str(file_rows.iloc[0][col])
-                            break
+                    if dataset == "common-voice":
+                        # For common-voice, use 'text' column
+                        for col in ['text', 'transcript', 'sentence', 'label']:
+                            if col in df.columns:
+                                ground_truth = str(file_rows.iloc[0][col])
+                                break
+                    elif dataset == "ravdess":
+                        # For RAVDESS, use 'statement' column
+                        for col in ['statement', 'text', 'transcript', 'sentence']:
+                            if col in df.columns:
+                                ground_truth = str(file_rows.iloc[0][col])
+                                break
         
         if not ground_truth:
             # More specific error message for debugging
             error_msg = f"Ground truth not found in dataset metadata. Dataset: {dataset}, File: {dataset_file}"
             if dataset and dataset_file:
-                metadata_path = DATA_DIR / f"{dataset}_valid_dev" / f"{dataset}_valid_data_metadata.csv" if dataset == "common-voice" else DATA_DIR / f"{dataset}_subset" / "metadata.csv"
-                error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
+                if dataset == "common-voice":
+                    metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
+                elif dataset == "ravdess":
+                    metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
+                else:
+                    metadata_path = None
+                if metadata_path:
+                    error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
             print(f"DEBUG: {error_msg}")
             raise HTTPException(status_code=404, detail=error_msg)
         
@@ -477,7 +507,8 @@ async def get_whisper_accuracy(request: Request):
 @router.post("/inferences/wav2vec2-batch")
 async def batch_wav2vec2_prediction(request: Request):
     """
-    Get batch wav2vec2 predictions for multiple files and calculate aggregated probabilities
+    Get batch wav2vec2 predictions for multiple files and calculate aggregated probabilities.
+    Uses cached results when available, only runs model for uncached files.
     """
     try:
         body = await request.json()
@@ -493,10 +524,11 @@ async def batch_wav2vec2_prediction(request: Request):
         # Process each file
         individual_predictions = []
         predicted_emotions = []  # Store just the predicted emotions for distribution
+        cache_stats = {"hits": 0, "misses": 0}
         
         for filename in filenames:
             try:
-                # Load and predict for each file
+                # Resolve file path
                 if dataset:
                     file_path = resolve_file(dataset, filename)
                 else:
@@ -505,8 +537,23 @@ async def batch_wav2vec2_prediction(request: Request):
                         print(f"Warning: File not found: {file_path}")
                         continue
                 
-                # Get detailed prediction
-                result = predict_emotion_wave2vec(str(file_path))
+                # Create cache key
+                file_content_hash = hashlib.md5(str(file_path).encode()).hexdigest()
+                cache_key = f"wav2vec2_detailed_{file_content_hash}"
+                
+                # Check cache first
+                cached_result = await get_result("wav2vec2", cache_key)
+                if cached_result is not None:
+                    # Use cached result
+                    result = cached_result.get("prediction", cached_result)
+                    cache_stats["hits"] += 1
+                    logger.debug(f"Using cached wav2vec2 result for {filename}")
+                else:
+                    # Run model and cache result
+                    result = await asyncio.to_thread(predict_emotion_wave2vec, str(file_path))
+                    await cache_result("wav2vec2", cache_key, {"prediction": result}, ttl=6*60*60)
+                    cache_stats["misses"] += 1
+                    logger.debug(f"Generated and cached wav2vec2 result for {filename}")
                 
                 individual_predictions.append({
                     "filename": filename,
@@ -547,6 +594,11 @@ async def batch_wav2vec2_prediction(request: Request):
                 "dominant_emotion": dominant_emotion[0],
                 "dominant_count": dominant_emotion[1],
                 "dominant_percentage": dominant_emotion[1] / total_files
+            },
+            "cache_info": {
+                "cached_count": cache_stats["hits"],
+                "missing_count": cache_stats["misses"],
+                "cache_hit_rate": cache_stats["hits"] / (cache_stats["hits"] + cache_stats["misses"]) if (cache_stats["hits"] + cache_stats["misses"]) > 0 else 0
             }
         }
         
