@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
+import { Upload } from "lucide-react";
 import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
@@ -47,25 +47,21 @@ const defaultDatasetForModel: Record<string, string> = {
 
 export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset, onBatchInference}: ToolbarProps) => {
 
-let abortController: AbortController | null = null;
-const onModelChange = async (value: string) => {
+const onModelChange = (value: string) => {
   setModel(value);
   
   // Update dataset based on model
   const allowedDatasets = modelDatasetMap[value] || ["custom"];
   const defaultDataset = defaultDatasetForModel[value] || "custom";
 
-  let finalDataset = dataset;
-  if (!allowedDatasets.includes(dataset)) {
-    finalDataset = defaultDataset;
-    setDataset(defaultDataset);
-  }
-
   console.log("Model selected:", value);
 
-  // Trigger batch inference for dataset when model changes (except for custom)
-  if (finalDataset !== 'custom' && onBatchInference) {
-    onBatchInference(value, finalDataset);
+  if (!allowedDatasets.includes(dataset)) {
+    // Use the canonical handler so all side effects fire (metadata loading)
+    onDatasetChange(defaultDataset);
+  } else if (dataset !== 'custom' && onBatchInference) {
+    // Dataset is already valid, fire batch inference directly
+    onBatchInference(value, dataset);
   }
 };
 
