@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { API_BASE } from '@/lib/api';
 
 interface AudioUploaderProps {
-  onUploadSuccess?: (uploadResponse: any) => void;
+  onUploadSuccess?: (uploadResponse) => void;
 }
 
 export const AudioUploader = ({ onUploadSuccess }: AudioUploaderProps) => {
