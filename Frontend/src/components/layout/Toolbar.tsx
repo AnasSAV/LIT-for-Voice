@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Upload, Download, Pin, Filter } from "lucide-react";
+import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
   file_id: string;
@@ -171,7 +172,7 @@ const onModelChange = async (value: string) => {
           className="h-8"
           onClick={async () => {
             try {
-              const response = await fetch('http://localhost:8000/upload/test');
+              const response = await fetch(`${API_BASE}/upload/test`, { credentials: 'include' });
               const data = await response.json();
               console.log('Backend test:', data);
               alert(`Backend is ${response.ok ? 'working' : 'not working'}: ${JSON.stringify(data)}`);

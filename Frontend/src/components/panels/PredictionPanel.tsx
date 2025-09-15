@@ -7,6 +7,7 @@ import { PerturbationTools } from "../analysis/PerturbationTools";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
 import { ScalersVisualization } from "../visualization/ScalersVisualization";
 import { useState, useEffect } from "react";
+import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
   file_id: string;
@@ -50,12 +51,18 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch wav2vec2 prediction when model is wav2vec2 and file is selected
+  // Fetch wav2vec prediction when model is wav2vec2 and file is selected
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+    
     const fetchWav2vecPrediction = async () => {
       if (model !== "wav2vec2" || (!selectedFile && !selectedEmbeddingFile)) {
-        setWav2vecPrediction(null);
-        setError(null);
+        if (isMounted) {
+          setWav2vecPrediction(null);
+          setError(null);
+          setIsLoading(false);
+        }
         return;
       }
 
@@ -79,12 +86,14 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           requestBody.dataset_file = selectedEmbeddingFile;
         }
 
-        const response = await fetch("http://localhost:8000/inferences/wav2vec2-detailed", {
+        const response = await fetch(`${API_BASE}/inferences/wav2vec2-detailed`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: 'include',
           body: JSON.stringify(requestBody),
+          signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -92,25 +101,44 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         }
 
         const prediction = await response.json();
-        setWav2vecPrediction(prediction);
+        if (isMounted) {
+          setWav2vecPrediction(prediction);
+        }
       } catch (err) {
+        // Ignore abort errors
+        if (err.name === 'AbortError') return;
+        
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        setError(errorMessage);
-        console.error("Error fetching wav2vec2 prediction:", err);
+        if (isMounted) {
+          setError(errorMessage);
+          console.error("Error fetching wav2vec2 prediction:", err);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchWav2vecPrediction();
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [selectedFile, selectedEmbeddingFile, model, dataset]);
 
   // Fetch whisper prediction when model includes whisper and file is selected
   useEffect(() => {
+    let isMounted = true;
+    
     const fetchWhisperPrediction = async () => {
       if (!model?.includes("whisper") || (!selectedFile && !selectedEmbeddingFile)) {
-        setWhisperPrediction(null);
-        setError(null);
+        if (isMounted) {
+          setWhisperPrediction(null);
+          setError(null);
+          setIsLoading(false);
+        }
         return;
       }
 
@@ -136,11 +164,12 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           requestBody.dataset_file = selectedEmbeddingFile;
         }
 
-        const response = await fetch("http://localhost:8000/inferences/whisper-accuracy", {
+        const response = await fetch(`${API_BASE}/inferences/whisper-accuracy`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: 'include',
           body: JSON.stringify(requestBody),
         });
 
@@ -149,7 +178,9 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         }
 
         const prediction = await response.json();
-        setWhisperPrediction(prediction);
+        if (isMounted) {
+          setWhisperPrediction(prediction);
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
         setError(errorMessage);
@@ -349,7 +380,11 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           
           <TabsContent value="saliency" className="m-0 h-full">
             <div className="p-3">
-              <SaliencyVisualization />
+              <SaliencyVisualization 
+                selectedFile={selectedFile || selectedEmbeddingFile} 
+                model={model} 
+                dataset={dataset} 
+              />
             </div>
           </TabsContent>
           

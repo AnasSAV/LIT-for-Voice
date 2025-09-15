@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { API_BASE } from '@/lib/api';
 
 interface ScalersVisualizationProps {
   model?: string;
@@ -110,11 +111,12 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
 
       console.log('Fetching whisper analysis for:', requestBody);
 
-      const response = await fetch("http://localhost:8000/inferences/whisper-batch", {
+      const response = await fetch(`${API_BASE}/inferences/whisper-batch`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include',
         body: JSON.stringify(requestBody),
       });
 
@@ -152,11 +154,12 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
 
       console.log('Fetching batch predictions for:', requestBody);
 
-      const response = await fetch("http://localhost:8000/inferences/wav2vec2-batch", {
+      const response = await fetch(`${API_BASE}/inferences/wav2vec2-batch`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include',
         body: JSON.stringify(requestBody),
       });
 

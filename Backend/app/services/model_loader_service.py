@@ -16,11 +16,9 @@ import umap
 logger = logging.getLogger(__name__)
 
 
-def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
-    # Use integer device indices to avoid meta-tensor issues in some transformer/torch combos
-    device = 0 if torch.cuda.is_available() else -1  # 0 => cuda:0, -1 => CPU
+def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, return_timestamps=False):
+    device = 0 if torch.cuda.is_available() else -1
     torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
 
     pipe = pipeline(
         "automatic-speech-recognition",
@@ -28,19 +26,23 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
         torch_dtype=torch_dtype,
         device=device,
     )
-
-    generate_kwargs = {"return_timestamps": True}
-
     audio, sample_rate = librosa.load(audio_file, sr=16000)
     audio = audio.astype(np.float32)
 
     result = pipe(
         audio,
-        generate_kwargs=generate_kwargs,
+        return_timestamps=return_timestamps,
         chunk_length_s=chunk_length_s,
         batch_size=batch_size,
     )
     
+    if return_timestamps:
+        return {
+            "text": result["text"],
+            "chunks": result.get("chunks", []),
+            "audio": audio,
+            "sample_rate": sample_rate
+        }
     return result["text"]
 
 def transcribe_whisper_large(audio_file_path):
@@ -50,6 +52,10 @@ def transcribe_whisper_large(audio_file_path):
 def transcribe_whisper_base(audio_file_path):
     model_id = "openai/whisper-base"
     return transcribe_whisper(model_id, audio_file_path)
+
+def transcribe_whisper_with_timestamps(audio_file_path, model_size="base"):
+    model_id = "openai/whisper-base" if model_size == "base" else "openai/whisper-large-v3"
+    return transcribe_whisper(model_id, audio_file_path, return_timestamps=True)
 
 
 _EMO_MODEL_ID = "r-f/wav2vec-english-speech-emotion-recognition"
@@ -133,9 +139,14 @@ def get_whisper_base_models():
 def get_whisper_large_models():
     global _whisper_processor_large, _whisper_model_large
     if _whisper_processor_large is None:
+        # Clear CUDA cache before loading large model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        
+        # Load processor and model with optimizations
         _whisper_processor_large = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
         _whisper_model_large = WhisperModel.from_pretrained("openai/whisper-large-v3")
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         _whisper_model_large = _whisper_model_large.to(device)
     return _whisper_processor_large, _whisper_model_large
 
@@ -246,6 +257,3 @@ def reduce_dimensions(embeddings_list: list, method: str = "pca", n_components: 
     
     reduced = reducer.fit_transform(X)
     return reduced
-
-
-

@@ -235,4 +235,4 @@ secrets.json
 # Docker
 .dockerignore
 
-/data
+# /data

@@ -7,6 +7,7 @@ import { AudioPlayer } from "../audio/AudioPlayer";
 import { WaveformViewer } from "../audio/WaveformViewer";
 import { Play, Pause, RotateCcw, Trash2, Plus } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
+import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
   file_id: string;
@@ -34,9 +35,9 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom" }: Datap
     if (!selectedFile) return undefined;
     if (dataset && dataset !== "custom") {
       const filename = encodeURIComponent(selectedFile.filename);
-      return `http://localhost:8000/${dataset}/file/${filename}`;
+      return `${API_BASE}/${dataset}/file/${filename}`;
     }
-    return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+    return `${API_BASE}/upload/file/${selectedFile.file_id}`;
   })();
 
   // Debug logging for selectedFile and audioUrl
