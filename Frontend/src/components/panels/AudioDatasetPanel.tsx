@@ -153,6 +153,14 @@ export const AudioDatasetPanel = ({
 
   // Batch inference for entire dataset when model/dataset changes
   useEffect(() => {
+    console.log('DEBUG: Batch inference useEffect triggered', {
+      dataset,
+      model,
+      datasetMetadataLength: datasetMetadata.length,
+      isCustom: dataset === "custom",
+      hasModel: !!model
+    });
+    
     if (dataset === "custom" || !model) return;
     if (datasetMetadata.length === 0) return;
     
@@ -280,7 +288,7 @@ export const AudioDatasetPanel = ({
     };
     
     checkCachedResults();
-  }, [model, dataset, originalDataset, datasetMetadata, onBatchInferenceStart, onBatchInferenceComplete, isInferenceComplete, currentModelDataset]);
+  }, [model, dataset, originalDataset, datasetMetadata, onBatchInferenceStart, onBatchInferenceComplete]);
 
   // Process batch inference queue
   useEffect(() => {
