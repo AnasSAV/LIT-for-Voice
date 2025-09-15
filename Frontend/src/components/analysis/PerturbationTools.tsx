@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RangeSlider } from "@/components/ui/range-slider"
 import { Volume2, Scissors, Plus, Play, Zap, Loader2, CheckCircle, XCircle } from "lucide-react"
 import { WaveformViewer } from "../audio/WaveformViewer"
 
@@ -88,8 +88,7 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
 }) => {
   // Perturbation parameters
   const [noiseLevel, setNoiseLevel] = useState([10])
-  const [maskStart, setMaskStart] = useState([20])
-  const [maskEnd, setMaskEnd] = useState([40])
+  const [maskRange, setMaskRange] = useState<[number, number]>([20, 40])
   const [pitchShift, setPitchShift] = useState([2])
   const [timeStretch, setTimeStretch] = useState([110]) // 110% = 1.1x
   
@@ -153,8 +152,8 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
         perturbations.push({
           type: "time_masking",
           params: {
-            mask_start_percent: maskStart[0],
-            mask_end_percent: maskEnd[0]
+            mask_start_percent: maskRange[0],
+            mask_end_percent: maskRange[1]
           }
         });
       }
@@ -283,28 +282,6 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Main Action Card */}
-      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
-        <CardContent className="pt-4">
-          <Button
-            onClick={handleAddPerturbations}
-            disabled={isLoading || !selectedFile}
-            className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
-            size="lg"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Zap className="h-4 w-4 mr-2" />
-            )}
-            {isLoading ? "Applying Perturbations..." : "Apply Perturbations"}
-          </Button>
-          <p className="text-xs text-muted-foreground mt-2 text-center">
-            {selectedFile ? `Apply perturbations to ${selectedFile.filename}` : "Select a file to apply perturbations"}
-          </p>
-        </CardContent>
-      </Card>
-
       {/* Error Display */}
       {error && (
         <Card className="border-destructive/20 bg-destructive/5">
@@ -322,144 +299,216 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Perturbation Configuration</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="noise" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 h-7">
-              <TabsTrigger value="noise" className="text-xs">
-                Noise
-              </TabsTrigger>
-              <TabsTrigger value="masking" className="text-xs">
-                Time Mask
-              </TabsTrigger>
-              <TabsTrigger value="pitch" className="text-xs">
-                Pitch
-              </TabsTrigger>
-              <TabsTrigger value="time" className="text-xs">
-                Time
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="noise" className="mt-3 space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="noise-checkbox"
-                  checked={selectedPerturbations.noise}
-                  onCheckedChange={() => handlePerturbationToggle('noise')}
-                />
-                <label htmlFor="noise-checkbox" className="text-xs font-medium">
-                  Add Gaussian Noise
-                </label>
-              </div>
-              
-              {selectedPerturbations.noise && (
-                <div className="space-y-2 pl-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs">Noise Level</span>
-                    <span className="text-xs text-muted-foreground">{noiseLevel[0]}%</span>
-                  </div>
-                  <Slider 
-                    value={noiseLevel} 
-                    onValueChange={setNoiseLevel} 
-                    max={50} 
-                    step={1} 
-                    className="w-full" 
-                  />
+        <CardContent className="space-y-4">
+          {/* Noise Perturbation */}
+          <div className="space-y-3 p-3 border rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="noise-checkbox"
+                checked={selectedPerturbations.noise}
+                onCheckedChange={() => handlePerturbationToggle('noise')}
+                className="border-blue-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+              <Volume2 className="h-4 w-4 text-blue-600" />
+              <label htmlFor="noise-checkbox" className="text-sm font-medium">
+                Add Gaussian Noise
+              </label>
+            </div>
+            
+            {selectedPerturbations.noise && (
+              <div className="space-y-2 pl-6">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Noise Level</span>
+                  <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">{noiseLevel[0]}%</Badge>
                 </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="masking" className="mt-3 space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="masking-checkbox"
-                  checked={selectedPerturbations.timeMasking}
-                  onCheckedChange={() => handlePerturbationToggle('timeMasking')}
+                <Slider 
+                  value={noiseLevel} 
+                  onValueChange={setNoiseLevel} 
+                  max={50} 
+                  step={1} 
+                  className="w-full [&_[role=slider]]:border-blue-500 [&_[role=slider]]:bg-blue-600" 
                 />
-                <label htmlFor="masking-checkbox" className="text-xs font-medium">
-                  Apply Time Masking
-                </label>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0%</span>
+                  <span>25%</span>
+                  <span>50%</span>
+                </div>
               </div>
-              
-              {selectedPerturbations.timeMasking && (
-                <div className="space-y-2 pl-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs">Mask Region</span>
-                    <span className="text-xs text-muted-foreground">
-                      {maskStart[0]}% - {maskEnd[0]}%
-                    </span>
+            )}
+          </div>
+
+          {/* Time Masking Perturbation */}
+          <div className="space-y-3 p-3 border rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="masking-checkbox"
+                checked={selectedPerturbations.timeMasking}
+                onCheckedChange={() => handlePerturbationToggle('timeMasking')}
+                className="border-blue-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+              <Scissors className="h-4 w-4 text-blue-600" />
+              <label htmlFor="masking-checkbox" className="text-sm font-medium">
+                Apply Time Masking
+              </label>
+            </div>
+            
+            {selectedPerturbations.timeMasking && (
+              <div className="space-y-3 pl-6">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Mask Region</span>
+                  <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
+                    {maskRange[0]}% - {maskRange[1]}%
+                  </Badge>
+                </div>
+                
+                {/* Visual representation of time mask */}
+                <div className="relative h-8 bg-gray-100 rounded border">
+                  <div 
+                    className="absolute top-0 h-full bg-blue-200 rounded transition-all duration-300 border border-blue-400"
+                    style={{
+                      left: `${maskRange[0]}%`,
+                      width: `${maskRange[1] - maskRange[0]}%`
+                    }}
+                  >
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xs font-medium text-blue-800">
+                        Masked
+                      </span>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Slider value={maskStart} onValueChange={setMaskStart} max={100} step={1} className="w-full" />
-                    <Slider value={maskEnd} onValueChange={setMaskEnd} max={100} step={1} className="w-full" />
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+                    Audio Timeline
                   </div>
                 </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="pitch" className="mt-3 space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="pitch-checkbox"
-                  checked={selectedPerturbations.pitchShift}
-                  onCheckedChange={() => handlePerturbationToggle('pitchShift')}
-                />
-                <label htmlFor="pitch-checkbox" className="text-xs font-medium">
-                  Apply Pitch Shift
-                </label>
-              </div>
-              
-              {selectedPerturbations.pitchShift && (
-                <div className="space-y-2 pl-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs">Pitch Shift</span>
-                    <span className="text-xs text-muted-foreground">
-                      {pitchShift[0] > 0 ? "+" : ""}{pitchShift[0]} semitones
-                    </span>
-                  </div>
-                  <Slider 
-                    value={pitchShift} 
-                    onValueChange={setPitchShift} 
-                    min={-6} 
-                    max={6} 
-                    step={1} 
+                
+                {/* Dual-pointer range slider */}
+                <div className="space-y-2">
+                  <RangeSlider
+                    value={maskRange}
+                    onValueChange={setMaskRange}
+                    min={0}
+                    max={100}
+                    step={1}
                     className="w-full"
+                    formatLabel={(value) => `${value}%`}
                   />
                 </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="time" className="mt-3 space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="time-checkbox"
-                  checked={selectedPerturbations.timeStretch}
-                  onCheckedChange={() => handlePerturbationToggle('timeStretch')}
-                />
-                <label htmlFor="time-checkbox" className="text-xs font-medium">
-                  Apply Time Stretch
-                </label>
+                
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0% (Start)</span>
+                  <span>50% (Middle)</span>
+                  <span>100% (End)</span>
+                </div>
               </div>
-              
-              {selectedPerturbations.timeStretch && (
-                <div className="space-y-2 pl-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs">Time Stretch</span>
-                    <span className="text-xs text-muted-foreground">
-                      {timeStretch[0]}%
-                    </span>
-                  </div>
-                  <Slider 
-                    value={timeStretch} 
-                    onValueChange={setTimeStretch} 
-                    min={50} 
-                    max={200} 
-                    step={5} 
-                    className="w-full" 
-                  />
+            )}
+          </div>
+
+          {/* Pitch Shift Perturbation */}
+          <div className="space-y-3 p-3 border rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="pitch-checkbox"
+                checked={selectedPerturbations.pitchShift}
+                onCheckedChange={() => handlePerturbationToggle('pitchShift')}
+                className="border-blue-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+              <Plus className="h-4 w-4 text-blue-600" />
+              <label htmlFor="pitch-checkbox" className="text-sm font-medium">
+                Apply Pitch Shift
+              </label>
+            </div>
+            
+            {selectedPerturbations.pitchShift && (
+              <div className="space-y-2 pl-6">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Pitch Shift</span>
+                  <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
+                    {pitchShift[0] > 0 ? "+" : ""}{pitchShift[0]} semitones
+                  </Badge>
                 </div>
-              )}
-            </TabsContent>
-          </Tabs>
+                <Slider 
+                  value={pitchShift} 
+                  onValueChange={setPitchShift} 
+                  min={-6} 
+                  max={6} 
+                  step={1} 
+                  className="w-full [&_[role=slider]]:border-blue-500 [&_[role=slider]]:bg-blue-600"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>-6</span>
+                  <span>0</span>
+                  <span>+6</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Time Stretch Perturbation */}
+          <div className="space-y-3 p-3 border rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="time-checkbox"
+                checked={selectedPerturbations.timeStretch}
+                onCheckedChange={() => handlePerturbationToggle('timeStretch')}
+                className="border-blue-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+              />
+              <Play className="h-4 w-4 text-blue-600" />
+              <label htmlFor="time-checkbox" className="text-sm font-medium">
+                Apply Time Stretch
+              </label>
+            </div>
+            
+            {selectedPerturbations.timeStretch && (
+              <div className="space-y-2 pl-6">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Time Stretch</span>
+                  <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
+                    {timeStretch[0]}% {timeStretch[0] < 100 ? "(Faster)" : timeStretch[0] > 100 ? "(Slower)" : "(Normal)"}
+                  </Badge>
+                </div>
+                <Slider 
+                  value={timeStretch} 
+                  onValueChange={setTimeStretch} 
+                  min={50} 
+                  max={200} 
+                  step={5} 
+                  className="w-full [&_[role=slider]]:border-blue-500 [&_[role=slider]]:bg-blue-600" 
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>50% (2x faster)</span>
+                  <span>100%</span>
+                  <span>200% (2x slower)</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Apply Perturbations Button */}
+      <Card>
+        <CardContent className="pt-4">
+          <Button
+            onClick={handleAddPerturbations}
+            disabled={isLoading || !selectedFile || !Object.values(selectedPerturbations).some(Boolean)}
+            className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-md"
+            size="lg"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4 mr-2" />
+            )}
+            {isLoading ? "Applying Perturbations..." : "Apply Perturbations"}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-2 text-center">
+            {!selectedFile 
+              ? "Select a file to apply perturbations"
+              : !Object.values(selectedPerturbations).some(Boolean)
+              ? "Select at least one perturbation type"
+              : `Apply perturbations to ${selectedFile.filename}`
+            }
+          </p>
         </CardContent>
       </Card>
 
