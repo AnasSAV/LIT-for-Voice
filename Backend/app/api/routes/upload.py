@@ -63,6 +63,18 @@ async def upload_audio_file(file: UploadFile = File(...),model: str = Form(...))
         except Exception as e:
             print("Prediction API failed:", e)
             prediction = {}
+        
+        # Generate embeddings for the uploaded file
+        try:
+            from app.api.routes.inferences import extract_single_embedding_endpoint
+            embedding_request = {
+                "model": model,
+                "file_path": str(file_path)
+            }
+            embedding_result = await extract_single_embedding_endpoint(embedding_request)
+            print(f"Generated embeddings for {file.filename}")
+        except Exception as e:
+            print(f"Embedding generation failed for {file.filename}:", e)
         return JSONResponse(
             status_code=200,
             content={

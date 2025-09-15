@@ -18,25 +18,81 @@ interface UploadedFile {
   sample_rate?: number;
 }
 
+interface PerturbationResult {
+  perturbed_file: string;
+  filename: string;
+  duration_ms: number;
+  sample_rate: number;
+  applied_perturbations: Array<{
+    type: string;
+    params: Record<string, any>;
+    status: string;
+    error?: string;
+  }>;
+  success: boolean;
+  error?: string;
+}
+
 interface DatapointEditorPanelProps {
   selectedFile?: UploadedFile | null;
   dataset?: string; // "custom" | dataset key
+  perturbationResult?: PerturbationResult | null;
+  predictionMap?: Record<string, string>;
 }
 
-export const DatapointEditorPanel = ({ selectedFile, dataset = "custom" }: DatapointEditorPanelProps) => {
+export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturbationResult, predictionMap }: DatapointEditorPanelProps) => {
   const [selectedLabel, setSelectedLabel] = useState<string>("neutral");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [showPerturbed, setShowPerturbed] = useState(false);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
 
   const audioUrl = (() => {
+    // If showing perturbed audio and it's available
+    if (showPerturbed && perturbationResult?.success) {
+      const filename = perturbationResult.filename;
+      return `http://localhost:8000/upload/file/${filename}`;
+    }
+    
+    // Otherwise show original audio
     if (!selectedFile) return undefined;
-    if (dataset && dataset !== "custom") {
+    
+    // Check if this is an uploaded file - more precise detection
+    // Uploaded files have file_path that contains "uploads/" OR have specific message types
+    // Dataset files have message "Selected from embeddings" or no uploads/ in path
+    const isUploadedFile = selectedFile.file_path && (
+      selectedFile.file_path.includes('uploads/') || 
+      selectedFile.file_path.startsWith('uploads/') ||
+      selectedFile.message === "Perturbed file" ||
+      selectedFile.message === "File uploaded successfully" ||
+      selectedFile.message === "File uploaded and processed successfully"
+    ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
+    
+    if (isUploadedFile) {
+      // This is an uploaded file, use the upload endpoint
+      return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+    } else if (dataset && dataset !== "custom") {
+      // This is a dataset file
       const filename = encodeURIComponent(selectedFile.filename);
       return `http://localhost:8000/${dataset}/file/${filename}`;
+    } else {
+      // Fallback to upload endpoint
+      return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
     }
-    return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+  })();
+
+  // Get current file info (original or perturbed)
+  const currentFileInfo = (() => {
+    if (showPerturbed && perturbationResult?.success) {
+      return {
+        filename: perturbationResult.filename,
+        duration: perturbationResult.duration_ms / 1000,
+        sample_rate: perturbationResult.sample_rate,
+        size: undefined
+      };
+    }
+    return selectedFile;
   })();
 
   // Debug logging for selectedFile and audioUrl
@@ -45,7 +101,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom" }: Datap
     console.log('DatapointEditorPanel - audioUrl:', audioUrl);
   }, [selectedFile, audioUrl]);
 
-  // Reset playback when file changes
+  // Reset playback when file changes or when switching between original/perturbed
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
@@ -55,7 +111,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom" }: Datap
     if (wavesurferRef.current) {
       wavesurferRef.current.stop();
     }
-  }, [selectedFile?.file_id, dataset]);
+  }, [selectedFile?.file_id, dataset, showPerturbed, perturbationResult?.filename]);
   
   return (
     <div className="h-full panel-background border-l panel-border flex flex-col">
@@ -67,25 +123,72 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom" }: Datap
         {/* File Info */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Sample Info</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Sample Info</CardTitle>
+              {perturbationResult?.success && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={showPerturbed ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowPerturbed(false)}
+                    className="text-xs h-6 px-2"
+                  >
+                    Original
+                  </Button>
+                  <Button
+                    variant={!showPerturbed ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowPerturbed(true)}
+                    className="text-xs h-6 px-2"
+                  >
+                    Perturbed
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="text-xs">
               <span className="text-muted-foreground">File:</span>
-              <span className="ml-2 font-mono">{selectedFile?.filename || "No file selected"}</span>
+              <span className="ml-2 font-mono">{currentFileInfo?.filename || "No file selected"}</span>
+              {showPerturbed && (
+                <Badge variant="secondary" className="ml-2 text-[10px]">P</Badge>
+              )}
             </div>
             <div className="text-xs">
               <span className="text-muted-foreground">Duration:</span>
-              <span className="ml-2">{selectedFile?.duration ? `${selectedFile.duration.toFixed(1)}s` : "N/A"}</span>
+              <span className="ml-2">{currentFileInfo?.duration ? `${currentFileInfo.duration.toFixed(1)}s` : "N/A"}</span>
             </div>
             <div className="text-xs">
               <span className="text-muted-foreground">Sample Rate:</span>
-              <span className="ml-2">{selectedFile?.sample_rate ? `${(selectedFile.sample_rate / 1000).toFixed(1)}kHz` : "N/A"}</span>
+              <span className="ml-2">{currentFileInfo?.sample_rate ? `${(currentFileInfo.sample_rate / 1000).toFixed(1)}kHz` : "N/A"}</span>
             </div>
-            {selectedFile?.size && (
+            {currentFileInfo?.size && (
               <div className="text-xs">
                 <span className="text-muted-foreground">Size:</span>
-                <span className="ml-2">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                <span className="ml-2">{(currentFileInfo.size / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+            )}
+            {showPerturbed && perturbationResult?.applied_perturbations && (
+              <div className="text-xs">
+                <span className="text-muted-foreground">Applied:</span>
+                <div className="ml-2 mt-1 space-y-1">
+                  {perturbationResult.applied_perturbations.map((pert, idx) => (
+                    <Badge key={idx} variant="outline" className="text-[10px] mr-1">
+                      {pert.type.replace('_', ' ')}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {showPerturbed && perturbationResult?.filename && predictionMap && (
+              <div className="text-xs mt-2">
+                <span className="text-muted-foreground">Perturbed Prediction:</span>
+                <div className="ml-2 mt-1">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {predictionMap[perturbationResult.filename] || "Loading..."}
+                  </Badge>
+                </div>
               </div>
             )}
           </CardContent>

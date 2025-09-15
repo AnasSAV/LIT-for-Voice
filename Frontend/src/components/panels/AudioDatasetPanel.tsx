@@ -23,6 +23,7 @@ interface AudioDatasetPanelProps {
   apiData?: unknown;
   model: string | null;
   dataset: string;
+  originalDataset?: string;
   uploadedFiles?: UploadedFile[];
   selectedFile?: UploadedFile | null;
   onFileSelect?: (file: UploadedFile) => void;
@@ -31,26 +32,32 @@ interface AudioDatasetPanelProps {
   onBatchInferenceStart?: () => void;
   onBatchInferenceComplete?: () => void;
   onAvailableFilesChange?: (files: string[]) => void;
+  onPredictionUpdate?: (fileId: string, prediction: string) => void;
+  predictionMap?: Record<string, string>;
 }
 
 export const AudioDatasetPanel = ({ 
   apiData, 
   model,
   dataset,
+  originalDataset,
   selectedFile, 
   onFileSelect, 
   onUploadSuccess,
   batchInferenceStatus,
   onBatchInferenceStart,
   onBatchInferenceComplete,
-  onAvailableFilesChange
+  onAvailableFilesChange,
+  onPredictionUpdate,
+  predictionMap: externalPredictionMap
 }: AudioDatasetPanelProps) => {
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [datasetMetadata, setDatasetMetadata] = useState<Record<string, string | number>[]>([]);
-  const [predictionMap, setPredictionMap] = useState<Record<string, string>>({});
+  // Use external predictionMap from parent
+  const predictionMap = externalPredictionMap || {};
   const [inferenceStatus, setInferenceStatus] = useState<Record<string, 'idle' | 'loading' | 'done' | 'error'>>({});
   
   // Batch inference state
@@ -91,8 +98,19 @@ export const AudioDatasetPanel = ({
     
     // When a row is selected, just propagate the file selection for UI/audio playback
     // No inference should be triggered here
-    if (dataset === "custom") return;
-    if (!onFileSelect) return;
+    if (!onFileSelect) {
+      return;
+    }
+    
+    // When showing combined data (uploaded + dataset files), check if it's an uploaded file first
+    if (dataset === "custom") {
+      const uploadedFile = uploadedFiles?.find(f => f.file_id === id);
+      if (uploadedFile) {
+        onFileSelect(uploadedFile);
+        return;
+      }
+      // If not an uploaded file, treat it as a dataset file (fall through to dataset logic)
+    }
 
     const findMatch = () => {
       for (const row of datasetMetadata) {
@@ -114,7 +132,7 @@ export const AudioDatasetPanel = ({
       file_id: String(id),
       filename,
       file_path: pathVal || filename,
-      message: "",
+      message: "Selected from dataset", // This indicates it's a dataset file
     };
 
     // Just select the file for UI purposes, no inference
@@ -122,13 +140,12 @@ export const AudioDatasetPanel = ({
   }, [dataset, datasetMetadata, onFileSelect]);
 
   const handleFilePlay = useCallback((file: UploadedFile) => {
-    console.log('AudioDatasetPanel - File selected for play:', file);
-    console.log('AudioDatasetPanel - onFileSelect callback exists:', !!onFileSelect);
     if (onFileSelect) {
       onFileSelect(file);
-      console.log('AudioDatasetPanel - Called onFileSelect with file');
     }
   }, [onFileSelect]);
+
+  // No need for local prediction update handling since we use external predictionMap
 
   const handleVisibleRowIdsChange = useCallback((ids: string[]) => {
     // This is now just for pagination, no inference triggering
@@ -139,7 +156,8 @@ export const AudioDatasetPanel = ({
     if (dataset === "custom" || !model) return;
     if (datasetMetadata.length === 0) return;
     
-    const modelDatasetKey = `${model}-${dataset}`;
+    const datasetToUse = originalDataset || dataset;
+    const modelDatasetKey = `${model}-${datasetToUse}`;
     
     // If we've already completed inference for this model+dataset combination, don't restart
     if (isInferenceComplete && currentModelDataset === modelDatasetKey) {
@@ -208,7 +226,12 @@ export const AudioDatasetPanel = ({
           }
         });
         
-        setPredictionMap(newPredictionMap);
+        // Update external predictionMap via callback
+        Object.entries(newPredictionMap).forEach(([fileId, prediction]) => {
+          if (onPredictionUpdate) {
+            onPredictionUpdate(fileId, prediction);
+          }
+        });
         setInferenceStatus(newInferenceStatus);
         
         if (missing_files.length === 0) {
@@ -248,7 +271,6 @@ export const AudioDatasetPanel = ({
         });
         
         setBatchInferenceQueue(fileIds);
-        setPredictionMap({});
         setInferenceStatus({});
         
         if (onBatchInferenceStart) {
@@ -258,7 +280,7 @@ export const AudioDatasetPanel = ({
     };
     
     checkCachedResults();
-  }, [model, dataset, datasetMetadata, onBatchInferenceStart, onBatchInferenceComplete, isInferenceComplete, currentModelDataset]);
+  }, [model, dataset, originalDataset, datasetMetadata, onBatchInferenceStart, onBatchInferenceComplete, isInferenceComplete, currentModelDataset]);
 
   // Process batch inference queue
   useEffect(() => {
@@ -314,7 +336,10 @@ export const AudioDatasetPanel = ({
         const prediction = await response.json();
         const predictionText = typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction);
 
-        setPredictionMap(prev => ({ ...prev, [currentFileId]: predictionText }));
+        // Update external predictionMap via callback
+        if (onPredictionUpdate) {
+          onPredictionUpdate(currentFileId, predictionText);
+        }
         setInferenceStatus(prev => ({ ...prev, [currentFileId]: 'done' }));
         
         console.log(`Inference complete for ${filename}: ${predictionText}`);
@@ -333,7 +358,7 @@ export const AudioDatasetPanel = ({
     const timeoutId = setTimeout(runInference, 100);
     
     return () => clearTimeout(timeoutId);
-  }, [batchInferenceQueue, currentInferenceIndex, datasetMetadata, model, dataset, onBatchInferenceComplete]);
+  }, [batchInferenceQueue, currentInferenceIndex, datasetMetadata, model, dataset, originalDataset, onBatchInferenceComplete]);
 
   // Cleanup on unmount or when dataset changes
   useEffect(() => {
@@ -345,17 +370,18 @@ export const AudioDatasetPanel = ({
     };
   }, [model, dataset]);
 
-  // Fetch dataset metadata when dataset changes (for non-custom datasets)
+  // Fetch dataset metadata when originalDataset changes (for non-custom datasets)
   useEffect(() => {
     const allowed = ["common-voice", "ravdess"];
-    if (!allowed.includes(dataset)) {
+    const datasetToUse = originalDataset || dataset;
+    if (!allowed.includes(datasetToUse)) {
       setDatasetMetadata([]);
       return;
     }
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await fetch(`http://localhost:8000/${dataset}/metadata`, { signal: ac.signal });
+        const res = await fetch(`http://localhost:8000/${datasetToUse}/metadata`, { signal: ac.signal });
         if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -381,7 +407,7 @@ export const AudioDatasetPanel = ({
       }
     })();
     return () => ac.abort();
-  }, [dataset]);
+  }, [originalDataset, dataset]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
