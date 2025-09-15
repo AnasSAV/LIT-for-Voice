@@ -443,45 +443,47 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
             )}
           </div>
 
-          {/* Time Stretch Perturbation */}
-          <div className="space-y-3 p-3 border rounded-lg">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="time-checkbox"
-                checked={selectedPerturbations.timeStretch}
-                onCheckedChange={() => handlePerturbationToggle('timeStretch')}
-                className="border-blue-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-              />
-              <Play className="h-4 w-4 text-blue-600" />
-              <label htmlFor="time-checkbox" className="text-sm font-medium">
-                Apply Time Stretch
-              </label>
-            </div>
-            
-            {selectedPerturbations.timeStretch && (
-              <div className="space-y-2 pl-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs">Time Stretch</span>
-                  <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
-                    {timeStretch[0]}% {timeStretch[0] < 100 ? "(Faster)" : timeStretch[0] > 100 ? "(Slower)" : "(Normal)"}
-                  </Badge>
-                </div>
-                <Slider 
-                  value={timeStretch} 
-                  onValueChange={setTimeStretch} 
-                  min={50} 
-                  max={200} 
-                  step={5} 
-                  className="w-full [&_[role=slider]]:border-blue-500 [&_[role=slider]]:bg-blue-600" 
+          {/* Time Stretch Perturbation - Hidden for Whisper models */}
+          {!model?.includes('whisper') && (
+            <div className="space-y-3 p-3 border rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="time-checkbox"
+                  checked={selectedPerturbations.timeStretch}
+                  onCheckedChange={() => handlePerturbationToggle('timeStretch')}
+                  className="border-blue-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>50% (2x faster)</span>
-                  <span>100%</span>
-                  <span>200% (2x slower)</span>
-                </div>
+                <Play className="h-4 w-4 text-blue-600" />
+                <label htmlFor="time-checkbox" className="text-sm font-medium">
+                  Apply Time Stretch
+                </label>
               </div>
-            )}
-          </div>
+              
+              {selectedPerturbations.timeStretch && (
+                <div className="space-y-2 pl-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs">Time Stretch</span>
+                    <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
+                      {timeStretch[0]}% {timeStretch[0] < 100 ? "(Faster)" : timeStretch[0] > 100 ? "(Slower)" : "(Normal)"}
+                    </Badge>
+                  </div>
+                  <Slider 
+                    value={timeStretch} 
+                    onValueChange={setTimeStretch} 
+                    min={50} 
+                    max={200} 
+                    step={5} 
+                    className="w-full [&_[role=slider]]:border-blue-500 [&_[role=slider]]:bg-blue-600" 
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>50% (2x faster)</span>
+                    <span>100%</span>
+                    <span>200% (2x slower)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

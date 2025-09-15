@@ -24,9 +24,9 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
     // Create WaveSurfer instance
     const wavesurfer = WaveSurfer.create({
       container: waveformRef.current,
-      waveColor: '#3b82f6', // Blue-500
-      progressColor: '#1d4ed8', // Blue-700
-      cursorColor: '#60a5fa', // Blue-400
+      waveColor: '#3b82f6', // Blue-500 for waveform
+      progressColor: '#1d4ed8', // Blue-700 for progress
+      cursorColor: '#60a5fa', // Blue-400 for cursor
       height: 80,
       normalize: true,
       barWidth: 2,
@@ -159,13 +159,13 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
   };
 
   return (
-    <Card className="p-3 border-blue-200 bg-blue-50/20">
+    <Card className="p-3 border-gray-200 bg-white shadow-sm">
       <div 
         ref={waveformRef}
-        className="h-20 bg-blue-100/50 rounded relative min-h-[80px] border border-blue-200"
+        className="h-20 bg-white rounded relative min-h-[80px] border border-gray-200"
       >
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 bg-blue-50/90">
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/90">
             <div className="text-xs text-blue-600 flex items-center gap-2">
               <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
               Loading waveform...
@@ -173,7 +173,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 bg-blue-50/90">
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/90">
             <div className="text-xs text-red-500 text-center px-2">
               <div className="font-medium">⚠️ Error loading audio</div>
               <div className="mt-1">{error}</div>
@@ -203,7 +203,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
         )}
         {!audioUrl && !isLoading && !error && (
           <div className="absolute inset-0 flex items-center justify-center z-10">
-            <div className="text-xs text-blue-600 text-center">
+            <div className="text-xs text-gray-500 text-center">
               <div>🎵 No audio file selected</div>
               <div className="mt-1">Upload and select a file to view waveform</div>
             </div>
@@ -212,7 +212,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
       </div>
       
       {/* Time markers and controls */}
-      <div className="flex justify-between text-xs text-blue-600 mt-2">
+      <div className="flex justify-between text-xs text-gray-600 mt-2">
         <span>0:00</span>
         <span className="text-center flex-1 italic">
           {audioUrl ? 'Click waveform to seek' : 'Waveform will appear here'}

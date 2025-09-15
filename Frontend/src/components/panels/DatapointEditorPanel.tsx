@@ -82,7 +82,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     }
   })();
 
-  // Get current file info (original or perturbed)
+  // Get current file info (original or perturbed) with better data handling
   const currentFileInfo = (() => {
     if (showPerturbed && perturbationResult?.success) {
       return {
@@ -92,8 +92,25 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
         size: undefined
       };
     }
-    return selectedFile;
+    
+    // For original file, try to get the most accurate data
+    if (selectedFile) {
+      return {
+        filename: selectedFile.filename,
+        duration: selectedFile.duration || undefined,
+        sample_rate: selectedFile.sample_rate || undefined,
+        size: selectedFile.size || undefined
+      };
+    }
+    
+    return null;
   })();
+
+  // Add a state to track audio metadata from wavesurfer
+  const [audioMetadata, setAudioMetadata] = useState<{
+    duration?: number;
+    sampleRate?: number;
+  }>({});
 
   // Debug logging for selectedFile and audioUrl
   useEffect(() => {
@@ -106,6 +123,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    setAudioMetadata({}); // Reset metadata when file changes
     
     // Reset wavesurfer instance if it exists
     if (wavesurferRef.current) {
@@ -165,11 +183,23 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
             </div>
             <div className="text-xs">
               <span className="text-gray-600">Duration:</span>
-              <span className="ml-2 text-gray-800">{currentFileInfo?.duration ? `${currentFileInfo.duration.toFixed(1)}s` : "N/A"}</span>
+              <span className="ml-2 text-gray-800">
+                {currentFileInfo?.duration 
+                  ? `${currentFileInfo.duration.toFixed(1)}s` 
+                  : audioMetadata.duration 
+                  ? `${audioMetadata.duration.toFixed(1)}s` 
+                  : "Loading..."}
+              </span>
             </div>
             <div className="text-xs">
               <span className="text-gray-600">Sample Rate:</span>
-              <span className="ml-2 text-gray-800">{currentFileInfo?.sample_rate ? `${(currentFileInfo.sample_rate / 1000).toFixed(1)}kHz` : "N/A"}</span>
+              <span className="ml-2 text-gray-800">
+                {currentFileInfo?.sample_rate 
+                  ? `${(currentFileInfo.sample_rate / 1000).toFixed(1)}kHz` 
+                  : audioMetadata.sampleRate 
+                  ? `${(audioMetadata.sampleRate / 1000).toFixed(1)}kHz` 
+                  : "Loading..."}
+              </span>
             </div>
             {currentFileInfo?.size && (
               <div className="text-xs">
@@ -217,10 +247,21 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
                 const duration = wavesurfer.getDuration();
                 console.log('Duration from WaveSurfer:', duration);
                 setDuration(duration);
+                
+                // Update metadata state for file info display
+                setAudioMetadata({
+                  duration: duration,
+                  sampleRate: wavesurfer.getDecodedData()?.sampleRate || undefined
+                });
               }}
               onProgress={(time, dur) => {
                 setCurrentTime(time);
                 setDuration(dur);
+                
+                // Update duration in metadata if not already set
+                if (!audioMetadata.duration && dur > 0) {
+                  setAudioMetadata(prev => ({ ...prev, duration: dur }));
+                }
               }}
             />
             <AudioPlayer 

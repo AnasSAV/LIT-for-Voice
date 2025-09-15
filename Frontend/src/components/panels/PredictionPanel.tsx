@@ -446,7 +446,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                 </Card>
               )}
 
-              <Card>
+              <Card className="border-gray-200 bg-white">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">
                     {model === "wav2vec2" ? "Classification Results" : model?.includes("whisper") ? "Transcription Results" : "Prediction Results"}
