@@ -507,7 +507,8 @@ async def get_whisper_accuracy(request: Request):
 @router.post("/inferences/wav2vec2-batch")
 async def batch_wav2vec2_prediction(request: Request):
     """
-    Get batch wav2vec2 predictions for multiple files and calculate aggregated probabilities
+    Get batch wav2vec2 predictions for multiple files and calculate aggregated probabilities.
+    Uses cached results when available, only runs model for uncached files.
     """
     try:
         body = await request.json()
@@ -523,10 +524,11 @@ async def batch_wav2vec2_prediction(request: Request):
         # Process each file
         individual_predictions = []
         predicted_emotions = []  # Store just the predicted emotions for distribution
+        cache_stats = {"hits": 0, "misses": 0}
         
         for filename in filenames:
             try:
-                # Load and predict for each file
+                # Resolve file path
                 if dataset:
                     file_path = resolve_file(dataset, filename)
                 else:
@@ -535,8 +537,23 @@ async def batch_wav2vec2_prediction(request: Request):
                         print(f"Warning: File not found: {file_path}")
                         continue
                 
-                # Get detailed prediction
-                result = predict_emotion_wave2vec(str(file_path))
+                # Create cache key
+                file_content_hash = hashlib.md5(str(file_path).encode()).hexdigest()
+                cache_key = f"wav2vec2_detailed_{file_content_hash}"
+                
+                # Check cache first
+                cached_result = await get_result("wav2vec2", cache_key)
+                if cached_result is not None:
+                    # Use cached result
+                    result = cached_result.get("prediction", cached_result)
+                    cache_stats["hits"] += 1
+                    logger.debug(f"Using cached wav2vec2 result for {filename}")
+                else:
+                    # Run model and cache result
+                    result = await asyncio.to_thread(predict_emotion_wave2vec, str(file_path))
+                    await cache_result("wav2vec2", cache_key, {"prediction": result}, ttl=6*60*60)
+                    cache_stats["misses"] += 1
+                    logger.debug(f"Generated and cached wav2vec2 result for {filename}")
                 
                 individual_predictions.append({
                     "filename": filename,
@@ -577,6 +594,11 @@ async def batch_wav2vec2_prediction(request: Request):
                 "dominant_emotion": dominant_emotion[0],
                 "dominant_count": dominant_emotion[1],
                 "dominant_percentage": dominant_emotion[1] / total_files
+            },
+            "cache_info": {
+                "cached_count": cache_stats["hits"],
+                "missing_count": cache_stats["misses"],
+                "cache_hit_rate": cache_stats["hits"] / (cache_stats["hits"] + cache_stats["misses"]) if (cache_stats["hits"] + cache_stats["misses"]) > 0 else 0
             }
         }
         
