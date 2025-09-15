@@ -325,7 +325,23 @@ async def get_whisper_accuracy(request: Request):
         print(f"DEBUG: Cached result found: {cached_result is not None}")
         
         if cached_result is None:
-            raise HTTPException(status_code=404, detail=f"No cached prediction found for {dataset_file}. Please run inference first. Cache key: {cache_key}")
+            # If not cached, run inference first
+            print(f"DEBUG: No cached result found, running inference for {dataset_file}")
+            try:
+                # Run inference to get the prediction and cache it
+                if dataset and dataset_file:
+                    inference_result = await run_inference(model, None, dataset, dataset_file)
+                else:
+                    inference_result = await run_inference(model, str(resolved_path), None, None)
+                
+                # Now try to get the cached result again
+                cached_result = await get_result(model, cache_key)
+                if cached_result is None:
+                    # If still not cached, use the inference result directly
+                    cached_result = {"prediction": inference_result}
+            except Exception as e:
+                print(f"DEBUG: Failed to run inference: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to run inference for {dataset_file}: {str(e)}")
         
         # Extract transcript from cached result
         if isinstance(cached_result, dict):
@@ -340,7 +356,7 @@ async def get_whisper_accuracy(request: Request):
             if dataset == "common-voice":
                 metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
             elif dataset == "ravdess":
-                metadata_path = DATA_DIR / "ravdess_subset" / "metadata.csv"
+                metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
             else:
                 raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
             
@@ -356,17 +372,31 @@ async def get_whisper_accuracy(request: Request):
                 
                 if not file_rows.empty:
                     # Try different column names for transcript/text
-                    for col in ['text', 'transcript', 'sentence', 'label']:
-                        if col in df.columns:
-                            ground_truth = str(file_rows.iloc[0][col])
-                            break
+                    if dataset == "common-voice":
+                        # For common-voice, use 'text' column
+                        for col in ['text', 'transcript', 'sentence', 'label']:
+                            if col in df.columns:
+                                ground_truth = str(file_rows.iloc[0][col])
+                                break
+                    elif dataset == "ravdess":
+                        # For RAVDESS, use 'statement' column
+                        for col in ['statement', 'text', 'transcript', 'sentence']:
+                            if col in df.columns:
+                                ground_truth = str(file_rows.iloc[0][col])
+                                break
         
         if not ground_truth:
             # More specific error message for debugging
             error_msg = f"Ground truth not found in dataset metadata. Dataset: {dataset}, File: {dataset_file}"
             if dataset and dataset_file:
-                metadata_path = DATA_DIR / f"{dataset}_valid_dev" / f"{dataset}_valid_data_metadata.csv" if dataset == "common-voice" else DATA_DIR / f"{dataset}_subset" / "metadata.csv"
-                error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
+                if dataset == "common-voice":
+                    metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
+                elif dataset == "ravdess":
+                    metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
+                else:
+                    metadata_path = None
+                if metadata_path:
+                    error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
             print(f"DEBUG: {error_msg}")
             raise HTTPException(status_code=404, detail=error_msg)
         
