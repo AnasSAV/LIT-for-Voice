@@ -29,12 +29,22 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
     audio, sample_rate = librosa.load(audio_file, sr=16000)
     audio = audio.astype(np.float32)
 
-    result = pipe(
-        audio,
-        return_timestamps=return_timestamps,
-        chunk_length_s=chunk_length_s,
-        batch_size=batch_size,
-    )
+    if return_timestamps:
+        
+        result = pipe(
+            audio,
+            return_timestamps="word",  # Get word-level timestamps instead of chunk-level
+            chunk_length_s=5,  # Use smaller chunks (5 seconds instead of 30)
+            batch_size=batch_size,
+        )
+    else:
+        # For regular transcription, use original parameters
+        result = pipe(
+            audio,
+            return_timestamps=return_timestamps,
+            chunk_length_s=chunk_length_s,
+            batch_size=batch_size,
+        )
     
     if return_timestamps:
         return {

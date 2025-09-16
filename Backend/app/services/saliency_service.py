@@ -34,14 +34,19 @@ def detect_model_type(model: str) -> str:
 
 
 def generate_whisper_saliency(audio_file_path: str, model_size: str = "base", method: str = "gradcam", existing_prediction: Dict = None) -> Dict:
+    logger.info(f"Generating Whisper saliency for {audio_file_path} using {method} method")
+    
     if existing_prediction and "chunks" in existing_prediction:
         data = existing_prediction
         audio = data["audio"]
         chunks = data["chunks"]
+        logger.info(f"Using existing prediction with {len(chunks)} chunks")
     else:
+        logger.info("Transcribing audio with timestamps for saliency analysis")
         data = transcribe_whisper_with_timestamps(audio_file_path, model_size)
         audio = data["audio"]
         chunks = data["chunks"]
+        logger.info(f"Transcription completed with {len(chunks) if chunks else 0} chunks")
     
     # Crop to a safe max duration to avoid OOM
     if isinstance(audio, (list, tuple)):
@@ -206,55 +211,93 @@ def generate_whisper_saliency(audio_file_path: str, model_size: str = "base", me
     T = len(saliency_scores)
     fps = (T / total_duration) if total_duration > 0 else 1.0
     
-    for chunk in chunks or []:
-        start_time = chunk.get("timestamp", [0, 0])[0]
-        end_time = chunk.get("timestamp", [0, 0])[1]
-        word = chunk.get("text", "")
+    # Process word-level chunks if available with simplified logic
+    if chunks and total_duration > 0:
+        logger.info(f"Processing {len(chunks)} word-level chunks for saliency segmentation")
         
-        # Convert to attribution frames using derived fps
-        start_frame = max(0, min(T - 1, int(start_time * fps)))
-        end_frame = max(0, min(T, int(end_time * fps)))
+        # Debug: Log first few chunks to understand structure
+        if len(chunks) > 0:
+            logger.info(f"First chunk structure: {chunks[0]}")
+            if len(chunks) > 5:
+                logger.info(f"Sample of chunks: {chunks[:3]} ... {chunks[-2:]}")
         
-        if end_frame > start_frame:
+        for chunk in chunks:
+            start_time = chunk.get("timestamp", [0, 0])[0]
+            end_time = chunk.get("timestamp", [0, 0])[1]
+            word = chunk.get("text", "")
+            
+            # Skip invalid chunks
+            if end_time <= start_time or start_time < 0 or end_time > total_duration:
+                continue
+            
+            # Convert to attribution frames
+            start_frame = max(0, min(T - 1, int(start_time * fps)))
+            end_frame = max(start_frame + 1, min(T, int(end_time * fps)))
+            
+            # Calculate segment saliency
+            if end_frame > start_frame:
+                segment_saliency = float(np.mean(saliency_scores[start_frame:end_frame]))
+                segments.append({
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "word": word.strip(),
+                    "saliency": segment_saliency,
+                    "intensity": float(abs(segment_saliency))
+                })
+        
+        # Sort by start time to ensure proper order
+        segments.sort(key=lambda x: x["start_time"])
+        
+        logger.info(f"Created {len(segments)} segments from word-level timestamps")
+
+    # Fallback: if no segments were created, create uniform time-based segments
+    if len(segments) == 0 and T > 0 and total_duration > 0:
+        logger.info("No word-level segments found, creating uniform time-based segments")
+        # Create 10-20 segments based on audio duration (aim for ~0.5-1 second segments)
+        num_segments = max(8, min(32, int(total_duration * 2)))
+        
+        for i in range(num_segments):
+            start_time = (i / num_segments) * total_duration
+            end_time = ((i + 1) / num_segments) * total_duration
+            
+            start_frame = max(0, min(T - 1, int(start_time * fps)))
+            end_frame = max(start_frame + 1, min(T, int(end_time * fps)))
+            
             segment_saliency = float(np.mean(saliency_scores[start_frame:end_frame]))
             segments.append({
                 "start_time": start_time,
                 "end_time": end_time,
-                "word": word,
+                "word": f"segment_{i+1}",
                 "saliency": segment_saliency,
                 "intensity": float(abs(segment_saliency))
             })
-
-    # Fallback: if no text chunks or mapping produced 0 segments, create uniform segments
-    if len(segments) == 0 and T > 0 and total_duration > 0:
-        num_segments = max(8, min(64, int(total_duration * 4)))
-        for i in range(num_segments):
-            s_time = (i / num_segments) * total_duration
-            e_time = ((i + 1) / num_segments) * total_duration
-            s_idx = int(s_time * fps)
-            e_idx = int(e_time * fps)
-            s_idx = max(0, min(T - 1, s_idx))
-            e_idx = max(s_idx + 1, min(T, e_idx))
-            seg_sal = float(np.mean(saliency_scores[s_idx:e_idx]))
-            segments.append({
-                "start_time": s_time,
-                "end_time": e_time,
-                "saliency": seg_sal,
-                "intensity": float(abs(seg_sal)),
-            })
+        
+        logger.info(f"Created {len(segments)} uniform time-based segments")
 
     # Final normalization across segments for visibility
     if len(segments) > 0:
-        vals = np.array([s.get("saliency", 0.0) for s in segments], dtype=np.float32)
-        vmin, vmax = float(np.min(vals)), float(np.max(vals))
-        vrng = vmax - vmin
-        if vrng < 1e-9:
-            # Use absolute values spread if flat
-            vals = np.abs(vals)
-            vmin, vmax = float(np.min(vals)), float(np.max(vals))
-            vrng = vmax - vmin
-        for s, v in zip(segments, vals):
-            s["intensity"] = float((v - vmin) / (vrng + 1e-9))
+        # Collect raw saliency values
+        raw_saliencies = [s.get("saliency", 0.0) for s in segments]
+        
+        # Use absolute values for intensity (magnitude of importance)
+        abs_vals = np.abs(raw_saliencies)
+        
+        # Robust normalization to prevent all-zero intensities
+        max_abs = float(np.max(abs_vals)) if len(abs_vals) > 0 else 0.0
+        if max_abs > 1e-9:
+            # Scale to [0,1] based on maximum absolute value
+            for i, segment in enumerate(segments):
+                segment["intensity"] = float(abs_vals[i] / max_abs)
+        else:
+            # Fallback: use relative ranking if all values are very small
+            sorted_indices = np.argsort(-abs_vals)  # Sort descending by magnitude
+            for rank, idx in enumerate(sorted_indices):
+                # Assign intensity based on ranking: highest gets 1.0, lowest gets 0.1
+                segments[idx]["intensity"] = float(1.0 - (rank / len(segments)) * 0.9)
+        
+        # Ensure minimum visibility for all segments
+        for segment in segments:
+            segment["intensity"] = max(0.1, segment["intensity"])  # Minimum 10% intensity
     
     return {
         "model": f"whisper-{model_size}",
@@ -430,15 +473,26 @@ def generate_wav2vec2_saliency(audio_file_path: str, method: str = "gradcam", ex
 
     # Final normalization across segments for visibility
     if len(segments) > 0:
-        vals = np.array([s.get("saliency", 0.0) for s in segments], dtype=np.float32)
-        vmin, vmax = float(np.min(vals)), float(np.max(vals))
-        vrng = vmax - vmin
-        if vrng < 1e-9:
-            vals = np.abs(vals)
-            vmin, vmax = float(np.min(vals)), float(np.max(vals))
-            vrng = vmax - vmin
-        for s, v in zip(segments, vals):
-            s["intensity"] = float((v - vmin) / (vrng + 1e-9))
+        # Use robust intensity calculation
+        raw_saliencies = [s.get("saliency", 0.0) for s in segments]
+        abs_vals = np.abs(raw_saliencies)
+        
+        # Robust normalization to prevent all-zero intensities
+        max_abs = float(np.max(abs_vals)) if len(abs_vals) > 0 else 0.0
+        if max_abs > 1e-9:
+            # Scale to [0,1] based on maximum absolute value
+            for i, segment in enumerate(segments):
+                segment["intensity"] = float(abs_vals[i] / max_abs)
+        else:
+            # Fallback: use relative ranking if all values are very small
+            sorted_indices = np.argsort(-abs_vals)  # Sort descending by magnitude
+            for rank, idx in enumerate(sorted_indices):
+                # Assign intensity based on ranking: highest gets 1.0, lowest gets 0.1
+                segments[idx]["intensity"] = float(1.0 - (rank / len(segments)) * 0.9)
+        
+        # Ensure minimum visibility for all segments
+        for segment in segments:
+            segment["intensity"] = max(0.1, segment["intensity"])  # Minimum 10% intensity
     
     return {
         "model": "wav2vec2",

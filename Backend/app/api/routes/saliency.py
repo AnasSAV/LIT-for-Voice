@@ -53,7 +53,11 @@ async def generate_saliency_endpoint(request: SaliencyRequest):
         raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
     
     import hashlib
-    file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+    # Include file size and modification time for better cache key uniqueness
+    file_stat = resolved_path.stat()
+    file_content_hash = hashlib.md5(
+        f"{str(resolved_path)}_{file_stat.st_size}_{file_stat.st_mtime}".encode()
+    ).hexdigest()
     cache_key = f"saliency_{SALIENCY_SCHEMA_VERSION}_{request.model}_{request.method}_{file_content_hash}"
     
     if not request.no_cache:

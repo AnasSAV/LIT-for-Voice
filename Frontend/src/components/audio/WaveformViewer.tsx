@@ -14,6 +14,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const currentBlobUrlRef = useRef<string | null>(null);
 
   // Initialize WaveSurfer instance
   useEffect(() => {
@@ -81,6 +82,11 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
         wavesurferRef.current.destroy();
         wavesurferRef.current = null;
       }
+      // Clean up blob URLs to prevent memory leaks
+      if (currentBlobUrlRef.current) {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+      }
     };
   }, []); // Only run once when component mounts
 
@@ -112,9 +118,36 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
           throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
         }
         
-        // If HEAD request succeeds, load with WaveSurfer
+        // If HEAD request succeeds, try to load with WaveSurfer
         try {
-          wavesurferRef.current?.load(audioUrl);
+          // For cross-origin requests (like ngrok), try to preload audio data
+          if (audioUrl.includes('ngrok') || audioUrl.includes('colab') || audioUrl.includes('https://')) {
+            // First try to fetch audio data
+            fetch(audioUrl, {
+              credentials: 'include',
+              mode: 'cors'
+            }).then(audioResponse => {
+              if (audioResponse.ok) {
+                return audioResponse.blob();
+              }
+              throw new Error('Failed to fetch audio data');
+            }).then(blob => {
+              // Clean up previous blob URL if exists
+              if (currentBlobUrlRef.current) {
+                URL.revokeObjectURL(currentBlobUrlRef.current);
+              }
+              const audioBlob = URL.createObjectURL(blob);
+              currentBlobUrlRef.current = audioBlob;
+              wavesurferRef.current?.load(audioBlob);
+            }).catch(blobErr => {
+              console.warn('Blob loading failed, trying direct URL:', blobErr);
+              // Fallback to direct URL loading
+              wavesurferRef.current?.load(audioUrl);
+            });
+          } else {
+            // Local files can be loaded directly
+            wavesurferRef.current?.load(audioUrl);
+          }
         } catch (err) {
           console.error('WaveSurfer load error:', err);
           setError(`WaveSurfer failed to load: ${err?.message || 'Unknown error'}`);
@@ -140,10 +173,24 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
           .then(response => {
             console.log('Audio URL GET fallback response:', response.status);
             if (response.ok) {
-              setError('File accessible but WaveSurfer may have issues with CORS or format');
-              // Try loading anyway
+              setError('File accessible, trying blob loading for cross-origin compatibility');
+              // Try blob loading for cross-origin
               try {
-                wavesurferRef.current?.load(audioUrl);
+                if (audioUrl.includes('ngrok') || audioUrl.includes('colab') || audioUrl.includes('https://')) {
+                  response.blob().then(blob => {
+                    // Clean up previous blob URL if exists
+                    if (currentBlobUrlRef.current) {
+                      URL.revokeObjectURL(currentBlobUrlRef.current);
+                    }
+                    const audioBlob = URL.createObjectURL(blob);
+                    currentBlobUrlRef.current = audioBlob;
+                    wavesurferRef.current?.load(audioBlob);
+                  }).catch(blobErr => {
+                    setError(`Blob loading failed: ${blobErr?.message || 'Unknown error'}`);
+                  });
+                } else {
+                  wavesurferRef.current?.load(audioUrl);
+                }
               } catch (wsErr: any) {
                 setError(`WaveSurfer error: ${wsErr?.message || 'Unknown error'}`);
               }

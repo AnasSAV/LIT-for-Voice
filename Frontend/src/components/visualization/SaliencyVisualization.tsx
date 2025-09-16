@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Download, Loader2 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { API_BASE } from '@/lib/api';
 
 interface SaliencySegment {
@@ -29,6 +29,137 @@ interface SaliencyVisualizationProps {
   dataset?: string;
 }
 
+interface StaticWaveformProps {
+  audioUrl: string;
+  duration: number;
+}
+
+const StaticWaveform = ({ audioUrl, duration }: StaticWaveformProps) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [waveformData, setWaveformData] = useState<number[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!audioUrl) return;
+    
+    const generateWaveform = async () => {
+      setLoading(true);
+      try {
+        // Create audio context for waveform analysis
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        // Fetch audio data
+        const response = await fetch(audioUrl, {
+          credentials: 'include',
+          mode: 'cors'
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch audio');
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Get audio data from the first channel
+        const channelData = audioBuffer.getChannelData(0);
+        
+        // Downsample for visualization (target ~300 points for smooth display)
+        const targetSamples = 300;
+        const blockSize = Math.floor(channelData.length / targetSamples);
+        const waveform: number[] = [];
+        
+        for (let i = 0; i < targetSamples; i++) {
+          const start = i * blockSize;
+          const end = Math.min(start + blockSize, channelData.length);
+          
+          // Calculate RMS for this block
+          let sum = 0;
+          for (let j = start; j < end; j++) {
+            sum += channelData[j] * channelData[j];
+          }
+          const rms = Math.sqrt(sum / (end - start));
+          waveform.push(rms);
+        }
+        
+        setWaveformData(waveform);
+        audioContext.close();
+      } catch (error) {
+        console.warn('Failed to generate waveform:', error);
+        // Fallback: create a simple placeholder waveform
+        const fallbackWaveform = Array.from({ length: 100 }, (_, i) => 
+          Math.sin(i * 0.1) * 0.3 + 0.1 + Math.random() * 0.1
+        );
+        setWaveformData(fallbackWaveform);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    generateWaveform();
+  }, [audioUrl]);
+
+  useEffect(() => {
+    if (!waveformData || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    
+    const width = rect.width;
+    const height = rect.height;
+    
+    // Clear canvas
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw waveform
+    const barWidth = width / waveformData.length;
+    const maxAmplitude = Math.max(...waveformData);
+    
+    ctx.fillStyle = '#6366f1';
+    ctx.globalAlpha = 0.7;
+    
+    waveformData.forEach((amplitude, i) => {
+      const normalizedHeight = (amplitude / maxAmplitude) * height * 0.8;
+      const x = i * barWidth;
+      const y = (height - normalizedHeight) / 2;
+      
+      ctx.fillRect(x, y, Math.max(1, barWidth - 0.5), normalizedHeight);
+    });
+    
+    ctx.globalAlpha = 1;
+  }, [waveformData]);
+
+  return (
+    <div className="relative">
+      <canvas 
+        ref={canvasRef} 
+        className="w-full h-12 rounded border border-border/20"
+        style={{ width: '100%', height: '48px' }}
+      />
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded">
+          <div className="text-xs text-muted-foreground">Analyzing audio...</div>
+        </div>
+      )}
+      {!loading && !waveformData && (
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+          No waveform data
+        </div>
+      )}
+      <div className="absolute bottom-0 left-1 text-[10px] text-muted-foreground bg-background/60 px-1 rounded">
+        {duration.toFixed(1)}s
+      </div>
+    </div>
+  );
+};
+
 export const SaliencyVisualization = ({ selectedFile, model, dataset }: SaliencyVisualizationProps) => {
   const [saliencyData, setSaliencyData] = useState<SaliencyData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +171,24 @@ export const SaliencyVisualization = ({ selectedFile, model, dataset }: Saliency
   const [smoothStrength, setSmoothStrength] = useState(0.5); // 0..1
   const [clipPercent, setClipPercent] = useState(95); // 80..99
   const [hover, setHover] = useState<{ x: number; t: number; v: number } | null>(null);
+  
+  // Generate audio URL for waveform display
+  const audioUrl = useMemo(() => {
+    if (!selectedFile) return '';
+    
+    if (dataset && dataset !== 'custom') {
+      const filename = typeof selectedFile === 'string' 
+        ? selectedFile 
+        : selectedFile?.filename;
+      if (filename) {
+        return `${API_BASE}/${dataset}/file/${filename}`;
+      }
+    } else if (typeof selectedFile === 'object' && selectedFile.file_path) {
+      return `${API_BASE}/upload/file/${selectedFile.file_path.split('/').pop()}`;
+    }
+    
+    return '';
+  }, [selectedFile, dataset]);
 
   const fetchSaliencyData = async () => {
     if (!selectedFile || !model) return;
@@ -51,10 +200,16 @@ export const SaliencyVisualization = ({ selectedFile, model, dataset }: Saliency
       // Send through the selected model so backend can infer base vs large
       const backendModel = model;
 
+      // Generate unique request identifier to prevent stale results
+      const fileIdentifier = dataset && dataset !== 'custom' 
+        ? `${dataset}_${selectedFile?.filename || selectedFile}` 
+        : `custom_${selectedFile?.file_path || selectedFile?.file_id}`;
+      
       const requestBody: any = {
         model: backendModel,
         method: selectedMethod,
-        no_cache: true,
+        no_cache: true, // Always regenerate to ensure fresh results per file
+        _file_id: fileIdentifier, // Add for debugging
       };
 
       if (dataset && dataset !== 'custom') {
@@ -281,7 +436,18 @@ export const SaliencyVisualization = ({ selectedFile, model, dataset }: Saliency
           
           {!loading && !error && saliencyData && (
             <>
-              {/* Waveform with saliency overlay */}
+              {/* Static Waveform Display */}
+              {audioUrl && (
+                <div className="mb-3">
+                  <div className="text-xs text-muted-foreground mb-2 font-medium">Audio Waveform</div>
+                  <StaticWaveform 
+                    audioUrl={audioUrl} 
+                    duration={saliencyData.total_duration || 0} 
+                  />
+                </div>
+              )}
+              
+              {/* Saliency overlay */}
               <div className="relative">
                 <div className="h-16 bg-muted/30 rounded mb-2"></div>
                 
