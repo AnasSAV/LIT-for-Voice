@@ -181,10 +181,26 @@ export const MainLayout = () => {
             
             <PanelResizeHandle className="w-1 bg-border hover:bg-border/80 transition-colors" />
             
-            {/* Center Panel: Audio Dataset Table */}
+            {/* Center Panel: Predictions */}
             <Panel defaultSize={50} minSize={30}>
               <PanelGroup direction="vertical">
                 <Panel defaultSize={70} minSize={40}>
+                  <PredictionPanel 
+                    selectedFile={selectedFile}
+                    selectedEmbeddingFile={selectedEmbeddingFile}
+                    model={model}
+                    dataset={effectiveDataset}
+                    originalDataset={dataset}
+                    onPerturbationComplete={handlePerturbationComplete}
+                    onPredictionRefresh={handlePredictionRefresh}
+                    onPredictionUpdate={handlePredictionUpdate}
+                  />
+                </Panel>
+                
+                <PanelResizeHandle className="h-1 bg-border hover:bg-border/80 transition-colors" />
+                
+                {/* Bottom Panel: Audio Dataset Table */}
+                <Panel defaultSize={30} minSize={20}>
                   <AudioDatasetPanel
                     apiData={apiData}
                     uploadedFiles={uploadedFiles}
@@ -200,22 +216,6 @@ export const MainLayout = () => {
                     onAvailableFilesChange={setAvailableFiles}
                     onPredictionUpdate={handlePredictionUpdate}
                     predictionMap={predictionMap}
-                  />
-                </Panel>
-                
-                <PanelResizeHandle className="h-1 bg-border hover:bg-border/80 transition-colors" />
-                
-                {/* Bottom Panel: Predictions */}
-                <Panel defaultSize={30} minSize={20}>
-                  <PredictionPanel 
-                    selectedFile={selectedFile}
-                    selectedEmbeddingFile={selectedEmbeddingFile}
-                    model={model}
-                    dataset={effectiveDataset}
-                    originalDataset={dataset}
-                    onPerturbationComplete={handlePerturbationComplete}
-                    onPredictionRefresh={handlePredictionRefresh}
-                    onPredictionUpdate={handlePredictionUpdate}
                   />
                 </Panel>
               </PanelGroup>
