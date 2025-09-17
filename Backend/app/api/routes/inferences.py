@@ -18,6 +18,7 @@ from app.services.model_loader_service import (
     extract_wav2vec2_embeddings,
     reduce_dimensions,
     predict_emotion_wave2vec,
+    extract_audio_frequency_features,
 )
 from app.services.dataset_service import resolve_file
 from app.core.redis import get_result, cache_result
@@ -847,6 +848,152 @@ async def extract_single_embedding_endpoint(
     if isinstance(embedding, list):
         embedding = np.array(embedding)
     
+@router.post("/inferences/audio-frequency-batch")
+async def batch_audio_frequency_analysis(request: Request):
+    """
+    Extract frequency-domain audio features for multiple files for analysis.
+    This provides detailed spectral analysis for both whisper and wav2vec2 models.
+    """
+    try:
+        body = await request.json()
+        filenames = body.get("filenames", [])
+        dataset = body.get("dataset")
+        model = body.get("model", "whisper-base")  # Track which model context this is for
+        
+        if not filenames:
+            raise HTTPException(status_code=400, detail="No filenames provided")
+        
+        if len(filenames) > 50:  # Limit batch size
+            raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
+        
+        # Process each file
+        individual_analyses = []
+        all_features = []
+        cache_stats = {"hits": 0, "misses": 0}
+        
+        for filename in filenames:
+            try:
+                # Resolve file path
+                if dataset:
+                    file_path = resolve_file(dataset, filename)
+                else:
+                    file_path = UPLOAD_DIR / filename
+                    if not file_path.exists():
+                        print(f"Warning: File not found: {file_path}")
+                        continue
+                
+                # Create cache key for audio frequency features
+                file_content_hash = hashlib.md5(str(file_path).encode()).hexdigest()
+                cache_key = f"audio_frequency_{file_content_hash}"
+                
+                # Check cache first
+                cached_result = await get_result("audio_frequency", cache_key)
+                if cached_result is not None:
+                    # Use cached result
+                    features = cached_result.get("features", cached_result)
+                    cache_stats["hits"] += 1
+                    logger.debug(f"Using cached audio frequency features for {filename}")
+                else:
+                    # Extract features and cache result
+                    features = await asyncio.to_thread(extract_audio_frequency_features, str(file_path))
+                    await cache_result("audio_frequency", cache_key, {"features": features}, ttl=24*60*60)  # 24h cache
+                    cache_stats["misses"] += 1
+                    logger.debug(f"Generated and cached audio frequency features for {filename}")
+                
+                individual_analyses.append({
+                    "filename": filename,
+                    "features": features
+                })
+                
+                # Collect features for aggregate analysis
+                all_features.append(features)
+                    
+            except Exception as file_error:
+                print(f"Error processing {filename}: {file_error}")
+                continue
+        
+        if not individual_analyses:
+            raise HTTPException(status_code=404, detail="No valid files could be processed for frequency analysis")
+        
+        # Calculate aggregate statistics across all files
+        feature_keys = set()
+        for features in all_features:
+            feature_keys.update(features.keys())
+        
+        aggregate_stats = {}
+        feature_distributions = {}
+        
+        for key in feature_keys:
+            values = [features.get(key, 0) for features in all_features if key in features]
+            if values:
+                aggregate_stats[key] = {
+                    "mean": float(np.mean(values)),
+                    "std": float(np.std(values)),
+                    "min": float(np.min(values)),
+                    "max": float(np.max(values)),
+                    "median": float(np.median(values))
+                }
+                
+                # Create distribution bins for visualization
+                hist, bins = np.histogram(values, bins=10)
+                feature_distributions[key] = {
+                    "histogram": hist.tolist(),
+                    "bins": bins.tolist()
+                }
+        
+        # Identify most varying features (highest coefficient of variation)
+        varying_features = []
+        for key, stats in aggregate_stats.items():
+            if stats["mean"] != 0:  # Avoid division by zero
+                cv = stats["std"] / abs(stats["mean"])
+                varying_features.append({
+                    "feature": key,
+                    "coefficient_of_variation": float(cv),
+                    "mean": stats["mean"],
+                    "std": stats["std"]
+                })
+        
+        # Sort by coefficient of variation (descending)
+        varying_features.sort(key=lambda x: x["coefficient_of_variation"], reverse=True)
+        
+        # Categorize features for better presentation
+        feature_categories = {
+            "spectral": [f for f in feature_keys if f.startswith(("spectral_", "zero_crossing"))],
+            "energy": [f for f in feature_keys if "rms" in f or "energy" in f],
+            "mfcc": [f for f in feature_keys if f.startswith("mfcc_")],
+            "chroma": [f for f in feature_keys if f.startswith("chroma_")],
+            "tonnetz": [f for f in feature_keys if f.startswith("tonnetz_")],
+            "temporal": [f for f in feature_keys if f in ["tempo", "duration"]],
+            "metadata": [f for f in feature_keys if f in ["sample_rate"]]
+        }
+        
+        return {
+            "model_context": model,
+            "individual_analyses": individual_analyses,
+            "aggregate_statistics": aggregate_stats,
+            "feature_distributions": feature_distributions,
+            "most_varying_features": varying_features[:10],  # Top 10 most varying
+            "feature_categories": feature_categories,
+            "summary": {
+                "total_files": len(individual_analyses),
+                "total_features_extracted": len(feature_keys),
+                "avg_duration": aggregate_stats.get("duration", {}).get("mean", 0),
+                "avg_tempo": aggregate_stats.get("tempo", {}).get("mean", 0)
+            },
+            "cache_info": {
+                "cached_count": cache_stats["hits"],
+                "missing_count": cache_stats["misses"],
+                "cache_hit_rate": cache_stats["hits"] / (cache_stats["hits"] + cache_stats["misses"]) if (cache_stats["hits"] + cache_stats["misses"]) > 0 else 0
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in batch audio frequency analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Audio frequency analysis failed: {str(e)}")
+
+
     return {
         "model": model,
         "file_path": str(resolved_path),

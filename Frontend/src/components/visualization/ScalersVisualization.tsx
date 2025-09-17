@@ -58,15 +58,54 @@ interface WhisperBatchAnalysis {
   };
 }
 
+interface AudioFrequencyAnalysis {
+  model_context: string;
+  individual_analyses: Array<{
+    filename: string;
+    features: Record<string, number>;
+  }>;
+  aggregate_statistics: Record<string, {
+    mean: number;
+    std: number;
+    min: number;
+    max: number;
+    median: number;
+  }>;
+  feature_distributions: Record<string, {
+    histogram: number[];
+    bins: number[];
+  }>;
+  most_varying_features: Array<{
+    feature: string;
+    coefficient_of_variation: number;
+    mean: number;
+    std: number;
+  }>;
+  feature_categories: Record<string, string[]>;
+  summary: {
+    total_files: number;
+    total_features_extracted: number;
+    avg_duration: number;
+    avg_tempo: number;
+  };
+  cache_info: {
+    cached_count: number;
+    missing_count: number;
+    cache_hit_rate: number;
+  };
+}
+
 export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationProps) => {
   const { embeddingData, isLoading, error } = useEmbedding();
   const [selectedPoints, setSelectedPoints] = useState<string[]>([]);
   const [batchPrediction, setBatchPrediction] = useState<Wav2Vec2BatchPrediction | null>(null);
   const [whisperAnalysis, setWhisperAnalysis] = useState<WhisperBatchAnalysis | null>(null);
+  const [audioFrequencyAnalysis, setAudioFrequencyAnalysis] = useState<AudioFrequencyAnalysis | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
   const [reductionMethod, setReductionMethod] = useState("pca");
   const [selectionMode, setSelectionMode] = useState<"box" | "lasso">("box");
+  const [analysisType, setAnalysisType] = useState<"default" | "frequency">("default");
 
   // Get the 2D coordinates from the embedding data
   const get2DCoordinates = () => {
@@ -95,6 +134,50 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
     setSelectedPoints([]);
     setBatchPrediction(null);
     setWhisperAnalysis(null);
+    setAudioFrequencyAnalysis(null);
+  };
+
+  // Fetch audio frequency analysis for selected points
+  const fetchAudioFrequencyAnalysis = async () => {
+    if (selectedPoints.length === 0) return;
+
+    setPredictionLoading(true);
+    setPredictionError(null);
+    try {
+      const requestBody: any = {
+        filenames: selectedPoints,
+        model: model,
+      };
+
+      if (dataset) {
+        requestBody.dataset = dataset;
+      }
+
+      console.log('Fetching audio frequency analysis for:', requestBody);
+
+      const response = await fetch("http://localhost:8000/inferences/audio-frequency-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Audio frequency analysis error:', response.status, errorText);
+        throw new Error(`Failed to fetch audio frequency analysis: ${response.status} - ${errorText}`);
+      }
+
+      const analysis = await response.json();
+      setAudioFrequencyAnalysis(analysis);
+    } catch (error) {
+      console.error("Error fetching audio frequency analysis:", error);
+      setPredictionError(error instanceof Error ? error.message : 'Unknown error occurred');
+      setAudioFrequencyAnalysis(null);
+    } finally {
+      setPredictionLoading(false);
+    }
   };
 
   // Fetch whisper batch analysis for selected points
@@ -185,13 +268,15 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
   // Auto-fetch predictions when selection changes
   useEffect(() => {
     if (selectedPoints.length > 0) {
-      if (model === 'wav2vec2') {
+      if (analysisType === "frequency") {
+        fetchAudioFrequencyAnalysis();
+      } else if (model === 'wav2vec2') {
         fetchBatchPredictions();
       } else if (model?.includes('whisper')) {
         fetchWhisperAnalysis();
       }
     }
-  }, [selectedPoints, model, dataset]);
+  }, [selectedPoints, model, dataset, analysisType]);
 
   const { x, y, text } = get2DCoordinates();
 
@@ -294,6 +379,18 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
           </SelectContent>
         </Select>
 
+        <Select value={analysisType} onValueChange={(value: "default" | "frequency") => setAnalysisType(value)}>
+          <SelectTrigger className="w-28 h-7">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">
+              {model === 'wav2vec2' ? 'Predictions' : 'Common Terms'}
+            </SelectItem>
+            <SelectItem value="frequency">Audio Features</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Button 
           variant="outline" 
           size="sm" 
@@ -318,15 +415,288 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
           />
         </div>
 
-        {/* Prediction Results */}
+        {/* Analysis Results */}
         <div className="w-80 space-y-3">
-          {model === 'wav2vec2' && selectedPoints.length > 0 && (
+          {selectedPoints.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">
-                  Selected Files Analysis ({selectedPoints.length})
+                  {analysisType === "frequency" ? "Audio Frequency Analysis" : 
+                   model === 'wav2vec2' ? "Emotion Predictions" : "Transcript Analysis"} ({selectedPoints.length})
                 </CardTitle>
               </CardHeader>
+              <CardContent className="space-y-3">
+                {predictionLoading ? (
+                  <div className="text-xs text-gray-600">
+                    Loading {analysisType === "frequency" ? "audio features" : 
+                            model === 'wav2vec2' ? "predictions" : "analysis"}...
+                  </div>
+                ) : predictionError ? (
+                  <div className="text-xs text-red-600">
+                    <div className="font-medium">Error loading analysis:</div>
+                    <div className="mt-1">{predictionError}</div>
+                    <div className="mt-2 text-gray-600">
+                      Make sure the backend server is running.
+                    </div>
+                  </div>
+                ) : analysisType === "frequency" && audioFrequencyAnalysis ? (
+                  <>
+                    {/* Audio Frequency Analysis Results */}
+                    {/* Cache Info */}
+                    {audioFrequencyAnalysis.cache_info && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium">Cache Performance</div>
+                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          <div className="flex justify-between">
+                            <span>Cache hits:</span>
+                            <span>{audioFrequencyAnalysis.cache_info.cached_count}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>New extractions:</span>
+                            <span>{audioFrequencyAnalysis.cache_info.missing_count}</span>
+                          </div>
+                          <div className="flex justify-between font-medium">
+                            <span>Hit rate:</span>
+                            <span>{(audioFrequencyAnalysis.cache_info.cache_hit_rate * 100).toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Summary</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                        <div>Files: {audioFrequencyAnalysis.summary.total_files}</div>
+                        <div>Features: {audioFrequencyAnalysis.summary.total_features_extracted}</div>
+                        <div>Avg Duration: {audioFrequencyAnalysis.summary.avg_duration.toFixed(1)}s</div>
+                        <div>Avg Tempo: {audioFrequencyAnalysis.summary.avg_tempo.toFixed(0)} BPM</div>
+                      </div>
+                    </div>
+
+                    {/* Most Varying Features */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Top 5 Most Varying Features</div>
+                      <div className="space-y-1">
+                        {audioFrequencyAnalysis.most_varying_features.slice(0, 5).map((feature, index) => (
+                          <div key={index} className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="font-mono text-blue-700 truncate">{feature.feature.replace(/_/g, ' ')}</span>
+                              <span>CV: {feature.coefficient_of_variation.toFixed(2)}</span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              μ={feature.mean.toFixed(2)}, σ={feature.std.toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Feature Categories */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Feature Categories</div>
+                      <div className="space-y-1">
+                        {Object.entries(audioFrequencyAnalysis.feature_categories)
+                          .filter(([_, features]) => features.length > 0)
+                          .map(([category, features]) => (
+                            <div key={category} className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs capitalize">
+                                  {category}
+                                </Badge>
+                                <span className="text-gray-600">{features.length} features</span>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* Individual Files */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Individual Files</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {audioFrequencyAnalysis.individual_analyses.slice(0, 10).map((analysis, index) => (
+                          <div key={index} className="text-xs p-2 bg-gray-50 rounded border">
+                            <div className="font-mono text-blue-700 truncate">
+                              {analysis.filename}
+                            </div>
+                            <div className="text-gray-600 mt-1 flex justify-between">
+                              <span>{analysis.features.duration?.toFixed(1)}s</span>
+                              <span>{analysis.features.tempo?.toFixed(0)} BPM</span>
+                            </div>
+                          </div>
+                        ))}
+                        {audioFrequencyAnalysis.individual_analyses.length > 10 && (
+                          <div className="text-xs text-gray-500 text-center pt-1">
+                            ... and {audioFrequencyAnalysis.individual_analyses.length - 10} more files
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : analysisType === "default" && model === 'wav2vec2' && batchPrediction ? (
+                  <>
+                    {/* Wav2Vec2 Emotion Analysis */}
+                    {/* Cache Info */}
+                    {batchPrediction.cache_info && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium">Cache Performance</div>
+                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          <div className="flex justify-between">
+                            <span>Cache hits:</span>
+                            <span>{batchPrediction.cache_info.cached_count}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>New predictions:</span>
+                            <span>{batchPrediction.cache_info.missing_count}</span>
+                          </div>
+                          <div className="flex justify-between font-medium">
+                            <span>Hit rate:</span>
+                            <span>{(batchPrediction.cache_info.cache_hit_rate * 100).toFixed(1)}%</span>
+                          </div>
+                          {batchPrediction.cache_info.missing_count === 0 && (
+                            <div className="text-green-700 mt-1 text-center">
+                              ✓ All predictions loaded from cache
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Dominant Emotion</div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="default" className="text-xs">
+                          {batchPrediction.summary.dominant_emotion}
+                        </Badge>
+                        <span className="text-xs text-gray-600">
+                          {(batchPrediction.summary.dominant_percentage * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Emotion Distribution */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Emotion Distribution</div>
+                      <div className="space-y-1">
+                        {Object.entries(batchPrediction.emotion_distribution)
+                          .sort(([,a], [,b]) => b - a)
+                          .map(([emotion, percentage]) => (
+                            <div key={emotion} className="space-y-1">
+                              <div className="flex justify-between text-xs">
+                                <span className="capitalize">{emotion}</span>
+                                <span>{(percentage * 100).toFixed(1)}% ({batchPrediction.emotion_counts[emotion]} files)</span>
+                              </div>
+                              <Progress 
+                                value={percentage * 100} 
+                                className="h-1"
+                              />
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* Individual Files */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Individual Files</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {batchPrediction.individual_predictions.map((pred, index) => (
+                          <div key={index} className="text-xs p-2 bg-gray-50 rounded border">
+                            <div className="font-mono text-blue-700 truncate">
+                              {pred.filename}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                {pred.predicted_emotion}
+                              </Badge>
+                              <span className="text-gray-600">
+                                {(pred.confidence * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : analysisType === "default" && model?.includes('whisper') && whisperAnalysis ? (
+                  <>
+                    {/* Whisper Transcript Analysis */}
+                    {/* Summary */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Summary</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                        <div>Total Words: {whisperAnalysis.summary.total_words}</div>
+                        <div>Unique Words: {whisperAnalysis.summary.unique_words}</div>
+                        <div>Avg/File: {whisperAnalysis.summary.avg_words_per_file.toFixed(1)}</div>
+                        <div>Files: {whisperAnalysis.summary.total_files}</div>
+                      </div>
+                      {whisperAnalysis.cache_info && (
+                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          Cache: {whisperAnalysis.cache_info.cached_count} found, {whisperAnalysis.cache_info.missing_count} missing
+                          {whisperAnalysis.cache_info.missing_count > 0 && (
+                            <div className="text-blue-700 mt-1">
+                              Run inference first for missing files to get complete analysis
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Top Common Terms */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Top 5 Common Terms</div>
+                      <div className="space-y-1">
+                        {whisperAnalysis.common_terms.slice(0, 5).map((term, index) => (
+                          <div key={index} className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="font-mono text-blue-700">"{term.term}"</span>
+                              <span>{term.percentage.toFixed(1)}% ({term.count}x)</span>
+                            </div>
+                            <Progress 
+                              value={term.percentage} 
+                              className="h-1"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Individual Transcripts */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium">Individual Transcripts</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {whisperAnalysis.individual_transcripts.map((transcript, index) => (
+                          <div key={index} className="text-xs p-2 bg-gray-50 rounded border">
+                            <div className="font-mono text-blue-700 truncate">
+                              {transcript.filename}
+                            </div>
+                            <div className="text-gray-600 mt-1 text-xs">
+                              {transcript.word_count} words
+                            </div>
+                            <div className="text-gray-800 mt-1 text-xs italic line-clamp-2">
+                              "{transcript.transcript}"
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedPoints.length === 0 && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-xs text-gray-600 text-center">
+                  Select points on the plot to see analysis results
+                </div>
+              </CardContent>
+            </Card>
+          )}
+            <Card>
               <CardContent className="space-y-3">
                 {predictionLoading ? (
                   <div className="text-xs text-gray-600">Loading predictions...</div>
@@ -425,101 +795,26 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                 ) : null}
               </CardContent>
             </Card>
-          )}
-
-          {model?.includes('whisper') && selectedPoints.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">
-                  Transcript Analysis ({selectedPoints.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {predictionLoading ? (
-                  <div className="text-xs text-gray-600">Loading transcript analysis...</div>
-                ) : predictionError ? (
-                  <div className="text-xs text-red-600">
-                    <div className="font-medium">Error loading analysis:</div>
-                    <div className="mt-1">{predictionError}</div>
-                    <div className="mt-2 text-gray-600">
-                      Make sure the backend server is running and the whisper-batch endpoint is available.
-                    </div>
-                  </div>
-                ) : whisperAnalysis ? (
-                  <>
-                    {/* Summary */}
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium">Summary</div>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                        <div>Total Words: {whisperAnalysis.summary.total_words}</div>
-                        <div>Unique Words: {whisperAnalysis.summary.unique_words}</div>
-                        <div>Avg/File: {whisperAnalysis.summary.avg_words_per_file.toFixed(1)}</div>
-                        <div>Files: {whisperAnalysis.summary.total_files}</div>
-                      </div>
-                      {whisperAnalysis.cache_info && (
-                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                          Cache: {whisperAnalysis.cache_info.cached_count} found, {whisperAnalysis.cache_info.missing_count} missing
-                          {whisperAnalysis.cache_info.missing_count > 0 && (
-                            <div className="text-blue-700 mt-1">
-                              Run inference first for missing files to get complete analysis
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Top Common Terms */}
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium">Top 5 Common Terms</div>
-                      <div className="space-y-1">
-                        {whisperAnalysis.common_terms.slice(0, 5).map((term, index) => (
-                          <div key={index} className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <span className="font-mono text-blue-700">"{term.term}"</span>
-                              <span>{term.percentage.toFixed(1)}% ({term.count}x)</span>
-                            </div>
-                            <Progress 
-                              value={term.percentage} 
-                              className="h-1"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Individual Transcripts */}
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium">Individual Transcripts</div>
-                      <div className="max-h-32 overflow-y-auto space-y-1">
-                        {whisperAnalysis.individual_transcripts.map((transcript, index) => (
-                          <div key={index} className="text-xs p-2 bg-gray-50 rounded border">
-                            <div className="font-mono text-blue-700 truncate">
-                              {transcript.filename}
-                            </div>
-                            <div className="text-gray-600 mt-1 text-xs">
-                              {transcript.word_count} words
-                            </div>
-                            <div className="text-gray-800 mt-1 text-xs italic line-clamp-2">
-                              "{transcript.transcript}"
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-              </CardContent>
-            </Card>
-          )}
 
           {!model?.includes('whisper') && model !== 'wav2vec2' && selectedPoints.length > 0 && (
             <Card>
               <CardContent className="pt-6">
                 <div className="text-xs text-gray-600 text-center">
-                  Batch analysis is available for wav2vec2 (emotions) and whisper (transcripts) models.
-                  <div className="mt-2">
-                    Selected files: {selectedPoints.length}
-                  </div>
+                  {analysisType === "frequency" ? (
+                    <div>
+                      Audio frequency analysis is available for all models.
+                      <div className="mt-2">
+                        Selected files: {selectedPoints.length}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      Batch analysis is available for wav2vec2 (emotions) and whisper (transcripts) models.
+                      <div className="mt-2">
+                        Selected files: {selectedPoints.length}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
