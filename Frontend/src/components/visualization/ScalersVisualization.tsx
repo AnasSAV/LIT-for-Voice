@@ -75,9 +75,11 @@ interface AudioFrequencyAnalysis {
     histogram: number[];
     bins: number[];
   }>;
-  most_varying_features: Array<{
+  most_common_features: Array<{
     feature: string;
-    coefficient_of_variation: number;
+    normalized_mean: number;
+    stability_score: number;
+    prevalence_score: number;
     mean: number;
     std: number;
   }>;
@@ -474,15 +476,15 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                       </div>
                     </div>
 
-                    {/* Most Varying Features */}
+                    {/* Most Common Features */}
                     <div className="space-y-2">
-                      <div className="text-xs font-medium">Top 5 Most Varying Features</div>
+                      <div className="text-xs font-medium">Top 5 Most Common Features</div>
                       <div className="space-y-1">
-                        {audioFrequencyAnalysis.most_varying_features.slice(0, 5).map((feature, index) => (
+                        {audioFrequencyAnalysis.most_common_features.slice(0, 5).map((feature, index) => (
                           <div key={index} className="space-y-1">
                             <div className="flex justify-between text-xs">
                               <span className="font-mono text-blue-700 truncate">{feature.feature.replace(/_/g, ' ')}</span>
-                              <span>CV: {feature.coefficient_of_variation.toFixed(2)}</span>
+                              <span>Score: {feature.prevalence_score.toFixed(2)}</span>
                             </div>
                             <div className="text-xs text-gray-500">
                               μ={feature.mean.toFixed(2)}, σ={feature.std.toFixed(2)}

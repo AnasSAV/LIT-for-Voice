@@ -941,20 +941,31 @@ async def batch_audio_frequency_analysis(request: Request):
                     "bins": bins.tolist()
                 }
         
-        # Identify most varying features (highest coefficient of variation)
-        varying_features = []
+        # Identify most common/prevalent features (highest normalized mean values)
+        common_features = []
         for key, stats in aggregate_stats.items():
-            if stats["mean"] != 0:  # Avoid division by zero
-                cv = stats["std"] / abs(stats["mean"])
-                varying_features.append({
+            # Normalize mean by the range to get a comparable score
+            feature_range = stats["max"] - stats["min"]
+            if feature_range > 0:
+                normalized_mean = (stats["mean"] - stats["min"]) / feature_range
+                
+                # Calculate stability (inverse of coefficient of variation)
+                stability = 1.0
+                if stats["mean"] != 0:
+                    cv = stats["std"] / abs(stats["mean"])
+                    stability = 1.0 / (1.0 + cv)  # Higher stability = lower variation
+                
+                common_features.append({
                     "feature": key,
-                    "coefficient_of_variation": float(cv),
+                    "normalized_mean": float(normalized_mean),
+                    "stability_score": float(stability),
+                    "prevalence_score": float(normalized_mean * stability),  # Combined score
                     "mean": stats["mean"],
                     "std": stats["std"]
                 })
         
-        # Sort by coefficient of variation (descending)
-        varying_features.sort(key=lambda x: x["coefficient_of_variation"], reverse=True)
+        # Sort by prevalence score (descending) - features that are both high and stable
+        common_features.sort(key=lambda x: x["prevalence_score"], reverse=True)
         
         # Categorize features for better presentation
         feature_categories = {
@@ -972,7 +983,7 @@ async def batch_audio_frequency_analysis(request: Request):
             "individual_analyses": individual_analyses,
             "aggregate_statistics": aggregate_stats,
             "feature_distributions": feature_distributions,
-            "most_varying_features": varying_features[:10],  # Top 10 most varying
+            "most_common_features": common_features[:10],  # Top 10 most common/prevalent
             "feature_categories": feature_categories,
             "summary": {
                 "total_files": len(individual_analyses),
