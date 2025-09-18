@@ -1,4 +1,3 @@
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -446,7 +445,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                 </Card>
               )}
 
-              <Card>
+              <Card className="border-gray-200 bg-white">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">
                     {model === "wav2vec2" ? "Classification Results" : model?.includes("whisper") ? "Transcription Results" : "Prediction Results"}
@@ -477,46 +476,46 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                   )}
                   
                   {model === "wav2vec2" && wav2vecPrediction && !isLoading ? (
-                    // Display wav2vec2 emotion predictions with comparison
+                    // Display wav2vec2 emotion predictions with comparison in two columns
                     <div className="space-y-3">
-                      {/* Original Prediction */}
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium flex items-center gap-2">
-                          Original Audio
-                          <Badge variant="outline" className="text-[10px]">O</Badge>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Original Prediction */}
+                        <div className="space-y-2 border-r md:border-r border-gray-200 pr-2">
+                          <div className="text-xs font-medium flex items-center gap-2">
+                            Original Audio
+                            <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Original</span>
+                          </div>
+                          {Object.entries(wav2vecPrediction.probabilities)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([emotion, probability]) => {
+                              const isPredicted = emotion === wav2vecPrediction.predicted_emotion;
+                              return (
+                                <div key={emotion} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="capitalize">{emotion}</span>
+                                    {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-1 max-w-[120px]">
+                                    <Progress value={probability * 100} className="h-2" />
+                                    <span className="text-muted-foreground min-w-[2rem]">
+                                      {(probability * 100).toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
                         </div>
-                        {Object.entries(wav2vecPrediction.probabilities)
-                          .sort(([,a], [,b]) => b - a)
-                          .map(([emotion, probability]) => {
-                            const isPredicted = emotion === wav2vecPrediction.predicted_emotion;
-                            return (
-                              <div key={emotion} className="flex items-center justify-between text-xs">
-                                <div className="flex items-center gap-2">
-                                  <span className="capitalize">{emotion}</span>
-                                  {isPredicted && <Badge variant="default" className="text-[10px] px-1">P</Badge>}
-                                </div>
-                                <div className="flex items-center gap-2 flex-1 max-w-[120px]">
-                                  <Progress value={probability * 100} className="h-2" />
-                                  <span className="text-muted-foreground min-w-[2rem]">
-                                    {(probability * 100).toFixed(1)}%
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
 
-                      {/* Perturbed Prediction */}
-                      {perturbedPredictions && (
-                        <div className="space-y-2 border-t pt-3">
+                        {/* Perturbed Prediction */}
+                        <div className="space-y-2 pl-2">
                           <div className="text-xs font-medium flex items-center gap-2">
                             Perturbed Audio
-                            <Badge variant="secondary" className="text-[10px]">P</Badge>
+                            <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Perturbed</span>
                             {isLoadingPerturbed && (
-                              <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                              <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
                             )}
                           </div>
-                          {!isLoadingPerturbed && Object.entries((perturbedPredictions as Wav2Vec2Prediction).probabilities)
+                          {!isLoadingPerturbed && perturbedPredictions && Object.entries((perturbedPredictions as Wav2Vec2Prediction).probabilities)
                             .sort(([,a], [,b]) => b - a)
                             .map(([emotion, probability]) => {
                               const isPredicted = emotion === (perturbedPredictions as Wav2Vec2Prediction).predicted_emotion;
@@ -526,7 +525,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                                 <div key={emotion} className="flex items-center justify-between text-xs">
                                   <div className="flex items-center gap-2">
                                     <span className="capitalize">{emotion}</span>
-                                    {isPredicted && <Badge variant="secondary" className="text-[10px] px-1">P</Badge>}
+                                    {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
                                   </div>
                                   <div className="flex items-center gap-2 flex-1 max-w-[120px]">
                                     <Progress value={probability * 100} className="h-2" />
@@ -543,98 +542,89 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                               );
                             })}
                         </div>
-                      )}
+                      </div>
                     </div>
                   ) : model?.includes("whisper") && whisperPrediction && !isLoading ? (
-                    // Display whisper transcription accuracy with comparison
+                    // Improved UI for Transcription Results (metrics layout and clearer sections)
                     <div className="space-y-3">
-                      {/* Original Prediction */}
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium flex items-center gap-2">
-                          Original Audio
-                          <Badge variant="outline" className="text-[10px]">O</Badge>
-                        </div>
-                        
-                        {/* Accuracy Metrics */}
-                        {whisperPrediction.ground_truth && (
-                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-2">
-                            <div>WER: {whisperPrediction.word_error_rate.toFixed(3)}</div>
-                            <div>CER: {whisperPrediction.character_error_rate.toFixed(3)}</div>
-                            <div>Words P: {whisperPrediction.word_count_predicted}</div>
-                            <div>Words T: {whisperPrediction.word_count_truth}</div>
-                            <div>Accuracy: {whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
-                            <div>Levenshtein: {whisperPrediction.levenshtein_distance}</div>
-                          </div>
-                        )}
-
-                        {/* Predicted Transcript */}
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium flex items-center gap-2">
-                            Predicted
-                            <Badge variant="outline" className="text-[10px] px-1">P</Badge>
-                          </div>
-                          <div className="text-xs p-2 bg-blue-50 rounded border font-mono">
-                            "{whisperPrediction.predicted_transcript}"
-                          </div>
-                        </div>
-
-                        {/* Ground Truth */}
-                        {whisperPrediction.ground_truth && (
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium flex items-center gap-2">
-                              Ground Truth
-                              <Badge variant="outline" className="text-[10px] px-1">T</Badge>
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="text-xs font-semibold">Transcription Metrics</div>
+                            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">WER</div>
+                                <div className="font-medium">{whisperPrediction.word_error_rate.toFixed(3)}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">CER</div>
+                                <div className="font-medium">{whisperPrediction.character_error_rate.toFixed(3)}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Accuracy</div>
+                                <div className="font-medium">{whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Words (Pred)</div>
+                                <div className="font-medium">{whisperPrediction.word_count_predicted}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Words (Truth)</div>
+                                <div className="font-medium">{whisperPrediction.word_count_truth}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Levenshtein</div>
+                                <div className="font-medium">{whisperPrediction.levenshtein_distance}</div>
+                              </div>
                             </div>
-                            <div className="text-xs p-2 bg-green-50 rounded border font-mono">
-                              "{whisperPrediction.ground_truth}"
+                          </div>
+
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <div className="text-xs font-medium">Predicted Transcript</div>
+                            <div className="text-xs p-2 bg-blue-50 rounded border font-mono whitespace-pre-wrap">
+                              {whisperPrediction.predicted_transcript ? `"${whisperPrediction.predicted_transcript}"` : <span className="italic text-gray-400">No prediction</span>}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-xs font-medium">Ground Truth</div>
+                            <div className="text-xs p-2 bg-green-50 rounded border font-mono whitespace-pre-wrap">
+                              {`"${whisperPrediction.ground_truth}"`}
+                            </div>
+                          </div>
+                        </div>
+
+                        {perturbedPredictions && (
+                          <div className="pt-2 border-t border-gray-100">
+                            <div className="text-xs font-semibold">Perturbed Prediction</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                              <div>
+                                {/* perturbed metrics if available */}
+                                {typeof perturbedPredictions === 'object' && (
+                                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                                    <div>WER: {(perturbedPredictions as WhisperPrediction).word_error_rate?.toFixed(3) || 'N/A'}</div>
+                                    <div>CER: {(perturbedPredictions as WhisperPrediction).character_error_rate?.toFixed(3) || 'N/A'}</div>
+                                    <div>Words P: {(perturbedPredictions as WhisperPrediction).word_count_predicted || 'N/A'}</div>
+                                    <div>Words T: {(perturbedPredictions as WhisperPrediction).word_count_truth || 'N/A'}</div>
+                                    <div>Accuracy: {(perturbedPredictions as WhisperPrediction).accuracy_percentage?.toFixed(1) || 'N/A'}%</div>
+                                    <div>Levenshtein: {(perturbedPredictions as WhisperPrediction).levenshtein_distance || 'N/A'}</div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="text-xs font-medium">Predicted Transcript (Perturbed)</div>
+                                <div className="mt-1 text-xs p-2 bg-white rounded border font-mono whitespace-pre-wrap text-gray-800">
+                                  {(perturbedPredictions as WhisperPrediction).predicted_transcript ? `"${(perturbedPredictions as WhisperPrediction).predicted_transcript}"` : <span className="italic text-gray-400">No prediction</span>}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         )}
                       </div>
-
-                      {/* Perturbed Prediction */}
-                      {perturbedPredictions && (
-                        <div className="space-y-2 border-t pt-3">
-                          <div className="text-xs font-medium flex items-center gap-2">
-                            Perturbed Audio
-                            <Badge variant="secondary" className="text-[10px]">P</Badge>
-                            {isLoadingPerturbed && (
-                              <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                            )}
-                          </div>
-                          
-                          {!isLoadingPerturbed && (
-                            <>
-                              {/* Perturbed Accuracy Metrics */}
-                              {typeof perturbedPredictions === 'object' && perturbedPredictions !== null ? (
-                                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                                  <div>WER: {(perturbedPredictions as WhisperPrediction).word_error_rate?.toFixed(3) || 'N/A'}</div>
-                                  <div>CER: {(perturbedPredictions as WhisperPrediction).character_error_rate?.toFixed(3) || 'N/A'}</div>
-                                  <div>Words P: {(perturbedPredictions as WhisperPrediction).word_count_predicted || 'N/A'}</div>
-                                  <div>Words T: {(perturbedPredictions as WhisperPrediction).word_count_truth || 'N/A'}</div>
-                                  <div>Accuracy: {(perturbedPredictions as WhisperPrediction).accuracy_percentage?.toFixed(1) || 'N/A'}%</div>
-                                  <div>Levenshtein: {(perturbedPredictions as WhisperPrediction).levenshtein_distance || 'N/A'}</div>
-                                </div>
-                              ) : (
-                                <div className="text-xs text-gray-600">
-                                  <div>Prediction: {typeof perturbedPredictions === 'string' ? perturbedPredictions : JSON.stringify(perturbedPredictions)}</div>
-                                </div>
-                              )}
-
-                              {/* Perturbed Predicted Transcript */}
-                              <div className="space-y-1">
-                                <div className="text-xs font-medium flex items-center gap-2">
-                                  Predicted
-                                  <Badge variant="secondary" className="text-[10px] px-1">P</Badge>
-                                </div>
-                                <div className="text-xs p-2 bg-purple-50 rounded border font-mono">
-                                  "{(perturbedPredictions as WhisperPrediction).predicted_transcript}"
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
                     </div>
                   ) : !model?.includes("whisper") && model !== "wav2vec2" ? (
                     // Display placeholder/mock data for other models
