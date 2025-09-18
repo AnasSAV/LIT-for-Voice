@@ -28,6 +28,11 @@ interface Wav2Vec2BatchPrediction {
     dominant_count: number;
     dominant_percentage: number;
   };
+  cache_info: {
+    cached_count: number;
+    missing_count: number;
+    cache_hit_rate: number;
+  };
 }
 
 interface WhisperBatchAnalysis {
@@ -338,6 +343,32 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                   </div>
                 ) : batchPrediction ? (
                   <>
+                    {/* Cache Info */}
+                    {batchPrediction.cache_info && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium">Cache Performance</div>
+                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          <div className="flex justify-between">
+                            <span>Cache hits:</span>
+                            <span>{batchPrediction.cache_info.cached_count}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>New predictions:</span>
+                            <span>{batchPrediction.cache_info.missing_count}</span>
+                          </div>
+                          <div className="flex justify-between font-medium">
+                            <span>Hit rate:</span>
+                            <span>{(batchPrediction.cache_info.cache_hit_rate * 100).toFixed(1)}%</span>
+                          </div>
+                          {batchPrediction.cache_info.missing_count === 0 && (
+                            <div className="text-green-700 mt-1 text-center">
+                              ✓ All predictions loaded from cache
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Summary */}
                     <div className="space-y-2">
                       <div className="text-xs font-medium">Dominant Emotion</div>

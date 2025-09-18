@@ -20,12 +20,29 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
     device = 0 if torch.cuda.is_available() else -1
     torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-    pipe = pipeline(
-        "automatic-speech-recognition",
-        model=model_id,
-        torch_dtype=torch_dtype,
-        device=device,
-    )
+    try:
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model_id,
+            torch_dtype=torch_dtype,
+            device=device,
+        )
+    except NotImplementedError as e:
+        if "meta tensor" in str(e):
+            # Fallback for meta tensor issue: load on CPU first then move to CUDA
+            pipe = pipeline(
+                "automatic-speech-recognition",
+                model=model_id,
+                torch_dtype=torch_dtype,
+                device=-1,  # Force CPU first
+            )
+            if torch.cuda.is_available():
+                try:
+                    pipe.model = pipe.model.to("cuda:0")
+                except Exception:
+                    pass  # Stay on CPU if move fails
+        else:
+            raise
     audio, sample_rate = librosa.load(audio_file, sr=16000)
     audio = audio.astype(np.float32)
 
@@ -140,32 +157,30 @@ _whisper_model_large = None
 def get_whisper_base_models():
     global _whisper_processor_base, _whisper_model_base
     if _whisper_processor_base is None:
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         _whisper_processor_base = WhisperProcessor.from_pretrained("openai/whisper-base")
         _whisper_model_base = WhisperModel.from_pretrained("openai/whisper-base")
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         _whisper_model_base = _whisper_model_base.to(device)
     return _whisper_processor_base, _whisper_model_base
 
 def get_whisper_large_models():
     global _whisper_processor_large, _whisper_model_large
     if _whisper_processor_large is None:
-        # Clear CUDA cache before loading large model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        
-        # Load processor and model with optimizations
         _whisper_processor_large = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        _whisper_model_large = WhisperModel.from_pretrained(
-            "openai/whisper-large-v3",
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto" if torch.cuda.is_available() else None
-        )
-        
-        # Use to_empty() for models loaded with device_map to avoid meta tensor issues
-        if not torch.cuda.is_available() or device == "cpu":
-            # Only use .to() for CPU or when device_map is not used
+        try:
+            _whisper_model_large = WhisperModel.from_pretrained(
+                "openai/whisper-large-v3",
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            )
             _whisper_model_large = _whisper_model_large.to(device)
+        except NotImplementedError as e:
+            if "meta tensor" in str(e):
+                # Handle meta tensor issue for embeddings model too
+                _whisper_model_large = WhisperModel.from_pretrained("openai/whisper-large-v3")
+                _whisper_model_large = _whisper_model_large.to(device)
+            else:
+                raise
     return _whisper_processor_large, _whisper_model_large
 
 def extract_whisper_embeddings(audio_file_path: str, model_size: str = "base") -> np.ndarray:

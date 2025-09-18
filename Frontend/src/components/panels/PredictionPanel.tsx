@@ -38,19 +38,148 @@ interface WhisperPrediction {
   word_count_truth: number;
 }
 
+interface PerturbationResult {
+  perturbed_file: string;
+  filename: string;
+  duration_ms: number;
+  sample_rate: number;
+  applied_perturbations: Array<{
+    type: string;
+    params: Record<string, any>;
+    status: string;
+    error?: string;
+  }>;
+  success: boolean;
+  error?: string;
+}
+
 interface PredictionPanelProps {
   selectedFile?: UploadedFile | null;
   selectedEmbeddingFile?: string | null;
   model?: string;
   dataset?: string;
+  originalDataset?: string;
+  onPerturbationComplete?: (result: PerturbationResult) => void;
+  onPredictionRefresh?: (file: UploadedFile, prediction: string) => void;
+  onPredictionUpdate?: (fileId: string, prediction: string) => void;
 }
 
-export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, dataset }: PredictionPanelProps) => {
+export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, dataset, originalDataset, onPerturbationComplete, onPredictionRefresh, onPredictionUpdate }: PredictionPanelProps) => {
   const [wav2vecPrediction, setWav2vecPrediction] = useState<Wav2Vec2Prediction | null>(null);
   const [whisperPrediction, setWhisperPrediction] = useState<WhisperPrediction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [perturbedPredictions, setPerturbedPredictions] = useState<Wav2Vec2Prediction | WhisperPrediction | null>(null);
+  const [originalFile, setOriginalFile] = useState<UploadedFile | null>(selectedFile || null);
+  const [perturbedFile, setPerturbedFile] = useState<UploadedFile | null>(null);
+  const [isLoadingPerturbed, setIsLoadingPerturbed] = useState(false);
 
+
+  // Handle perturbation completion
+  const handlePerturbationComplete = async (result: PerturbationResult) => {
+    if (!result.success) {
+      console.error("Perturbation failed:", result.error);
+      return;
+    }
+
+    // Create a file-like object for the perturbed audio
+    const perturbedFileObj: UploadedFile = {
+      file_id: result.filename,
+      filename: result.filename,
+      file_path: result.perturbed_file,
+      message: "Perturbed audio",
+      duration: result.duration_ms / 1000,
+      sample_rate: result.sample_rate
+    };
+    
+    setPerturbedFile(perturbedFileObj);
+    
+    // Notify parent component about perturbation completion
+    if (onPerturbationComplete) {
+      onPerturbationComplete(result);
+    }
+    
+    // Run inference on the perturbed audio
+    await runInferenceOnPerturbed(perturbedFileObj);
+  };
+
+  // Run inference on perturbed audio
+  const runInferenceOnPerturbed = async (perturbedFile: UploadedFile) => {
+    if (!model) return;
+
+    setIsLoadingPerturbed(true);
+    setError(null);
+
+    try {
+      console.log("DEBUG: Running inference on perturbed file:", perturbedFile);
+      
+      let response;
+      let prediction;
+      
+      if (model === "wav2vec2") {
+        const requestBody = {
+          file_path: perturbedFile.file_path
+        };
+
+        response = await fetch("http://localhost:8000/inferences/wav2vec2-detailed", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch perturbed wav2vec2 prediction: ${response.status}`);
+        }
+
+        prediction = await response.json();
+      } else if (model?.includes("whisper")) {
+        const requestBody = {
+          model: model,
+          file_path: perturbedFile.file_path
+        };
+
+        response = await fetch("http://localhost:8000/inferences/whisper-accuracy", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch perturbed whisper prediction: ${response.status}`);
+        }
+
+        prediction = await response.json();
+      }
+
+      console.log("DEBUG: Perturbed prediction result:", prediction);
+      setPerturbedPredictions(prediction);
+      
+      // Extract prediction text and notify parent component
+      let predictionText = "";
+      if (model?.includes("whisper")) {
+        // For whisper, extract the transcription text
+        predictionText = prediction?.transcript || prediction?.prediction || "";
+      } else if (model === "wav2vec2") {
+        // For wav2vec2, extract the emotion prediction
+        predictionText = prediction?.emotion || prediction?.prediction || "";
+      }
+      
+      if (predictionText && onPredictionRefresh) {
+        console.log("DEBUG: Calling onPredictionRefresh for perturbed file:", perturbedFile.filename, predictionText);
+        onPredictionRefresh(perturbedFile, predictionText);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
+      console.error("Error fetching perturbed prediction:", err);
+    } finally {
+      setIsLoadingPerturbed(false);
+    }
+  };
   // Fetch wav2vec prediction when model is wav2vec2 and file is selected
   useEffect(() => {
     let isMounted = true;
@@ -73,16 +202,26 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         let requestBody: any = {};
         
         if (selectedFile) {
-          // Use selectedFile if available
-          if (dataset === "custom") {
+          // Check if this is an uploaded file - more precise detection
+          const isUploadedFile = selectedFile.file_path && (
+            selectedFile.file_path.includes('uploads/') || 
+            selectedFile.file_path.startsWith('uploads/') ||
+            selectedFile.message === "Perturbed file" ||
+            selectedFile.message === "File uploaded successfully" ||
+            selectedFile.message === "File uploaded and processed successfully"
+          ) && selectedFile.message !== "Selected from dataset";
+          
+          if (isUploadedFile) {
+            // This is an uploaded file, use file_path
             requestBody.file_path = selectedFile.file_path;
           } else {
-            requestBody.dataset = dataset;
+            // This is a dataset file, use originalDataset and dataset_file
+            requestBody.dataset = originalDataset || dataset;
             requestBody.dataset_file = selectedFile.filename;
           }
         } else if (selectedEmbeddingFile && dataset) {
           // Use embedding file selection
-          requestBody.dataset = dataset;
+          requestBody.dataset = originalDataset || dataset;
           requestBody.dataset_file = selectedEmbeddingFile;
         }
 
@@ -103,6 +242,24 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         const prediction = await response.json();
         if (isMounted) {
           setWav2vecPrediction(prediction);
+        }
+        
+        // Update predictionMap for uploaded files (same as dataset files)
+        if (selectedFile && onPredictionUpdate) {
+          const isUploadedFile = selectedFile.file_path && (
+            selectedFile.file_path.includes('uploads/') || 
+            selectedFile.file_path.startsWith('uploads/') ||
+            selectedFile.message === "Perturbed file" ||
+            selectedFile.message === "File uploaded successfully" ||
+            selectedFile.message === "File uploaded and processed successfully"
+          ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
+          
+          if (isUploadedFile) {
+            const predictionText = typeof prediction === 'string' ? prediction : 
+              prediction?.predicted_emotion || prediction?.prediction || prediction?.emotion || JSON.stringify(prediction);
+            console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Wav2Vec2:", selectedFile.file_id, predictionText);
+            onPredictionUpdate(selectedFile.file_id, predictionText);
+          }
         }
       } catch (err) {
         // Ignore abort errors
@@ -150,21 +307,33 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           model: model
         };
         
+        let isUploadedFile = false;
+        
         if (selectedFile) {
-          // Use selectedFile if available
-          if (dataset === "custom") {
+          // Check if this is an uploaded file - more precise detection
+          isUploadedFile = selectedFile.file_path && (
+            selectedFile.file_path.includes('uploads/') || 
+            selectedFile.file_path.startsWith('uploads/') ||
+            selectedFile.message === "Perturbed file" ||
+            selectedFile.message === "File uploaded successfully" ||
+            selectedFile.message === "File uploaded and processed successfully"
+          ) && selectedFile.message !== "Selected from dataset";
+          
+          if (isUploadedFile) {
+            // This is an uploaded file, use file_path
             requestBody.file_path = selectedFile.file_path;
           } else {
-            requestBody.dataset = dataset;
+            // This is a dataset file, use originalDataset and dataset_file
+            requestBody.dataset = originalDataset || dataset;
             requestBody.dataset_file = selectedFile.filename;
           }
         } else if (selectedEmbeddingFile && dataset) {
-          // Use embedding file selection
-          requestBody.dataset = dataset;
+          // Use embedding file selection - this is a dataset file
+          requestBody.dataset = originalDataset || dataset;
           requestBody.dataset_file = selectedEmbeddingFile;
         }
 
-        const response = await fetch(`${API_BASE}/inferences/whisper-accuracy`, {
+        const response = await fetch("${API_BASE}/inferences/whisper-accuracy", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -178,8 +347,45 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         }
 
         const prediction = await response.json();
-        if (isMounted) {
-          setWhisperPrediction(prediction);
+        
+        let whisperPrediction: WhisperPrediction;
+        
+        if (isUploadedFile) {
+          // For uploaded files, convert basic prediction to expected format
+          whisperPrediction = {
+            predicted_transcript: typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction),
+            ground_truth: "",
+            accuracy_percentage: 0,
+            word_error_rate: 0,
+            character_error_rate: 0,
+            levenshtein_distance: 0,
+            exact_match: 0,
+            character_similarity: 0,
+            word_count_predicted: 0,
+            word_count_truth: 0
+          };
+        } else {
+          // For dataset files, the accuracy endpoint returns all the metrics
+          whisperPrediction = {
+            predicted_transcript: prediction.predicted_transcript || "",
+            ground_truth: prediction.ground_truth || "",
+            accuracy_percentage: prediction.accuracy_percentage || 0,
+            word_error_rate: prediction.word_error_rate || 0,
+            character_error_rate: prediction.character_error_rate || 0,
+            levenshtein_distance: prediction.levenshtein_distance || 0,
+            exact_match: prediction.exact_match || 0,
+            character_similarity: prediction.character_similarity || 0,
+            word_count_predicted: prediction.word_count_predicted || 0,
+            word_count_truth: prediction.word_count_truth || 0
+          };
+        }
+        
+        setWhisperPrediction(whisperPrediction);
+        
+        // Update predictionMap for uploaded files (same as dataset files)
+        if (selectedFile && onPredictionUpdate && isUploadedFile) {
+          console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Whisper:", selectedFile.file_id, whisperPrediction.predicted_transcript);
+          onPredictionUpdate(selectedFile.file_id, whisperPrediction.predicted_transcript);
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -191,7 +397,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     };
 
     fetchWhisperPrediction();
-  }, [selectedFile, selectedEmbeddingFile, model, dataset]);
+  }, [selectedFile, selectedEmbeddingFile, model, dataset, originalDataset]);
 
   return (
     <div className="h-full panel-background border-t panel-border">
@@ -255,7 +461,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                 </Card>
               )}
 
-              <Card>
+              <Card className="border-gray-200 bg-white">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">
                     {model === "wav2vec2" ? "Classification Results" : model?.includes("whisper") ? "Transcription Results" : "Prediction Results"}
@@ -286,59 +492,154 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                   )}
                   
                   {model === "wav2vec2" && wav2vecPrediction && !isLoading ? (
-                    // Display wav2vec2 emotion predictions
-                    Object.entries(wav2vecPrediction.probabilities)
-                      .sort(([,a], [,b]) => b - a) // Sort by probability descending
-                      .map(([emotion, probability]) => {
-                        const isPredicted = emotion === wav2vecPrediction.predicted_emotion;
-                        return (
-                          <div key={emotion} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="capitalize">{emotion}</span>
-                              {isPredicted && <Badge variant="default" className="text-[10px] px-1">P</Badge>}
-                            </div>
-                            <div className="flex items-center gap-2 flex-1 max-w-[120px]">
-                              <Progress value={probability * 100} className="h-2" />
-                              <span className="text-muted-foreground min-w-[2rem]">
-                                {(probability * 100).toFixed(1)}%
-                              </span>
+                    // Display wav2vec2 emotion predictions with comparison in two columns
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Original Prediction */}
+                        <div className="space-y-2 border-r md:border-r border-gray-200 pr-2">
+                          <div className="text-xs font-medium flex items-center gap-2">
+                            Original Audio
+                            <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Original</span>
+                          </div>
+                          {Object.entries(wav2vecPrediction.probabilities)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([emotion, probability]) => {
+                              const isPredicted = emotion === wav2vecPrediction.predicted_emotion;
+                              return (
+                                <div key={emotion} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="capitalize">{emotion}</span>
+                                    {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-1 max-w-[120px]">
+                                    <Progress value={probability * 100} className="h-2" />
+                                    <span className="text-muted-foreground min-w-[2rem]">
+                                      {(probability * 100).toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+
+                        {/* Perturbed Prediction */}
+                        <div className="space-y-2 pl-2">
+                          <div className="text-xs font-medium flex items-center gap-2">
+                            Perturbed Audio
+                            <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Perturbed</span>
+                            {isLoadingPerturbed && (
+                              <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                            )}
+                          </div>
+                          {!isLoadingPerturbed && perturbedPredictions && Object.entries((perturbedPredictions as Wav2Vec2Prediction).probabilities)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([emotion, probability]) => {
+                              const isPredicted = emotion === (perturbedPredictions as Wav2Vec2Prediction).predicted_emotion;
+                              const originalProb = wav2vecPrediction.probabilities[emotion] || 0;
+                              const change = (probability - originalProb) * 100;
+                              return (
+                                <div key={emotion} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="capitalize">{emotion}</span>
+                                    {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-1 max-w-[120px]">
+                                    <Progress value={probability * 100} className="h-2" />
+                                    <span className="text-muted-foreground min-w-[2rem]">
+                                      {(probability * 100).toFixed(1)}%
+                                    </span>
+                                    <span className={`text-[10px] min-w-[2rem] ${
+                                      change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-muted-foreground"
+                                    }`}>
+                                      {change > 0 ? "+" : ""}{change.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : model?.includes("whisper") && whisperPrediction && !isLoading ? (
+                    // Improved UI for Transcription Results (metrics layout and clearer sections)
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="text-xs font-semibold">Transcription Metrics</div>
+                            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">WER</div>
+                                <div className="font-medium">{whisperPrediction.word_error_rate.toFixed(3)}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">CER</div>
+                                <div className="font-medium">{whisperPrediction.character_error_rate.toFixed(3)}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Accuracy</div>
+                                <div className="font-medium">{whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Words (Pred)</div>
+                                <div className="font-medium">{whisperPrediction.word_count_predicted}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Words (Truth)</div>
+                                <div className="font-medium">{whisperPrediction.word_count_truth}</div>
+                              </div>
+                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                <div className="text-[10px] text-gray-500">Levenshtein</div>
+                                <div className="font-medium">{whisperPrediction.levenshtein_distance}</div>
+                              </div>
                             </div>
                           </div>
-                        );
-                      })
-                  ) : model?.includes("whisper") && whisperPrediction && !isLoading ? (
-                    // Display whisper transcription accuracy
-                    <div className="space-y-3">
-                      {/* Accuracy Metrics */}
-                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                        <div>WER: {whisperPrediction.word_error_rate.toFixed(3)}</div>
-                        <div>CER: {whisperPrediction.character_error_rate.toFixed(3)}</div>
-                        <div>Words P: {whisperPrediction.word_count_predicted}</div>
-                        <div>Words T: {whisperPrediction.word_count_truth}</div>
-                        <div>Accuracy: {whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
-                        <div>Levenshtein: {whisperPrediction.levenshtein_distance}</div>
-                      </div>
 
-                      {/* Predicted Transcript */}
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium flex items-center gap-2">
-                          Predicted
-                          <Badge variant="outline" className="text-[10px] px-1">P</Badge>
                         </div>
-                        <div className="text-xs p-2 bg-blue-50 rounded border font-mono">
-                          "{whisperPrediction.predicted_transcript}"
-                        </div>
-                      </div>
 
-                      {/* Ground Truth */}
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium flex items-center gap-2">
-                          Ground Truth
-                          <Badge variant="outline" className="text-[10px] px-1">T</Badge>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <div className="text-xs font-medium">Predicted Transcript</div>
+                            <div className="text-xs p-2 bg-blue-50 rounded border font-mono whitespace-pre-wrap">
+                              {whisperPrediction.predicted_transcript ? `"${whisperPrediction.predicted_transcript}"` : <span className="italic text-gray-400">No prediction</span>}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-xs font-medium">Ground Truth</div>
+                            <div className="text-xs p-2 bg-green-50 rounded border font-mono whitespace-pre-wrap">
+                              {`"${whisperPrediction.ground_truth}"`}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs p-2 bg-green-50 rounded border font-mono">
-                          "{whisperPrediction.ground_truth}"
-                        </div>
+
+                        {perturbedPredictions && (
+                          <div className="pt-2 border-t border-gray-100">
+                            <div className="text-xs font-semibold">Perturbed Prediction</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                              <div>
+                                {/* perturbed metrics if available */}
+                                {typeof perturbedPredictions === 'object' && (
+                                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                                    <div>WER: {(perturbedPredictions as WhisperPrediction).word_error_rate?.toFixed(3) || 'N/A'}</div>
+                                    <div>CER: {(perturbedPredictions as WhisperPrediction).character_error_rate?.toFixed(3) || 'N/A'}</div>
+                                    <div>Words P: {(perturbedPredictions as WhisperPrediction).word_count_predicted || 'N/A'}</div>
+                                    <div>Words T: {(perturbedPredictions as WhisperPrediction).word_count_truth || 'N/A'}</div>
+                                    <div>Accuracy: {(perturbedPredictions as WhisperPrediction).accuracy_percentage?.toFixed(1) || 'N/A'}%</div>
+                                    <div>Levenshtein: {(perturbedPredictions as WhisperPrediction).levenshtein_distance || 'N/A'}</div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="text-xs font-medium">Predicted Transcript (Perturbed)</div>
+                                <div className="mt-1 text-xs p-2 bg-white rounded border font-mono whitespace-pre-wrap text-gray-800">
+                                  {(perturbedPredictions as WhisperPrediction).predicted_transcript ? `"${(perturbedPredictions as WhisperPrediction).predicted_transcript}"` : <span className="italic text-gray-400">No prediction</span>}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : !model?.includes("whisper") && model !== "wav2vec2" ? (
@@ -396,7 +697,14 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           
           <TabsContent value="perturbation" className="m-0 h-full">
             <div className="p-3">
-              <PerturbationTools />
+              <PerturbationTools 
+                selectedFile={selectedFile} 
+                onPerturbationComplete={handlePerturbationComplete}
+                onPredictionRefresh={onPredictionRefresh}
+                model={model}
+                dataset={dataset}
+                originalDataset={originalDataset}
+              />
             </div>
           </TabsContent>
         </div>
