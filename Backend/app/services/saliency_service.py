@@ -33,6 +33,7 @@ def detect_model_type(model: str) -> str:
     return "unknown"
 
 
+#################################################################################################################
 def generate_whisper_saliency(audio_file_path: str, model_size: str = "base", method: str = "gradcam", existing_prediction: Dict = None) -> Dict:
     logger.info(f"Generating Whisper saliency for {audio_file_path} using {method} method")
     
@@ -253,7 +254,7 @@ def generate_whisper_saliency(audio_file_path: str, model_size: str = "base", me
     # Fallback: if no segments were created, create uniform time-based segments
     if len(segments) == 0 and T > 0 and total_duration > 0:
         logger.info("No word-level segments found, creating uniform time-based segments")
-        # Create 10-20 segments based on audio duration (aim for ~0.5-1 second segments)
+        # Create 10-20 segments based on audio duration (aim for ~0.3-1 second segments)
         num_segments = max(8, min(32, int(total_duration * 2)))
         
         for i in range(num_segments):
@@ -306,6 +307,8 @@ def generate_whisper_saliency(audio_file_path: str, model_size: str = "base", me
         "total_duration": total_duration,
         "series": series.tolist()
     }
+
+################################################################################################################
 
 def generate_wav2vec2_saliency(audio_file_path: str, method: str = "gradcam", existing_prediction: Dict = None) -> Dict:
     audio, rate = librosa.load(audio_file_path, sr=16000)

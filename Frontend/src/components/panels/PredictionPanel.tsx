@@ -121,7 +121,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           file_path: perturbedFile.file_path
         };
 
-        response = await fetch("http://localhost:8000/inferences/wav2vec2-detailed", {
+        response = await fetch(`${API_BASE}/inferences/wav2vec2-detailed`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -140,7 +140,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           file_path: perturbedFile.file_path
         };
 
-        response = await fetch("http://localhost:8000/inferences/whisper-accuracy", {
+        response = await fetch(`${API_BASE}/inferences/whisper-accuracy`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -333,7 +333,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           requestBody.dataset_file = selectedEmbeddingFile;
         }
 
-        const response = await fetch("${API_BASE}/inferences/whisper-accuracy", {
+        const response = await fetch(`${API_BASE}/inferences/whisper-accuracy`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

@@ -53,7 +53,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     // If showing perturbed audio and it's available
     if (showPerturbed && perturbationResult?.success) {
       const filename = perturbationResult.filename;
-      return `http://localhost:8000/upload/file/${filename}`;
+      return `${API_BASE}/upload/file/${filename}`;
     }
     
     // Otherwise show original audio

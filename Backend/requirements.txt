@@ -20,3 +20,4 @@ captum>=0.6.0
 lime>=0.2.0
 shap>=0.42.0
 accelerate
+torchaudio
