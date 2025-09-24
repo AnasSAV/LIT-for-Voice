@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Plot from "react-plotly.js";
 import { useEmbedding } from "../../contexts/EmbeddingContext";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, RotateCcw, Maximize2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Layers3 } from "lucide-react";
 
 interface EmbeddingPlotProps {
   selectedMethod?: string;
@@ -11,10 +12,20 @@ interface EmbeddingPlotProps {
   selectedFile?: string | null;
 }
 
+type PlaneType = 'none' | 'xy' | 'xz' | 'yz';
+
 export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSelect, selectedFile }: EmbeddingPlotProps) => {
   const { embeddingData, isLoading, error } = useEmbedding();
   const plotRef = useRef<any>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [selectedPlane, setSelectedPlane] = useState<PlaneType>('none');
+
+  // Reset plane selection when switching to 2D
+  useEffect(() => {
+    if (!is3D) {
+      setSelectedPlane('none');
+    }
+  }, [is3D]);
 
   // Generate mock data as fallback
   const generateMockData = () => {
@@ -179,6 +190,61 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     return mockData;
   };
 
+  // Create transparent plane surfaces for 3D visualization
+  const createPlane = (planeType: PlaneType, bounds: { x: [number, number], y: [number, number], z: [number, number] }) => {
+    if (!is3D || planeType === 'none') return null;
+
+    const [xMin, xMax] = bounds.x;
+    const [yMin, yMax] = bounds.y;
+    const [zMin, zMax] = bounds.z;
+    const midX = (xMin + xMax) / 2;
+    const midY = (yMin + yMax) / 2;
+    const midZ = (zMin + zMax) / 2;
+
+    const planeAlpha = 0.2; // 80% transparency (20% opacity)
+    
+    switch (planeType) {
+      case 'xy': // X-Y plane (Z = midZ)
+        return {
+          type: 'surface' as const,
+          x: [[xMin, xMax], [xMin, xMax]],
+          y: [[yMin, yMin], [yMax, yMax]],
+          z: [[midZ, midZ], [midZ, midZ]],
+          opacity: planeAlpha,
+          colorscale: [[0, 'rgba(59, 130, 246, 0.3)'], [1, 'rgba(59, 130, 246, 0.3)']], // Blue
+          showscale: false,
+          hoverinfo: 'skip',
+          name: 'X-Y Plane'
+        };
+      case 'xz': // X-Z plane (Y = midY)
+        return {
+          type: 'surface' as const,
+          x: [[xMin, xMax], [xMin, xMax]],
+          y: [[midY, midY], [midY, midY]],
+          z: [[zMin, zMin], [zMax, zMax]],
+          opacity: planeAlpha,
+          colorscale: [[0, 'rgba(16, 185, 129, 0.3)'], [1, 'rgba(16, 185, 129, 0.3)']], // Green
+          showscale: false,
+          hoverinfo: 'skip',
+          name: 'X-Z Plane'
+        };
+      case 'yz': // Y-Z plane (X = midX)
+        return {
+          type: 'surface' as const,
+          x: [[midX, midX], [midX, midX]],
+          y: [[yMin, yMax], [yMin, yMax]],
+          z: [[zMin, zMin], [zMax, zMax]],
+          opacity: planeAlpha,
+          colorscale: [[0, 'rgba(239, 68, 68, 0.3)'], [1, 'rgba(239, 68, 68, 0.3)']], // Red
+          showscale: false,
+          hoverinfo: 'skip',
+          name: 'Y-Z Plane'
+        };
+      default:
+        return null;
+    }
+  };
+
   const plotData = getPlotData();
   const { x, y, colors, text } = plotData;
   const z = 'z' in plotData ? plotData.z : undefined;
@@ -211,6 +277,13 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     return colorKeys.indexOf(color) >= 0 ? colorKeys.indexOf(color) : colorKeys.indexOf('unknown');
   });
 
+  // Calculate bounds for plane creation
+  const bounds = x.length > 0 ? {
+    x: [Math.min(...x) * 1.1, Math.max(...x) * 1.1] as [number, number],
+    y: [Math.min(...y) * 1.1, Math.max(...y) * 1.1] as [number, number],
+    z: z && z.length > 0 ? [Math.min(...z) * 1.1, Math.max(...z) * 1.1] as [number, number] : [0, 0] as [number, number]
+  } : { x: [0, 0] as [number, number], y: [0, 0] as [number, number], z: [0, 0] as [number, number] };
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -238,7 +311,10 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     selectedFile === filename ? 12 : 8
   );
 
-  // Create trace data
+  // Create traces array - start with main scatter plot
+  const traces: any[] = [];
+
+  // Create main trace data
   const traceData: any = {
     x: x,
     y: y,
@@ -268,6 +344,16 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     traceData.hovertemplate = '<b>%{text}</b><extra></extra>';
   } else {
     traceData.hovertemplate = '<b>%{text}</b><extra></extra>';
+  }
+
+  traces.push(traceData);
+
+  // Add plane if selected and in 3D mode
+  if (is3D && selectedPlane !== 'none') {
+    const planeTrace = createPlane(selectedPlane, bounds);
+    if (planeTrace) {
+      traces.push(planeTrace);
+    }
   }
 
   // Layout configuration
@@ -366,9 +452,40 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
   }
 
   return (
-    <div className="w-full h-full min-h-0">
+    <div className="w-full h-full min-h-0 relative">
+      {/* Plane Selection Controls - Only show in 3D mode */}
+      {is3D && (
+        <div className="absolute top-2 right-2 z-10 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-md p-2 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Layers3 className="h-3 w-3 text-gray-600" />
+            <span className="text-xs text-gray-600 font-medium">Plane:</span>
+            <Select
+              value={selectedPlane}
+              onValueChange={(value: PlaneType) => setSelectedPlane(value)}
+            >
+              <SelectTrigger className="w-16 h-6 text-xs border-gray-300 hover:border-gray-400 transition-colors">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="xy">X-Y</SelectItem>
+                <SelectItem value="xz">X-Z</SelectItem>
+                <SelectItem value="yz">Y-Z</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedPlane !== 'none' && (
+            <div className="text-[10px] text-gray-500 mt-1">
+              {selectedPlane === 'xy' && '🔵 Blue plane at Z center'}
+              {selectedPlane === 'xz' && '🟢 Green plane at Y center'}
+              {selectedPlane === 'yz' && '🔴 Red plane at X center'}
+            </div>
+          )}
+        </div>
+      )}
+      
       <Plot
-        data={[traceData]}
+        data={traces}
         layout={layout}
         onClick={handlePointClick}
         config={{
@@ -384,7 +501,7 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
           showTips: true,
           toImageButtonOptions: {
             format: 'png',
-            filename: `embeddings_${selectedMethod}_${is3D ? '3D' : '2D'}`,
+            filename: `embeddings_${selectedMethod}_${is3D ? '3D' : '2D'}${selectedPlane !== 'none' ? `_${selectedPlane}` : ''}`,
             height: 800,
             width: 800,
             scale: 2
