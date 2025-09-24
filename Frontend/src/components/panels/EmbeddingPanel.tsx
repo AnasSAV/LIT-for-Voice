@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { EmbeddingPlot } from "../visualization/EmbeddingPlot";
 import { ScalarPlot } from "../visualization/ScalarPlot";
 import { useEmbedding } from "../../contexts/EmbeddingContext";
-import { RefreshCw, Eye, Box, Square } from "lucide-react";
+import { RefreshCw, Eye, Box, Square, BarChart3 } from "lucide-react";
 
 interface EmbeddingPanelProps {
   model?: string;
@@ -19,9 +20,54 @@ interface EmbeddingPanelProps {
   onFileSelect?: (filename: string) => void;
 }
 
+// Audio Frequency Analysis interface (reusing from ScalersVisualization)
+interface AudioFrequencyAnalysis {
+  model_context: string;
+  individual_analyses: Array<{
+    filename: string;
+    features: Record<string, number>;
+  }>;
+  aggregate_statistics: Record<string, {
+    mean: number;
+    std: number;
+    min: number;
+    max: number;
+    median: number;
+  }>;
+  feature_distributions: Record<string, {
+    histogram: number[];
+    bins: number[];
+  }>;
+  most_common_features: Array<{
+    feature: string;
+    normalized_mean: number;
+    stability_score: number;
+    prevalence_score: number;
+    mean: number;
+    std: number;
+  }>;
+  feature_categories: Record<string, string[]>;
+  summary: {
+    total_files: number;
+    total_features_extracted: number;
+    avg_duration: number;
+    avg_tempo: number;
+  };
+  cache_info: {
+    cached_count: number;
+    missing_count: number;
+    cache_hit_rate: number;
+  };
+}
+
 export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice", availableFiles = [], selectedFile, onFileSelect }: EmbeddingPanelProps) => {
   const [reductionMethod, setReductionMethod] = useState("pca");
   const [is3D, setIs3D] = useState(false);
+  const [selectedByAngle, setSelectedByAngle] = useState<string[]>([]);
+  const [audioFrequencyAnalysis, setAudioFrequencyAnalysis] = useState<AudioFrequencyAnalysis | null>(null);
+  const [isLoadingFrequency, setIsLoadingFrequency] = useState(false);
+  const [frequencyError, setFrequencyError] = useState<string | null>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const { embeddingData, isLoading, error, fetchEmbeddings, clearEmbeddings } = useEmbedding();
 
   // Auto-fetch embeddings when model, dataset, or reduction method changes
@@ -32,6 +78,15 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
       fetchEmbeddings(model, dataset, filesToProcess, reductionMethod, nComponents);
     }
   }, [model, dataset, availableFiles, reductionMethod, fetchEmbeddings]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
 
   const handleFetchEmbeddings = () => {
     if (availableFiles.length > 0) {
@@ -63,14 +118,79 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
     }
   };
 
+  const handleAngleRangeSelect = (selectedFiles: string[]) => {
+    // Only update if the selection has actually changed
+    const currentSelection = selectedByAngle.sort().join(',');
+    const newSelection = selectedFiles.sort().join(',');
+    
+    if (currentSelection !== newSelection) {
+      setSelectedByAngle(selectedFiles);
+      
+      // Clear any existing debounce timer
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      
+      // Debounce the frequency analysis fetch to prevent rapid successive calls
+      debounceRef.current = setTimeout(() => {
+        if (selectedFiles.length > 0) {
+          fetchFrequencyAnalysis(selectedFiles);
+        } else {
+          setAudioFrequencyAnalysis(null);
+        }
+      }, 300); // 300ms debounce
+    }
+  };
+
+  // Fetch audio frequency analysis for selected files
+  const fetchFrequencyAnalysis = async (filenames: string[]) => {
+    if (filenames.length === 0) return;
+
+    setIsLoadingFrequency(true);
+    setFrequencyError(null);
+    
+    try {
+      const requestBody: any = {
+        filenames: filenames,
+        model: model,
+      };
+
+      if (dataset) {
+        requestBody.dataset = dataset;
+      }
+
+      const response = await fetch("http://localhost:8000/inferences/audio-frequency-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch audio frequency analysis: ${response.status} - ${errorText}`);
+      }
+
+      const analysis = await response.json();
+      setAudioFrequencyAnalysis(analysis);
+    } catch (error) {
+      console.error("Error fetching audio frequency analysis:", error);
+      setFrequencyError(error instanceof Error ? error.message : 'Unknown error occurred');
+      setAudioFrequencyAnalysis(null);
+    } finally {
+      setIsLoadingFrequency(false);
+    }
+  };
+
   return (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col">
       <div className="p-4 border-b border-gray-200 bg-gray-50">
         <h3 className="font-medium text-sm text-gray-800">Audio Embeddings</h3>
       </div>
       
-      <div className="flex-1 p-4 bg-white flex flex-col min-h-0">
-        <div className="flex flex-col h-full gap-4">
+      <div className="flex-1 p-4 bg-white overflow-auto">
+        <div className="space-y-4">
           {/* Controls Section */}
           <div className="flex-shrink-0 space-y-3">
             <div className="flex items-center justify-between">
@@ -150,14 +270,153 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
           </div>
 
           {/* Embedding Plot */}
-          <div className="flex-1 border border-gray-200 rounded-lg bg-white p-2 min-h-0 overflow-hidden">
+          <div className="h-[500px] border border-gray-200 rounded-lg bg-white p-2 overflow-hidden">
             <EmbeddingPlot 
               selectedMethod={reductionMethod} 
               is3D={is3D}
               onPointSelect={handlePointSelect}
+              onAngleRangeSelect={handleAngleRangeSelect}
               selectedFile={selectedFile}
             />
           </div>
+
+          {/* Frequency Analysis Panel - Only show when files are selected by angle range */}
+          {selectedByAngle.length > 0 && (
+            <div className="border border-gray-200 rounded-lg bg-white">
+              <Tabs defaultValue="frequency" className="w-full">
+                <div className="border-b border-gray-200 px-4 py-2 bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium">Frequency Analysis</span>
+                      <Badge variant="outline" className="text-xs">
+                        {selectedByAngle.length} files
+                      </Badge>
+                    </div>
+                    <TabsList className="grid w-24 grid-cols-1">
+                      <TabsTrigger value="frequency" className="text-xs">Results</TabsTrigger>
+                    </TabsList>
+                  </div>
+                </div>
+                
+                <TabsContent value="frequency" className="mt-0">
+                  <div className="p-4 max-h-96 overflow-y-auto">
+                    {isLoadingFrequency ? (
+                      <div className="text-xs text-gray-600 flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        Loading frequency analysis...
+                      </div>
+                    ) : frequencyError ? (
+                      <div className="text-xs text-red-600">
+                        <div className="font-medium">Error loading analysis:</div>
+                        <div className="mt-1">{frequencyError}</div>
+                      </div>
+                    ) : audioFrequencyAnalysis ? (
+                      <div className="space-y-4">
+                        {/* Cache Info */}
+                        {audioFrequencyAnalysis.cache_info && (
+                          <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                            <div className="flex justify-between">
+                              <span>Cache hits:</span>
+                              <span>{audioFrequencyAnalysis.cache_info.cached_count}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>New extractions:</span>
+                              <span>{audioFrequencyAnalysis.cache_info.missing_count}</span>
+                            </div>
+                            <div className="flex justify-between font-medium">
+                              <span>Hit rate:</span>
+                              <span>{(audioFrequencyAnalysis.cache_info.cache_hit_rate * 100).toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Summary */}
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div className="space-y-1">
+                            <div className="font-medium">Summary</div>
+                            <div className="text-gray-600">
+                              <div>Files: {audioFrequencyAnalysis.summary.total_files}</div>
+                              <div>Features: {audioFrequencyAnalysis.summary.total_features_extracted}</div>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="font-medium">Audio Metrics</div>
+                            <div className="text-gray-600">
+                              <div>Avg Duration: {audioFrequencyAnalysis.summary.avg_duration.toFixed(1)}s</div>
+                              <div>Avg Tempo: {audioFrequencyAnalysis.summary.avg_tempo.toFixed(0)} BPM</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Top Features */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium">Top 5 Most Common Features</div>
+                          <div className="space-y-1">
+                            {audioFrequencyAnalysis.most_common_features.slice(0, 5).map((feature, index) => (
+                              <div key={index} className="space-y-1">
+                                <div className="flex justify-between text-xs">
+                                  <span className="font-mono text-blue-700 truncate text-[10px]">
+                                    {feature.feature.replace(/_/g, ' ')}
+                                  </span>
+                                  <span className="text-[10px]">Score: {feature.prevalence_score.toFixed(2)}</span>
+                                </div>
+                                <Progress 
+                                  value={feature.prevalence_score * 100} 
+                                  className="h-1"
+                                />
+                                <div className="text-[10px] text-gray-500">
+                                  μ={feature.mean.toFixed(2)}, σ={feature.std.toFixed(2)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Feature Categories */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium">Feature Categories</div>
+                          <div className="grid grid-cols-2 gap-1">
+                            {Object.entries(audioFrequencyAnalysis.feature_categories)
+                              .filter(([_, features]) => features.length > 0)
+                              .map(([category, features]) => (
+                                <div key={category} className="text-xs">
+                                  <Badge variant="outline" className="text-[10px] capitalize">
+                                    {category}
+                                  </Badge>
+                                  <span className="text-gray-600 ml-1">{features.length}</span>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+
+                        {/* Selected Files Preview */}
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium">Selected Files ({selectedByAngle.length})</div>
+                          <div className="max-h-24 overflow-y-auto space-y-1">
+                            {selectedByAngle.slice(0, 5).map((filename, index) => (
+                              <div key={index} className="text-[10px] font-mono text-blue-700 truncate bg-gray-50 px-2 py-1 rounded">
+                                {filename}
+                              </div>
+                            ))}
+                            {selectedByAngle.length > 5 && (
+                              <div className="text-[10px] text-gray-500 text-center">
+                                ... and {selectedByAngle.length - 5} more files
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-600 text-center">
+                        No frequency analysis data available
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
 
         </div>
       </div>
