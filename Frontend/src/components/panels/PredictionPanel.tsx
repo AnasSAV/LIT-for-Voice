@@ -140,6 +140,47 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           file_path: perturbedFile.file_path
         };
 
+        response = await fetch("http://localhost:8000/inferences/whisper-accuracy", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch perturbed whisper prediction: ${response.status}`);
+        }
+
+        prediction = await response.json();
+      }
+
+      console.log("DEBUG: Perturbed prediction result:", prediction);
+      setPerturbedPredictions(prediction);
+      
+      // Extract prediction text and notify parent component
+      let predictionText = "";
+      if (model?.includes("whisper")) {
+        // For whisper, extract the transcription text
+        predictionText = prediction?.transcript || prediction?.prediction || "";
+      } else if (model === "wav2vec2") {
+        // For wav2vec2, extract the emotion prediction
+        predictionText = prediction?.emotion || prediction?.prediction || "";
+      }
+      
+      if (predictionText && onPredictionRefresh) {
+        console.log("DEBUG: Calling onPredictionRefresh for perturbed file:", perturbedFile.filename, predictionText);
+        onPredictionRefresh(perturbedFile, predictionText);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
+      console.error("Error fetching perturbed prediction:", err);
+    } finally {
+      setIsLoadingPerturbed(false);
+    }
+  };
+
         response = await fetch(`${API_BASE}/inferences/whisper-accuracy`, {
           method: "POST",
           headers: {
@@ -331,6 +372,17 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           // Use embedding file selection - this is a dataset file
           requestBody.dataset = originalDataset || dataset;
           requestBody.dataset_file = selectedEmbeddingFile;
+          isUploadedFile = false;
+        }
+
+        // Choose the correct endpoint based on file type
+        let endpoint: string;
+        if (isUploadedFile) {
+          // For uploaded files, use basic inference endpoint (no ground truth available)
+          endpoint = "http://localhost:8000/inferences/run";
+        } else {
+          // For dataset files, use accuracy endpoint to get ground truth and metrics
+          endpoint = "http://localhost:8000/inferences/whisper-accuracy";
         }
 
         const response = await fetch(`${API_BASE}/inferences/whisper-accuracy`, {

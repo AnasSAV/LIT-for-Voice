@@ -240,6 +240,7 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
           console.log("DEBUG: Created perturbed file object:", perturbedFile);
           
           // Run inference on the perturbed file
+
           const inferenceResponse = await fetch(`${API_BASE}/inferences/run`, {
             method: 'POST',
             headers: {
