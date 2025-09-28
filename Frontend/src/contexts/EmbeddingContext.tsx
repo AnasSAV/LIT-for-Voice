@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { API_BASE } from '@/lib/api';
 
 export interface EmbeddingPoint {
   filename: string;
@@ -67,11 +68,12 @@ export const EmbeddingProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:8000/inferences/embeddings', {
+      const response = await fetch(`${API_BASE}/inferences/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           model,
           dataset,

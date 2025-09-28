@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { RangeSlider } from "@/components/ui/range-slider"
 import { Volume2, Scissors, Plus, Play, Zap, Loader2, CheckCircle, XCircle } from "lucide-react"
 import { WaveformViewer } from "../audio/WaveformViewer"
+import { API_BASE } from '@/lib/api'
 
 interface UploadedFile {
   file_id: string;
@@ -59,13 +60,13 @@ const getAudioUrl = (selectedFile: UploadedFile, dataset?: string, originalDatas
   
   if (isUploadedFile) {
     // For uploaded files, use the file_id (unique filename) with upload endpoint
-    const url = `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+    const url = `${API_BASE}/upload/file/${selectedFile.file_id}`;
     console.log("DEBUG: Generated upload URL:", url);
     return url;
   } else {
     // For dataset files, use the filename with dataset endpoint
     const datasetToUse = originalDataset || dataset;
-    const url = `http://localhost:8000/${datasetToUse}/file/${selectedFile.filename}`;
+    const url = `${API_BASE}/${datasetToUse}/file/${selectedFile.filename}`;
     console.log("DEBUG: Generated dataset URL:", url);
     return url;
   }
@@ -75,7 +76,7 @@ const getAudioUrl = (selectedFile: UploadedFile, dataset?: string, originalDatas
 const getPerturbedAudioUrl = (perturbedFilePath: string): string => {
   // Extract filename from path (handle both forward and backward slashes)
   const filename = perturbedFilePath.split('/').pop() || perturbedFilePath.split('\\').pop();
-  return `http://localhost:8000/upload/file/${filename}`;
+  return `${API_BASE}/upload/file/${filename}`;
 };
 
 export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
@@ -200,7 +201,7 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
       console.log("DEBUG: selectedFile:", selectedFile);
 
 
-      const response = await fetch('http://localhost:8000/perturb', {
+      const response = await fetch(`${API_BASE}/perturb`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -239,7 +240,8 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
           console.log("DEBUG: Created perturbed file object:", perturbedFile);
           
           // Run inference on the perturbed file
-          const inferenceResponse = await fetch('http://localhost:8000/inferences/run', {
+
+          const inferenceResponse = await fetch(`${API_BASE}/inferences/run`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

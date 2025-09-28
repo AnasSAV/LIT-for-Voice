@@ -3,9 +3,10 @@ import { useDropzone } from "react-dropzone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Upload, FileAudio } from "lucide-react";
 import { toast } from "sonner";
+import { API_BASE } from '@/lib/api';
 
 interface AudioUploaderProps {
-  onUploadSuccess?: (uploadResponse: any) => void;
+  onUploadSuccess?: (uploadResponse) => void;
 }
 
 export const AudioUploader = ({ onUploadSuccess }: AudioUploaderProps) => {
@@ -16,9 +17,10 @@ export const AudioUploader = ({ onUploadSuccess }: AudioUploaderProps) => {
     formData.append('file', file);
 
     try {
-      console.log('Sending request to http://localhost:8000/upload...');
-      const response = await fetch('http://localhost:8000/upload', {
+      console.log(`Sending request to ${API_BASE}/upload...`);
+      const response = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
 

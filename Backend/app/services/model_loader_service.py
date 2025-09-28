@@ -16,31 +16,60 @@ import umap
 logger = logging.getLogger(__name__)
 
 
-def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8):
-    # Use integer device indices to avoid meta-tensor issues in some transformer/torch combos
-    device = 0 if torch.cuda.is_available() else -1  # 0 => cuda:0, -1 => CPU
+def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, return_timestamps=False):
+    device = 0 if torch.cuda.is_available() else -1
     torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-
-    pipe = pipeline(
-        "automatic-speech-recognition",
-        model=model_id,
-        torch_dtype=torch_dtype,
-        device=device,
-    )
-
-    generate_kwargs = {"return_timestamps": True}
-
+    try:
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model_id,
+            torch_dtype=torch_dtype,
+            device=device,
+        )
+    except NotImplementedError as e:
+        if "meta tensor" in str(e):
+            # Fallback for meta tensor issue: load on CPU first then move to CUDA
+            pipe = pipeline(
+                "automatic-speech-recognition",
+                model=model_id,
+                torch_dtype=torch_dtype,
+                device=-1,  # Force CPU first
+            )
+            if torch.cuda.is_available():
+                try:
+                    pipe.model = pipe.model.to("cuda:0")
+                except Exception:
+                    pass  # Stay on CPU if move fails
+        else:
+            raise
     audio, sample_rate = librosa.load(audio_file, sr=16000)
     audio = audio.astype(np.float32)
 
-    result = pipe(
-        audio,
-        generate_kwargs=generate_kwargs,
-        chunk_length_s=chunk_length_s,
-        batch_size=batch_size,
-    )
+    if return_timestamps:
+        
+        result = pipe(
+            audio,
+            return_timestamps="word",  # Get word-level timestamps instead of chunk-level
+            chunk_length_s=5,  # Use smaller chunks (5 seconds instead of 30)
+            batch_size=batch_size,
+        )
+    else:
+        # For regular transcription, use original parameters
+        result = pipe(
+            audio,
+            return_timestamps=return_timestamps,
+            chunk_length_s=chunk_length_s,
+            batch_size=batch_size,
+        )
     
+    if return_timestamps:
+        return {
+            "text": result["text"],
+            "chunks": result.get("chunks", []),
+            "audio": audio,
+            "sample_rate": sample_rate
+        }
     return result["text"]
 
 def transcribe_whisper_large(audio_file_path):
@@ -50,6 +79,10 @@ def transcribe_whisper_large(audio_file_path):
 def transcribe_whisper_base(audio_file_path):
     model_id = "openai/whisper-base"
     return transcribe_whisper(model_id, audio_file_path)
+
+def transcribe_whisper_with_timestamps(audio_file_path, model_size="base"):
+    model_id = "openai/whisper-base" if model_size == "base" else "openai/whisper-large-v3"
+    return transcribe_whisper(model_id, audio_file_path, return_timestamps=True)
 
 
 _EMO_MODEL_ID = "r-f/wav2vec-english-speech-emotion-recognition"
@@ -124,19 +157,30 @@ _whisper_model_large = None
 def get_whisper_base_models():
     global _whisper_processor_base, _whisper_model_base
     if _whisper_processor_base is None:
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         _whisper_processor_base = WhisperProcessor.from_pretrained("openai/whisper-base")
         _whisper_model_base = WhisperModel.from_pretrained("openai/whisper-base")
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
         _whisper_model_base = _whisper_model_base.to(device)
     return _whisper_processor_base, _whisper_model_base
 
 def get_whisper_large_models():
     global _whisper_processor_large, _whisper_model_large
     if _whisper_processor_large is None:
-        _whisper_processor_large = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        _whisper_model_large = WhisperModel.from_pretrained("openai/whisper-large-v3")
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        _whisper_model_large = _whisper_model_large.to(device)
+        _whisper_processor_large = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
+        try:
+            _whisper_model_large = WhisperModel.from_pretrained(
+                "openai/whisper-large-v3",
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            )
+            _whisper_model_large = _whisper_model_large.to(device)
+        except NotImplementedError as e:
+            if "meta tensor" in str(e):
+                # Handle meta tensor issue for embeddings model too
+                _whisper_model_large = WhisperModel.from_pretrained("openai/whisper-large-v3")
+                _whisper_model_large = _whisper_model_large.to(device)
+            else:
+                raise
     return _whisper_processor_large, _whisper_model_large
 
 def extract_whisper_embeddings(audio_file_path: str, model_size: str = "base") -> np.ndarray:
@@ -341,6 +385,4 @@ def extract_audio_frequency_features(audio_file_path: str) -> dict:
             flattened_features[key] = value
     
     return flattened_features
-
-
 
