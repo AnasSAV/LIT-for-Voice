@@ -7,6 +7,7 @@ import { AudioPlayer } from "../audio/AudioPlayer";
 import { WaveformViewer } from "../audio/WaveformViewer";
 import { Play, Pause, RotateCcw, Trash2, Plus } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
+import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
   file_id: string;
@@ -52,7 +53,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     // If showing perturbed audio and it's available
     if (showPerturbed && perturbationResult?.success) {
       const filename = perturbationResult.filename;
-      return `http://localhost:8000/upload/file/${filename}`;
+      return `${API_BASE}/upload/file/${filename}`;
     }
     
     // Otherwise show original audio
@@ -71,14 +72,14 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     
     if (isUploadedFile) {
       // This is an uploaded file, use the upload endpoint
-      return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+      return `${API_BASE}/upload/file/${selectedFile.file_id}`;
     } else if (dataset && dataset !== "custom") {
       // This is a dataset file
       const filename = encodeURIComponent(selectedFile.filename);
-      return `http://localhost:8000/${dataset}/file/${filename}`;
+      return `${API_BASE}/${dataset}/file/${filename}`;
     } else {
       // Fallback to upload endpoint
-      return `http://localhost:8000/upload/file/${selectedFile.file_id}`;
+      return `${API_BASE}/upload/file/${selectedFile.file_id}`;
     }
   })();
 

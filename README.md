@@ -53,6 +53,8 @@ docker compose up -d
 ```
 3. **Set up the backend**
 
+# Must use Python 3.11
+
    ```cmd
    :: Create and activate virtual environment (Windows cmd)
    cd Backend

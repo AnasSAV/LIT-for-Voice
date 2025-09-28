@@ -7,6 +7,7 @@ import { Upload, Search, Play, Pause } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
 import { toast } from "sonner";
+import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
   file_id: string;
@@ -195,11 +196,12 @@ export const AudioDatasetPanel = ({
           return pathVal ? (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : String(row["id"] || "unknown");
         });
 
-        const response = await fetch(`http://localhost:8000/inferences/batch-check`, {
+        const response = await fetch(`${API_BASE}/inferences/batch-check`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify({
             model,
             dataset,
@@ -328,11 +330,12 @@ export const AudioDatasetPanel = ({
           dataset_file: filename
         };
 
-        const response = await fetch(`http://localhost:8000/inferences/run`, {
+        const response = await fetch(`${API_BASE}/inferences/run`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include',
           body: JSON.stringify(requestBody),
           signal: abortControllerRef.current?.signal,
         });
@@ -389,7 +392,7 @@ export const AudioDatasetPanel = ({
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await fetch(`http://localhost:8000/${datasetToUse}/metadata`, { signal: ac.signal });
+        const res = await fetch(`${API_BASE}/${dataset}/metadata`, { signal: ac.signal, credentials: 'include' });
         if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -449,8 +452,9 @@ export const AudioDatasetPanel = ({
     formData.append('model', model);
 
     try {
-      const response = await fetch('http://localhost:8000/upload', {
+      const response = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
 

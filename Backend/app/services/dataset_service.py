@@ -1,6 +1,10 @@
 from pathlib import Path
 from typing import Dict, List
 import csv
+import librosa
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Resolve paths relative to repo structure: Backend/data/
@@ -19,6 +23,16 @@ DATASET_BASE_DIRS: Dict[str, Path] = {
 }
 
 
+def calculate_audio_duration(audio_path: Path) -> float:
+    """Calculate duration of audio file in seconds"""
+    try:
+        # Use librosa to get duration without loading the entire audio
+        duration = librosa.get_duration(path=str(audio_path))
+        return round(duration, 2)
+    except Exception as e:
+        logger.warning(f"Could not calculate duration for {audio_path}: {e}")
+        return 0.0
+
 def load_metadata(dataset: str) -> List[Dict[str, str]]:
 
     ds = dataset.lower()
@@ -36,6 +50,25 @@ def load_metadata(dataset: str) -> List[Dict[str, str]]:
             for row in reader:
                 # normalize keys to lowercase; strip whitespace
                 normalized = {str(k).strip().lower(): (v.strip() if isinstance(v, str) else v) for k, v in row.items()}
+                
+                # Add duration for datasets that don't have it (like RAVDESS)
+                if ds == "ravdess" and "duration" not in normalized:
+                    try:
+                        # Try to find the audio file and calculate duration
+                        filename = normalized.get("filename", "")
+                        if filename:
+                            audio_path = DATASET_BASE_DIRS[ds] / filename
+                            if audio_path.exists():
+                                duration = calculate_audio_duration(audio_path)
+                                normalized["duration"] = str(duration)
+                            else:
+                                normalized["duration"] = "0.0"
+                        else:
+                            normalized["duration"] = "0.0"
+                    except Exception as e:
+                        logger.warning(f"Error calculating duration for {filename}: {e}")
+                        normalized["duration"] = "0.0"
+                
                 rows.append(normalized)
     except Exception:
         # Re-raise to let the route map to a 500
