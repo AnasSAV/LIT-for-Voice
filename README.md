@@ -1,5 +1,5 @@
 <p align="center">
-  <img loading="lazy" alt="LIT for Voice" src="https://raw.githubusercontent.com/AnasSAV/LIT-for-Voice/main/Frontend/public/lit_web.png" width="100%"/>
+  <img width="1920" height="1080" alt="LIT for Voice" src="https://github.com/user-attachments/assets/42155dcb-2526-4780-ab5c-8374777a4144" />
 </p>
 
 # LIT for Voice
