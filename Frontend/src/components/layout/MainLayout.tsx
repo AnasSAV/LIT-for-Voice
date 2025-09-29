@@ -133,8 +133,19 @@ export const MainLayout = () => {
     setBatchInferenceStatus('done');
   }, []);
 
+  // Clear predictions when model or dataset changes
+  useEffect(() => {
+    console.log('Model or dataset changed, clearing predictions:', model, dataset);
+    setPredictionMap({});
+    setBatchInferenceStatus('idle');
+  }, [model, dataset]);
+
   const handleBatchInference = async (selectedModel: string, selectedDataset: string) => {
     if (selectedDataset === 'custom') return;
+    
+    // Clear predictions when dataset/model changes to avoid showing old predictions
+    console.log('Clearing predictions for new dataset/model combination:', selectedModel, selectedDataset);
+    setPredictionMap({});
     
     setBatchInferenceStatus('running');
     console.log(`Starting batch inference for ${selectedModel} on ${selectedDataset} dataset`);

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Search, Play, Pause } from "lucide-react";
+import { Upload, Search, Play, Pause, RefreshCw } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
 import { toast } from "sonner";
@@ -187,6 +187,7 @@ export const AudioDatasetPanel = ({
     setIsInferenceComplete(false);
     setCurrentInferenceIndex(0);
     setBatchInferenceQueue([]);
+    setInferenceStatus({}); // Clear inference status for new dataset
     
     // First, check what's already cached
     const checkCachedResults = async () => {
@@ -372,6 +373,43 @@ export const AudioDatasetPanel = ({
   }, [batchInferenceQueue, currentInferenceIndex, datasetMetadata, model, dataset, originalDataset, onBatchInferenceComplete]);
 
   // Cleanup on unmount or when dataset changes
+  // Reload function to refresh dataset metadata
+  const handleReloadDataset = useCallback(async () => {
+    const allowed = ["common-voice", "ravdess"];
+    const datasetToUse = originalDataset || dataset;
+    if (!allowed.includes(datasetToUse)) {
+      setDatasetMetadata([]);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_BASE}/${dataset}/metadata`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setDatasetMetadata(data as Record<string, string | number>[]);
+        
+        // Extract filenames for embeddings
+        const filenames = data.map((row: Record<string, string | number>) => {
+          const pathVal = row["path"] || row["filepath"] || row["file"] || row["filename"];
+          const filename = typeof pathVal === 'string' ? 
+            (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : 
+            String(pathVal);
+          return filename;
+        });
+        
+        onAvailableFilesChange?.(filenames);
+        toast.success("Dataset reloaded successfully");
+      } else {
+        setDatasetMetadata([]);
+        onAvailableFilesChange?.([]);
+      }
+    } catch (error) {
+      console.error('Failed to reload dataset:', error);
+      toast.error("Failed to reload dataset");
+    }
+  }, [dataset, originalDataset, onAvailableFilesChange]);
+
   useEffect(() => {
     abortControllerRef.current = new AbortController();
     return () => {
@@ -502,6 +540,9 @@ export const AudioDatasetPanel = ({
             <Button size="sm" variant="outline" className="h-7" onClick={handleUploadClick}>
               <Upload className="h-3 w-3 mr-1" />
               Upload
+            </Button>
+            <Button size="sm" variant="outline" className="h-7" onClick={handleReloadDataset} title="Reload dataset">
+              <RefreshCw className="h-3 w-3" />
             </Button>
             <input
               ref={fileInputRef}

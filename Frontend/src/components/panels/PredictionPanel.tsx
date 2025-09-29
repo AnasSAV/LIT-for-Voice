@@ -23,17 +23,18 @@ interface Wav2Vec2Prediction {
   predicted_emotion: string;
   probabilities: Record<string, number>;
   confidence: number;
+  ground_truth_emotion?: string;
 }
 
 interface WhisperPrediction {
   predicted_transcript: string;
   ground_truth: string;
-  accuracy_percentage: number;
-  word_error_rate: number;
-  character_error_rate: number;
-  levenshtein_distance: number;
-  exact_match: number;
-  character_similarity: number;
+  accuracy_percentage: number | null;
+  word_error_rate: number | null;
+  character_error_rate: number | null;
+  levenshtein_distance: number | null;
+  exact_match: number | null;
+  character_similarity: number | null;
   word_count_predicted: number;
   word_count_truth: number;
 }
@@ -579,34 +580,42 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
                             <div className="text-xs font-semibold">Transcription Metrics</div>
-                            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                                <div className="text-[10px] text-gray-500">WER</div>
-                                <div className="font-medium">{whisperPrediction.word_error_rate.toFixed(3)}</div>
+                            {whisperPrediction.accuracy_percentage !== null && whisperPrediction.word_error_rate !== null ? (
+                              // Show metrics when ground truth is available
+                              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                                <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                  <div className="text-[10px] text-gray-500">WER</div>
+                                  <div className="font-medium">{whisperPrediction.word_error_rate.toFixed(3)}</div>
+                                </div>
+                                <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                  <div className="text-[10px] text-gray-500">CER</div>
+                                  <div className="font-medium">{whisperPrediction.character_error_rate.toFixed(3)}</div>
+                                </div>
+                                <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                  <div className="text-[10px] text-gray-500">Accuracy</div>
+                                  <div className="font-medium">{whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
+                                </div>
+                                <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                  <div className="text-[10px] text-gray-500">Words (Pred)</div>
+                                  <div className="font-medium">{whisperPrediction.word_count_predicted}</div>
+                                </div>
+                                <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                  <div className="text-[10px] text-gray-500">Words (Truth)</div>
+                                  <div className="font-medium">{whisperPrediction.word_count_truth}</div>
+                                </div>
+                                <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                                  <div className="text-[10px] text-gray-500">Levenshtein</div>
+                                  <div className="font-medium">{whisperPrediction.levenshtein_distance}</div>
+                                </div>
                               </div>
-                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                                <div className="text-[10px] text-gray-500">CER</div>
-                                <div className="font-medium">{whisperPrediction.character_error_rate.toFixed(3)}</div>
+                            ) : (
+                              // Show message when ground truth is not available
+                              <div className="mt-2 p-3 bg-yellow-50 rounded border border-yellow-200 text-xs text-yellow-700">
+                                <div className="font-medium">No Ground Truth Available</div>
+                                <div className="mt-1">Accuracy metrics are not available for this dataset-model combination.</div>
                               </div>
-                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                                <div className="text-[10px] text-gray-500">Accuracy</div>
-                                <div className="font-medium">{whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
-                              </div>
-                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                                <div className="text-[10px] text-gray-500">Words (Pred)</div>
-                                <div className="font-medium">{whisperPrediction.word_count_predicted}</div>
-                              </div>
-                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                                <div className="text-[10px] text-gray-500">Words (Truth)</div>
-                                <div className="font-medium">{whisperPrediction.word_count_truth}</div>
-                              </div>
-                              <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                                <div className="text-[10px] text-gray-500">Levenshtein</div>
-                                <div className="font-medium">{whisperPrediction.levenshtein_distance}</div>
-                              </div>
-                            </div>
+                            )}
                           </div>
-
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -617,12 +626,14 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                             </div>
                           </div>
 
-                          <div>
-                            <div className="text-xs font-medium">Ground Truth</div>
-                            <div className="text-xs p-2 bg-green-50 rounded border font-mono whitespace-pre-wrap">
-                              {`"${whisperPrediction.ground_truth}"`}
+                          {whisperPrediction.ground_truth && (
+                            <div>
+                              <div className="text-xs font-medium">Ground Truth</div>
+                              <div className="text-xs p-2 bg-green-50 rounded border font-mono whitespace-pre-wrap">
+                                {`"${whisperPrediction.ground_truth}"`}
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
 
                         {perturbedPredictions && (

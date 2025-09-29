@@ -34,9 +34,9 @@ interface ToolbarProps {
   onBatchInference?: (model: string, dataset: string) => void; // New callback for batch inference
 }
 const modelDatasetMap: Record<string, string[]> = {
-  "whisper-base": ["common-voice", "custom"],
-  "whisper-large": ["common-voice", "custom"],
-  "wav2vec2": ["ravdess", "custom"],
+  "whisper-base": ["common-voice", "ravdess", "custom"],
+  "whisper-large": ["common-voice", "ravdess", "custom"],
+  "wav2vec2": ["common-voice", "ravdess", "custom"],
 };
 
 const defaultDatasetForModel: Record<string, string> = {

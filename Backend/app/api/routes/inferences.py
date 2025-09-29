@@ -386,20 +386,10 @@ async def get_whisper_accuracy(request: Request):
                                 ground_truth = str(file_rows.iloc[0][col])
                                 break
         
+        # If ground truth is not available, we'll return None for metrics but still provide the prediction
+        has_ground_truth = bool(ground_truth)
         if not ground_truth:
-            # More specific error message for debugging
-            error_msg = f"Ground truth not found in dataset metadata. Dataset: {dataset}, File: {dataset_file}"
-            if dataset and dataset_file:
-                if dataset == "common-voice":
-                    metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
-                elif dataset == "ravdess":
-                    metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
-                else:
-                    metadata_path = None
-                if metadata_path:
-                    error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
-            print(f"DEBUG: {error_msg}")
-            raise HTTPException(status_code=404, detail=error_msg)
+            print(f"DEBUG: No ground truth found for dataset: {dataset}, file: {dataset_file}. Continuing without accuracy metrics.")
         
         # Calculate accuracy metrics
         def calculate_accuracy(predicted, ground_truth):
@@ -490,13 +480,28 @@ async def get_whisper_accuracy(request: Request):
                 "word_count_truth": len(truth_words)
             }
         
-        accuracy_metrics = calculate_accuracy(predicted_transcript, ground_truth)
-        
-        return {
-            "predicted_transcript": predicted_transcript,
-            "ground_truth": ground_truth,
-            **accuracy_metrics
-        }
+        # Calculate accuracy metrics only if ground truth is available
+        if has_ground_truth:
+            accuracy_metrics = calculate_accuracy(predicted_transcript, ground_truth)
+            return {
+                "predicted_transcript": predicted_transcript,
+                "ground_truth": ground_truth,
+                **accuracy_metrics
+            }
+        else:
+            # Return just the prediction without ground truth metrics
+            return {
+                "predicted_transcript": predicted_transcript,
+                "ground_truth": "",
+                "accuracy_percentage": None,
+                "word_error_rate": None,
+                "character_error_rate": None,
+                "levenshtein_distance": None,
+                "exact_match": None,
+                "character_similarity": None,
+                "word_count_predicted": len(predicted_transcript.split()) if predicted_transcript else 0,
+                "word_count_truth": 0
+            }
         
     except HTTPException:
         raise
@@ -618,7 +623,7 @@ async def get_wav2vec2_detailed_prediction(
         "dataset_file": "sample-001.mp3"
     })
 ):
-    """Get detailed wav2vec2 prediction with probabilities for all emotions"""
+    """Get detailed wav2vec2 prediction with probabilities for all emotions and ground truth if available"""
     file_path = request.get("file_path")
     dataset = request.get("dataset")
     dataset_file = request.get("dataset_file")
@@ -654,6 +659,28 @@ async def get_wav2vec2_detailed_prediction(
     # Get detailed prediction with probabilities
     try:
         detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
+        
+        # Try to get ground truth emotion if we have dataset information
+        ground_truth_emotion = ""
+        if dataset and dataset_file:
+            # Only try to get emotion ground truth from RAVDESS dataset
+            if dataset == "ravdess":
+                metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
+                if metadata_path.exists():
+                    df = pd.read_csv(metadata_path)
+                    file_rows = df[df['filename'] == dataset_file]
+                    if not file_rows.empty:
+                        # Try different column names for emotion
+                        for col in ['emotion', 'label', 'category']:
+                            if col in df.columns:
+                                ground_truth_emotion = str(file_rows.iloc[0][col])
+                                break
+        
+        # Add ground truth to the result if available
+        if ground_truth_emotion:
+            detailed_result["ground_truth_emotion"] = ground_truth_emotion
+        else:
+            detailed_result["ground_truth_emotion"] = None
         
         # Cache the detailed result
         await cache_result("wav2vec2", cache_key, {"prediction": detailed_result}, ttl=6*60*60)
