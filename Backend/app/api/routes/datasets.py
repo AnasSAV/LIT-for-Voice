@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+from urllib.parse import unquote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -22,6 +23,8 @@ def get_session_id(request: Request) -> str:
 @router.get("/{dataset}/metadata")
 async def get_dataset_metadata(dataset: str, request: Request) -> JSONResponse:
     try:
+        # URL decode the dataset parameter to handle colons in custom dataset names
+        dataset = unquote(dataset)
         session_id = get_session_id(request)
         rows: List[dict] = load_metadata(dataset, session_id)
         return JSONResponse(content=rows)
@@ -38,6 +41,8 @@ async def get_dataset_metadata(dataset: str, request: Request) -> JSONResponse:
 @router.options("/{dataset}/file/{file_path:path}")
 async def serve_dataset_file(dataset: str, file_path: str, request: Request):
     try:
+        # URL decode the dataset parameter to handle colons in custom dataset names
+        dataset = unquote(dataset)
         session_id = get_session_id(request)
         audio_path = resolve_file(dataset, file_path, session_id)
     except ValueError as e:

@@ -347,9 +347,9 @@ async def get_whisper_accuracy(request: Request):
             try:
                 # Run inference to get the prediction and cache it
                 if dataset and dataset_file:
-                    inference_result = await run_inference(model, None, dataset, dataset_file)
+                    inference_result = await run_inference(model, None, dataset, dataset_file, session_id)
                 else:
-                    inference_result = await run_inference(model, str(resolved_path), None, None)
+                    inference_result = await run_inference(model, str(resolved_path), None, None, session_id)
                 
                 # Now try to get the cached result again
                 cached_result = await get_result(model, cache_key)
@@ -374,10 +374,14 @@ async def get_whisper_accuracy(request: Request):
                 metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
             elif dataset == "ravdess":
                 metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
+            elif dataset.startswith("custom:"):
+                # For custom datasets, ground truth is not available - skip ground truth extraction
+                ground_truth = ""
+                metadata_path = None
             else:
                 raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
             
-            if metadata_path.exists():
+            if metadata_path and metadata_path.exists():
                 df = pd.read_csv(metadata_path)
                 # Find the row for this file
                 # Try both with and without path prefix

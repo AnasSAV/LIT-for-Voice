@@ -338,15 +338,17 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
 
         // Choose the correct endpoint based on file type
         let endpoint: string;
-        if (isUploadedFile) {
-          // For uploaded files, use basic inference endpoint (no ground truth available)
-          endpoint = "http://localhost:8000/inferences/run";
+        const isCustomDataset = (originalDataset || dataset)?.startsWith('custom:');
+        
+        if (isUploadedFile || isCustomDataset) {
+          // For uploaded files or custom datasets, use basic inference endpoint (no ground truth available)
+          endpoint = `${API_BASE}/inferences/run`;
         } else {
-          // For dataset files, use accuracy endpoint to get ground truth and metrics
-          endpoint = "http://localhost:8000/inferences/whisper-accuracy";
+          // For regular dataset files, use accuracy endpoint to get ground truth and metrics
+          endpoint = `${API_BASE}/inferences/whisper-accuracy`;
         }
 
-        const response = await fetch(`${API_BASE}/inferences/whisper-accuracy`, {
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -363,8 +365,8 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         
         let whisperPrediction: WhisperPrediction;
         
-        if (isUploadedFile) {
-          // For uploaded files, convert basic prediction to expected format
+        if (isUploadedFile || isCustomDataset) {
+          // For uploaded files or custom datasets, convert basic prediction to expected format
           whisperPrediction = {
             predicted_transcript: typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction),
             ground_truth: "",
@@ -378,7 +380,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
             word_count_truth: 0
           };
         } else {
-          // For dataset files, the accuracy endpoint returns all the metrics
+          // For regular dataset files, the accuracy endpoint returns all the metrics
           whisperPrediction = {
             predicted_transcript: prediction.predicted_transcript || "",
             ground_truth: prediction.ground_truth || "",
@@ -395,8 +397,8 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         
         setWhisperPrediction(whisperPrediction);
         
-        // Update predictionMap for uploaded files (same as dataset files)
-        if (selectedFile && onPredictionUpdate && isUploadedFile) {
+        // Update predictionMap for uploaded files and custom datasets
+        if (selectedFile && onPredictionUpdate && (isUploadedFile || isCustomDataset)) {
           console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Whisper:", selectedFile.file_id, whisperPrediction.predicted_transcript);
           onPredictionUpdate(selectedFile.file_id, whisperPrediction.predicted_transcript);
         }
