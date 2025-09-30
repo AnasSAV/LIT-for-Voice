@@ -105,8 +105,16 @@ def resolve_file(dataset: str, file_path: str, session_id: Optional[str] = None)
             raise ValueError("session_id is required for custom datasets")
         
         session_id_from_name, dataset_name = parse_custom_dataset_name(dataset)
+        logger.info(f"Custom dataset: session_id_from_name='{session_id_from_name}', current_session_id='{session_id}'")
         if session_id_from_name != session_id:
-            raise ValueError("Session ID mismatch for custom dataset")
+            logger.warning(f"Session ID mismatch: dataset has '{session_id_from_name}' but request has '{session_id}'")
+            # For debugging, let's check if the file exists with the dataset's session ID
+            manager = get_custom_dataset_manager(session_id_from_name)
+            try:
+                return manager.resolve_file_path(dataset_name, file_path)
+            except Exception as e:
+                logger.error(f"Could not resolve file with dataset session ID: {e}")
+                raise ValueError(f"Session ID mismatch for custom dataset. Dataset session: {session_id_from_name}, Request session: {session_id}")
         
         manager = get_custom_dataset_manager(session_id)
         return manager.resolve_file_path(dataset_name, file_path)

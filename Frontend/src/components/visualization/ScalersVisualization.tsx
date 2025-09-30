@@ -157,12 +157,15 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
       }
 
       console.log('Fetching audio frequency analysis for:', requestBody);
+      console.log('Browser cookies:', document.cookie);
+      console.log('Dataset being sent:', dataset);
 
       const response = await fetch("http://localhost:8000/inferences/audio-frequency-batch", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include', // Include session cookies
         body: JSON.stringify(requestBody),
       });
 

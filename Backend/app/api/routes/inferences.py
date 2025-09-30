@@ -917,6 +917,8 @@ async def batch_audio_frequency_analysis(request: Request):
         dataset = body.get("dataset")
         model = body.get("model", "whisper-base")  # Track which model context this is for
         
+        logger.info(f"batch_audio_frequency_analysis called with: filenames={filenames}, dataset={dataset}, model={model}")
+        
         if not filenames:
             raise HTTPException(status_code=400, detail="No filenames provided")
         
@@ -924,6 +926,7 @@ async def batch_audio_frequency_analysis(request: Request):
             raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
         
         session_id = get_session_id(request)
+        logger.info(f"Session ID: {session_id}")
         
         # Process each file
         individual_analyses = []
@@ -932,14 +935,17 @@ async def batch_audio_frequency_analysis(request: Request):
         
         for filename in filenames:
             try:
+                logger.info(f"Processing file: {filename}")
                 # Resolve file path
                 if dataset:
                     file_path = resolve_file(dataset, filename, session_id)
+                    logger.info(f"Resolved file path: {file_path}")
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():
-                        print(f"Warning: File not found: {file_path}")
+                        logger.warning(f"File not found: {file_path}")
                         continue
+                    logger.info(f"Using upload file path: {file_path}")
                 
                 # Create cache key for audio frequency features
                 file_content_hash = hashlib.md5(str(file_path).encode()).hexdigest()
@@ -968,9 +974,10 @@ async def batch_audio_frequency_analysis(request: Request):
                 all_features.append(features)
                     
             except Exception as file_error:
-                print(f"Error processing {filename}: {file_error}")
+                logger.error(f"Error processing {filename}: {file_error}")
                 continue
         
+        logger.info(f"Successfully processed {len(individual_analyses)} files out of {len(filenames)}")
         if not individual_analyses:
             raise HTTPException(status_code=404, detail="No valid files could be processed for frequency analysis")
         
