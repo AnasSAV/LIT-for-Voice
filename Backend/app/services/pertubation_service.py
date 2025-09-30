@@ -246,20 +246,21 @@ def apply_perturbations(waveform, sample_rate, perturbations: List[Dict[str, Any
     
     return perturbed_waveform, applied_perturbations
 
-def perturb_and_save(file_path: str, perturbations: List[Dict[str, Any]], output_dir: str = "uploads", dataset: str = None) -> Dict[str, Any]:
+def perturb_and_save(file_path: str, perturbations: List[Dict[str, Any]], output_dir: str = "uploads", dataset: str = None, session_id: str = None) -> Dict[str, Any]:
     """
     Apply perturbations to an audio file and save the result
     file_path: Path to the input audio file (can be dataset path or absolute path)
     perturbations: List of perturbation dictionaries
     output_dir: Directory to save the perturbed audio
     dataset: Dataset name if file_path is a dataset file
+    session_id: Session ID for custom dataset resolution
     Returns: Dictionary with file info and metadata
     """
     # Resolve the file path - handle both dataset files and uploaded files
     try:
         if dataset and not Path(file_path).is_absolute():
             # This is a dataset file, resolve it using the dataset service
-            resolved_path = resolve_file(dataset, file_path)
+            resolved_path = resolve_file(dataset, file_path, session_id)
         else:
             # This is an uploaded file or absolute path
             resolved_path = Path(file_path)

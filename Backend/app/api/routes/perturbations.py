@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -7,6 +7,11 @@ from app.services.pertubation_service import perturb_and_save
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def get_session_id(request: Request) -> Optional[str]:
+    """Extract session ID from request (optional for backwards compatibility)"""
+    return getattr(request.state, 'sid', None)
 
 class Perturbation(BaseModel):
     type: str
@@ -29,11 +34,13 @@ class PerturbResponse(BaseModel):
 
 # --- Endpoint ---
 @router.post("/perturb", response_model=PerturbResponse)
-def apply_perturbations(request: PerturbRequest):
+def apply_perturbations(http_request: Request, request: PerturbRequest):
     """
     Apply multiple perturbations to the given audio file and save the result.
     """
     try:
+        session_id = get_session_id(http_request)
+        
         # Convert Pydantic models to dictionaries for the service
         perturbations_list = []
         for perturbation in request.perturbations:
@@ -47,7 +54,8 @@ def apply_perturbations(request: PerturbRequest):
             file_path=request.file_path,
             perturbations=perturbations_list,
             output_dir="uploads",
-            dataset=request.dataset
+            dataset=request.dataset,
+            session_id=session_id
         )
         
         if not result["success"]:
