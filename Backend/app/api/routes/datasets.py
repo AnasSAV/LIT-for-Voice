@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 def get_session_id(request: Request) -> str:
     """Extract session ID from request (optional for backwards compatibility)"""
-    return getattr(request.state, 'sid', None)
+    session_id = getattr(request.state, 'sid', None)
+    logger.info(f"get_session_id: extracted session_id='{session_id}' from request.state")
+    logger.info(f"get_session_id: request.cookies = {dict(request.cookies)}")
+    return session_id
 
 
 @router.get("/{dataset}/metadata")
@@ -40,15 +43,21 @@ async def get_dataset_metadata(dataset: str, request: Request) -> JSONResponse:
 @router.head("/{dataset}/file/{file_path:path}")
 @router.options("/{dataset}/file/{file_path:path}")
 async def serve_dataset_file(dataset: str, file_path: str, request: Request):
+    logger.info(f"serve_dataset_file called: dataset='{dataset}', file_path='{file_path}'")
     try:
         # URL decode the dataset parameter to handle colons in custom dataset names
         dataset = unquote(dataset)
+        logger.info(f"After URL decode: dataset='{dataset}'")
         session_id = get_session_id(request)
+        logger.info(f"Session ID: {session_id}")
         audio_path = resolve_file(dataset, file_path, session_id)
+        logger.info(f"Resolved audio path: {audio_path}")
     except ValueError as e:
         # Unknown dataset
+        logger.error(f"ValueError in serve_dataset_file: {e}")
         raise HTTPException(status_code=404, detail=str(e))
     except FileNotFoundError as e:
+        logger.error(f"FileNotFoundError in serve_dataset_file: {e}")
         raise HTTPException(status_code=404, detail=str(e))
 
     try:

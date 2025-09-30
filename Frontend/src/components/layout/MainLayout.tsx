@@ -250,7 +250,7 @@ export const MainLayout = () => {
             <Panel defaultSize={25} minSize={20}>
               <DatapointEditorPanel 
                 selectedFile={selectedFile} 
-                dataset={dataset} 
+                dataset={effectiveDataset} 
                 perturbationResult={perturbationResult}
                 predictionMap={predictionMap}
               />

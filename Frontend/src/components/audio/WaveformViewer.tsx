@@ -22,6 +22,18 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
     
     console.log('Initializing WaveSurfer...');
     
+    // Test browser FLAC support
+    const audio = new Audio();
+    const flacSupport = audio.canPlayType('audio/flac');
+    console.log('Browser FLAC support:', flacSupport);
+    console.log('Browser supports:', {
+      'audio/wav': audio.canPlayType('audio/wav'),
+      'audio/mp3': audio.canPlayType('audio/mp3'),
+      'audio/mpeg': audio.canPlayType('audio/mpeg'),
+      'audio/flac': audio.canPlayType('audio/flac'),
+      'audio/ogg': audio.canPlayType('audio/ogg')
+    });
+    
     // Create WaveSurfer instance
     const wavesurfer = WaveSurfer.create({
       container: waveformRef.current,
@@ -64,7 +76,12 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
 
     wavesurfer.on('error', (err) => {
       console.error('WaveSurfer error:', err);
-      setError('Failed to load audio file. Please check if the file exists and is accessible.');
+      console.error('Error details:', {
+        message: err.message,
+        stack: err.stack,
+        audioUrl: audioUrl
+      });
+      setError(`Failed to load audio file: ${err.message || 'Unknown error'}`);
       setIsLoading(false);
     });
 
@@ -98,6 +115,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
     }
 
     console.log('Loading audio URL:', audioUrl);
+    console.log('Document cookies:', document.cookie);
     setIsLoading(true);
     setError(null);
     
@@ -114,14 +132,16 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
     fetch(audioUrl, fetchOptions)
       .then(response => {
         console.log('Audio URL HEAD response:', response.status, response.statusText);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
         if (!response.ok) {
           throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
         }
         
         // If HEAD request succeeds, try to load with WaveSurfer
         try {
-          // For cross-origin requests (like ngrok), try to preload audio data
-          if (audioUrl.includes('ngrok') || audioUrl.includes('colab') || audioUrl.includes('https://')) {
+          // For cross-origin requests (like ngrok) or custom datasets, try to preload audio data
+          if (audioUrl.includes('ngrok') || audioUrl.includes('colab') || audioUrl.includes('https://') || audioUrl.includes('custom%3A')) {
+            console.log('Loading audio with credentials (cross-origin or custom dataset)...');
             // First try to fetch audio data
             fetch(audioUrl, {
               credentials: 'include',
@@ -130,7 +150,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
               if (audioResponse.ok) {
                 return audioResponse.blob();
               }
-              throw new Error('Failed to fetch audio data');
+              throw new Error(`Failed to fetch audio data: ${audioResponse.status} ${audioResponse.statusText}`);
             }).then(blob => {
               // Clean up previous blob URL if exists
               if (currentBlobUrlRef.current) {
@@ -138,6 +158,7 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
               }
               const audioBlob = URL.createObjectURL(blob);
               currentBlobUrlRef.current = audioBlob;
+              console.log('Loading audio from blob URL for custom dataset');
               wavesurferRef.current?.load(audioBlob);
             }).catch(blobErr => {
               console.warn('Blob loading failed, trying direct URL:', blobErr);

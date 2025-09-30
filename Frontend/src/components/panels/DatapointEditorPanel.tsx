@@ -73,10 +73,10 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     if (isUploadedFile) {
       // This is an uploaded file, use the upload endpoint
       return `${API_BASE}/upload/file/${selectedFile.file_id}`;
-    } else if (dataset && dataset !== "custom") {
-      // This is a dataset file
+    } else if (dataset) {
+      // This is a dataset file (including custom datasets)
       const filename = encodeURIComponent(selectedFile.filename);
-      return `${API_BASE}/${dataset}/file/${filename}`;
+      return `${API_BASE}/${encodeURIComponent(dataset)}/file/${filename}`;
     } else {
       // Fallback to upload endpoint
       return `${API_BASE}/upload/file/${selectedFile.file_id}`;
@@ -116,8 +116,9 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
   // Debug logging for selectedFile and audioUrl
   useEffect(() => {
     console.log('DatapointEditorPanel - selectedFile changed:', selectedFile);
+    console.log('DatapointEditorPanel - dataset:', dataset);
     console.log('DatapointEditorPanel - audioUrl:', audioUrl);
-  }, [selectedFile, audioUrl]);
+  }, [selectedFile, audioUrl, dataset]);
 
   // Reset playback when file changes or when switching between original/perturbed
   useEffect(() => {
