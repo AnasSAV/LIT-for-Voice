@@ -162,8 +162,8 @@ export const AudioDatasetPanel = ({
       hasModel: !!model
     });
     
-    // Skip batch inference for legacy "custom" or new custom datasets
-    if (dataset === "custom" || dataset.startsWith('custom:') || !model) return;
+    // Skip batch inference for legacy "custom" (uploaded files) but allow for custom datasets
+    if (dataset === "custom" || !model) return;
     if (datasetMetadata.length === 0) return;
     
     const datasetToUse = originalDataset || dataset;
