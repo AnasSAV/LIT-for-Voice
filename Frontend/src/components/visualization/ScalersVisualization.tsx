@@ -320,9 +320,9 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
     );
   }
 
-  // Create colors for selected vs unselected points
+  // Create colors for selected vs unselected points - using gold for selected to match EmbeddingPlot
   const colors = text.map(filename => 
-    selectedPoints.includes(filename) ? '#ef4444' : '#3b82f6'
+    selectedPoints.includes(filename) ? '#FFD700' : '#3b82f6'
   );
 
   const trace = {
@@ -363,11 +363,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
   };
 
   const config = {
-    displayModeBar: true,
-    modeBarButtonsToRemove: [
-      'zoom2d', 'pan2d', 'autoScale2d', 'resetScale2d',
-      'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleHover'
-    ],
+    displayModeBar: false, // Hide the mode bar completely
     displaylogo: false,
     responsive: true
   };
