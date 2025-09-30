@@ -545,12 +545,12 @@ export const AudioDatasetPanel = ({
             <Badge variant="secondary" className="text-xs">
               {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
             </Badge>
-            {!dataset.startsWith('custom:') && dataset !== 'custom' && batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
+            {batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
               <Badge variant="outline" className="text-xs">
                 Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
               </Badge>
             )}
-            {!dataset.startsWith('custom:') && dataset !== 'custom' && (batchInferenceStatus === 'done' || isInferenceComplete) && (
+            {(batchInferenceStatus === 'done' || isInferenceComplete) && (
               <Badge variant="default" className="text-xs">
                 ✓ Inference Complete
               </Badge>

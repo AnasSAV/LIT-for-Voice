@@ -152,8 +152,8 @@ export const MainLayout = () => {
   }, [model, dataset]);
 
   const handleBatchInference = async (selectedModel: string, selectedDataset: string) => {
-    // Don't run batch inference for custom datasets or legacy "custom" 
-    if (selectedDataset === 'custom' || selectedDataset.startsWith('custom:')) return;
+    // Don't run batch inference for legacy "custom" (uploaded files only)
+    if (selectedDataset === 'custom') return;
     
     // Clear predictions when dataset/model changes to avoid showing old predictions
     console.log('Clearing predictions for new dataset/model combination:', selectedModel, selectedDataset);
