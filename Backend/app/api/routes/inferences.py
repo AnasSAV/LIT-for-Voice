@@ -37,6 +37,11 @@ DATASET_DIRS = {
 logger = logging.getLogger(__name__)
 
 
+def get_session_id(request: Request) -> Optional[str]:
+    """Extract session ID from request (optional for backwards compatibility)"""
+    return getattr(request.state, 'sid', None)
+
+
 MODEL_FUNCTIONS = {
     "whisper-base": transcribe_whisper_base,
     "whisper-large": transcribe_whisper_large,
@@ -46,6 +51,7 @@ MODEL_FUNCTIONS = {
 
 @router.post("/inferences/run")
 async def run_inference_endpoint(
+    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "file_path": "/path/to/audio.wav",
@@ -62,11 +68,13 @@ async def run_inference_endpoint(
     if not model:
         raise HTTPException(status_code=400, detail="Model is required")
     
-    return await run_inference(model, file_path, dataset, dataset_file)
+    session_id = get_session_id(http_request)
+    return await run_inference(model, file_path, dataset, dataset_file, session_id)
 
 
 @router.post("/inferences/batch-check")
 async def check_batch_cache(
+    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "dataset": "common-voice",
@@ -81,13 +89,15 @@ async def check_batch_cache(
     if not model or not dataset:
         raise HTTPException(status_code=400, detail="Model and dataset are required")
     
+    session_id = get_session_id(http_request)
+    
     cached_results = {}
     missing_files = []
     
     for filename in files:
         try:
             # Resolve the file path
-            resolved_path = resolve_file(dataset, filename)
+            resolved_path = resolve_file(dataset, filename, session_id)
             
             # Create cache key
             file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
@@ -116,14 +126,16 @@ async def run_inference(
     file_path: Optional[str] = None,
     dataset: Optional[str] = None,
     dataset_file: Optional[str] = None,
+    session_id: Optional[str] = None,
 ):
     """Internal function for running inference - can be called directly or via HTTP endpoint"""
     logger.info(
-        "inferences.run model=%s file_path=%s dataset=%s dataset_file=%s",
+        "inferences.run model=%s file_path=%s dataset=%s dataset_file=%s session_id=%s",
         model,
         file_path,
         dataset,
         dataset_file,
+        session_id,
     )
 
     func = MODEL_FUNCTIONS.get(model)
@@ -137,7 +149,7 @@ async def run_inference(
     elif dataset and dataset_file:
         try:
             # Resolve using service (enforces allowed datasets and basename-only)
-            resolved_path = resolve_file(dataset, dataset_file)
+            resolved_path = resolve_file(dataset, dataset_file, session_id)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
@@ -198,11 +210,13 @@ async def batch_whisper_analysis(request: Request):
         cached_count = 0
         missing_count = 0
         
+        session_id = get_session_id(request)
+        
         for filename in filenames:
             try:
                 # Get file path and create cache key
                 if dataset:
-                    file_path = resolve_file(dataset, filename)
+                    file_path = resolve_file(dataset, filename, session_id)
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():
@@ -307,11 +321,13 @@ async def get_whisper_accuracy(request: Request):
         if not dataset_file and not file_path:
             raise HTTPException(status_code=400, detail="Either dataset_file or file_path must be provided")
         
+        session_id = get_session_id(request)
+        
         # Get file path
         if file_path:
             resolved_path = Path(file_path)
         else:
-            resolved_path = resolve_file(dataset, dataset_file)
+            resolved_path = resolve_file(dataset, dataset_file, session_id)
         
         if not resolved_path.exists():
             raise HTTPException(status_code=404, detail="Audio file not found")
@@ -527,6 +543,8 @@ async def batch_wav2vec2_prediction(request: Request):
         if len(filenames) > 50:  # Limit batch size
             raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
         
+        session_id = get_session_id(request)
+        
         # Process each file
         individual_predictions = []
         predicted_emotions = []  # Store just the predicted emotions for distribution
@@ -536,7 +554,7 @@ async def batch_wav2vec2_prediction(request: Request):
             try:
                 # Resolve file path
                 if dataset:
-                    file_path = resolve_file(dataset, filename)
+                    file_path = resolve_file(dataset, filename, session_id)
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():
@@ -617,6 +635,7 @@ async def batch_wav2vec2_prediction(request: Request):
 
 @router.post("/inferences/wav2vec2-detailed")
 async def get_wav2vec2_detailed_prediction(
+    http_request: Request,
     request: dict = Body(..., example={
         "file_path": "/path/to/audio.wav",
         "dataset": "common-voice", 
@@ -628,13 +647,15 @@ async def get_wav2vec2_detailed_prediction(
     dataset = request.get("dataset")
     dataset_file = request.get("dataset_file")
     
+    session_id = get_session_id(http_request)
+    
     # Resolve file path
     resolved_path = None
     if file_path:
         resolved_path = Path(file_path)
     elif dataset and dataset_file:
         try:
-            resolved_path = resolve_file(dataset, dataset_file)
+            resolved_path = resolve_file(dataset, dataset_file, session_id)
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(status_code=404, detail=str(e))
     else:
@@ -695,6 +716,7 @@ async def get_wav2vec2_detailed_prediction(
 
 @router.post("/inferences/embeddings")
 async def extract_embeddings_endpoint(
+    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "dataset": "common-voice",
@@ -713,6 +735,7 @@ async def extract_embeddings_endpoint(
     if not model or not dataset or not files:
         raise HTTPException(status_code=400, detail="Model, dataset, and files are required")
     
+    session_id = get_session_id(http_request)
     logger.info(f"Extracting embeddings for {len(files)} files with model {model}")
     
     embeddings_data = []
@@ -721,7 +744,7 @@ async def extract_embeddings_endpoint(
     for filename in files:
         try:
             # Resolve the file path
-            resolved_path = resolve_file(dataset, filename)
+            resolved_path = resolve_file(dataset, filename, session_id)
             
             # Create cache key for embeddings
             file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
@@ -813,6 +836,7 @@ async def extract_embeddings_endpoint(
 
 @router.post("/inferences/embeddings/single")
 async def extract_single_embedding_endpoint(
+    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "file_path": "/path/to/audio.wav",
@@ -829,13 +853,15 @@ async def extract_single_embedding_endpoint(
     if not model:
         raise HTTPException(status_code=400, detail="Model is required")
     
+    session_id = get_session_id(http_request)
+    
     # Resolve file path
     resolved_path = None
     if file_path:
         resolved_path = Path(file_path)
     elif dataset and dataset_file:
         try:
-            resolved_path = resolve_file(dataset, dataset_file)
+            resolved_path = resolve_file(dataset, dataset_file, session_id)
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(status_code=404, detail=str(e))
     else:
@@ -893,6 +919,8 @@ async def batch_audio_frequency_analysis(request: Request):
         if len(filenames) > 50:  # Limit batch size
             raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
         
+        session_id = get_session_id(request)
+        
         # Process each file
         individual_analyses = []
         all_features = []
@@ -902,7 +930,7 @@ async def batch_audio_frequency_analysis(request: Request):
             try:
                 # Resolve file path
                 if dataset:
-                    file_path = resolve_file(dataset, filename)
+                    file_path = resolve_file(dataset, filename, session_id)
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():

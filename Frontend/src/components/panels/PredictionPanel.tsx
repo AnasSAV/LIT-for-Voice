@@ -211,13 +211,13 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
             selectedFile.message === "Perturbed file" ||
             selectedFile.message === "File uploaded successfully" ||
             selectedFile.message === "File uploaded and processed successfully"
-          ) && selectedFile.message !== "Selected from dataset";
+          ) && !selectedFile.message.includes("Selected from");
           
           if (isUploadedFile) {
             // This is an uploaded file, use file_path
             requestBody.file_path = selectedFile.file_path;
           } else {
-            // This is a dataset file, use originalDataset and dataset_file
+            // This is a dataset file (including custom datasets), use originalDataset and dataset_file
             requestBody.dataset = originalDataset || dataset;
             requestBody.dataset_file = selectedFile.filename;
           }
@@ -319,13 +319,13 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
             selectedFile.message === "Perturbed file" ||
             selectedFile.message === "File uploaded successfully" ||
             selectedFile.message === "File uploaded and processed successfully"
-          ) && selectedFile.message !== "Selected from dataset";
+          ) && !selectedFile.message.includes("Selected from");
           
           if (isUploadedFile) {
             // This is an uploaded file, use file_path
             requestBody.file_path = selectedFile.file_path;
           } else {
-            // This is a dataset file, use originalDataset and dataset_file
+            // This is a dataset file (including custom datasets), use originalDataset and dataset_file
             requestBody.dataset = originalDataset || dataset;
             requestBody.dataset_file = selectedFile.filename;
           }

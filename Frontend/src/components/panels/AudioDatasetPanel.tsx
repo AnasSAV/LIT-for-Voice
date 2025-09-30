@@ -133,7 +133,7 @@ export const AudioDatasetPanel = ({
       file_id: String(id),
       filename,
       file_path: pathVal || filename,
-      message: "Selected from dataset", // This indicates it's a dataset file
+      message: dataset.startsWith('custom:') ? "Selected from custom dataset" : "Selected from dataset", // This indicates it's a dataset file
     };
 
     // Just select the file for UI purposes, no inference
@@ -162,7 +162,8 @@ export const AudioDatasetPanel = ({
       hasModel: !!model
     });
     
-    if (dataset === "custom" || !model) return;
+    // Skip batch inference for legacy "custom" or new custom datasets
+    if (dataset === "custom" || dataset.startsWith('custom:') || !model) return;
     if (datasetMetadata.length === 0) return;
     
     const datasetToUse = originalDataset || dataset;
@@ -419,18 +420,29 @@ export const AudioDatasetPanel = ({
     };
   }, [model, dataset]);
 
-  // Fetch dataset metadata when originalDataset changes (for non-custom datasets)
+  // Fetch dataset metadata when originalDataset changes 
   useEffect(() => {
-    const allowed = ["common-voice", "ravdess"];
     const datasetToUse = originalDataset || dataset;
-    if (!allowed.includes(datasetToUse)) {
+    
+    // Skip legacy "custom" (individual uploaded files)
+    if (datasetToUse === "custom") {
       setDatasetMetadata([]);
       return;
     }
+    
+    // Handle both global datasets and custom datasets
+    const allowed = ["common-voice", "ravdess"];
+    const isCustomDataset = datasetToUse.startsWith('custom:');
+    
+    if (!allowed.includes(datasetToUse) && !isCustomDataset) {
+      setDatasetMetadata([]);
+      return;
+    }
+    
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/${dataset}/metadata`, { signal: ac.signal, credentials: 'include' });
+        const res = await fetch(`${API_BASE}/${datasetToUse}/metadata`, { signal: ac.signal, credentials: 'include' });
         if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -533,12 +545,12 @@ export const AudioDatasetPanel = ({
             <Badge variant="secondary" className="text-xs">
               {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
             </Badge>
-            {dataset !== 'custom' && batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
+            {!dataset.startsWith('custom:') && dataset !== 'custom' && batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
               <Badge variant="outline" className="text-xs">
                 Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
               </Badge>
             )}
-            {dataset !== 'custom' && (batchInferenceStatus === 'done' || isInferenceComplete) && (
+            {!dataset.startsWith('custom:') && dataset !== 'custom' && (batchInferenceStatus === 'done' || isInferenceComplete) && (
               <Badge variant="default" className="text-xs">
                 ✓ Inference Complete
               </Badge>

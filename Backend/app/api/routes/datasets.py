@@ -13,10 +13,17 @@ from app.services.dataset_service import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def get_session_id(request: Request) -> str:
+    """Extract session ID from request (optional for backwards compatibility)"""
+    return getattr(request.state, 'sid', None)
+
+
 @router.get("/{dataset}/metadata")
-async def get_dataset_metadata(dataset: str) -> JSONResponse:
+async def get_dataset_metadata(dataset: str, request: Request) -> JSONResponse:
     try:
-        rows: List[dict] = load_metadata(dataset)
+        session_id = get_session_id(request)
+        rows: List[dict] = load_metadata(dataset, session_id)
         return JSONResponse(content=rows)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -31,7 +38,8 @@ async def get_dataset_metadata(dataset: str) -> JSONResponse:
 @router.options("/{dataset}/file/{file_path:path}")
 async def serve_dataset_file(dataset: str, file_path: str, request: Request):
     try:
-        audio_path = resolve_file(dataset, file_path)
+        session_id = get_session_id(request)
+        audio_path = resolve_file(dataset, file_path, session_id)
     except ValueError as e:
         # Unknown dataset
         raise HTTPException(status_code=404, detail=str(e))

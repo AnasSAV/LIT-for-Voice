@@ -24,8 +24,19 @@ export const MainLayout = () => {
   const [model, setModel] = useState("whisper-base");
   const [dataset, setDataset] = useState("common-voice");
   
-  // Determine effective dataset based on uploaded files
-  const effectiveDataset = uploadedFiles && uploadedFiles.length > 0 ? "custom" : dataset;
+  // Determine effective dataset based on uploaded files and custom datasets
+  const effectiveDataset = (() => {
+    // If a custom dataset is selected (starts with custom:), use it as-is
+    if (dataset.startsWith('custom:')) {
+      return dataset;
+    }
+    // Legacy behavior: if there are uploaded files and no custom dataset, show as "custom"
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      return "custom";
+    }
+    // Otherwise use the selected dataset
+    return dataset;
+  })();
   const [batchInferenceStatus, setBatchInferenceStatus] = useState<'idle' | 'running' | 'done'>('idle');
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
   const [selectedEmbeddingFile, setSelectedEmbeddingFile] = useState<string | null>(null);
@@ -141,7 +152,8 @@ export const MainLayout = () => {
   }, [model, dataset]);
 
   const handleBatchInference = async (selectedModel: string, selectedDataset: string) => {
-    if (selectedDataset === 'custom') return;
+    // Don't run batch inference for custom datasets or legacy "custom" 
+    if (selectedDataset === 'custom' || selectedDataset.startsWith('custom:')) return;
     
     // Clear predictions when dataset/model changes to avoid showing old predictions
     console.log('Clearing predictions for new dataset/model combination:', selectedModel, selectedDataset);

@@ -1,8 +1,13 @@
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 import csv
 import librosa
 import logging
+from .custom_dataset_service import (
+    get_custom_dataset_manager, 
+    is_custom_dataset, 
+    parse_custom_dataset_name
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +38,22 @@ def calculate_audio_duration(audio_path: Path) -> float:
         logger.warning(f"Could not calculate duration for {audio_path}: {e}")
         return 0.0
 
-def load_metadata(dataset: str) -> List[Dict[str, str]]:
-
+def load_metadata(dataset: str, session_id: Optional[str] = None) -> List[Dict[str, str]]:
+    """Load metadata for both global and custom datasets"""
+    
+    # Handle custom datasets
+    if is_custom_dataset(dataset):
+        if not session_id:
+            raise ValueError("session_id is required for custom datasets")
+        
+        session_id_from_name, dataset_name = parse_custom_dataset_name(dataset)
+        if session_id_from_name != session_id:
+            raise ValueError("Session ID mismatch for custom dataset")
+        
+        manager = get_custom_dataset_manager(session_id)
+        return manager.get_dataset_files_as_csv_format(dataset_name)
+    
+    # Handle global datasets (existing logic)
     ds = dataset.lower()
     if ds not in DATASET_PATHS:
         raise ValueError(f"Unknown dataset: {dataset}")
@@ -77,8 +96,22 @@ def load_metadata(dataset: str) -> List[Dict[str, str]]:
     return rows
 
 
-def resolve_file(dataset: str, file_path: str) -> Path:
-
+def resolve_file(dataset: str, file_path: str, session_id: Optional[str] = None) -> Path:
+    """Resolve file path for both global and custom datasets"""
+    
+    # Handle custom datasets
+    if is_custom_dataset(dataset):
+        if not session_id:
+            raise ValueError("session_id is required for custom datasets")
+        
+        session_id_from_name, dataset_name = parse_custom_dataset_name(dataset)
+        if session_id_from_name != session_id:
+            raise ValueError("Session ID mismatch for custom dataset")
+        
+        manager = get_custom_dataset_manager(session_id)
+        return manager.resolve_file_path(dataset_name, file_path)
+    
+    # Handle global datasets (existing logic)
     ds = dataset.lower()
     if ds not in DATASET_BASE_DIRS:
         raise ValueError(f"Unknown dataset: {dataset}")

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Upload } from "lucide-react";
 import { API_BASE } from '@/lib/api';
+import { CustomDatasetManager } from '@/components/dataset/CustomDatasetManager';
 
 interface UploadedFile {
   file_id: string;
@@ -33,6 +34,13 @@ interface ToolbarProps {
   setDataset: (dataset: string) => void;
   onBatchInference?: (model: string, dataset: string) => void; // New callback for batch inference
 }
+
+interface CustomDataset {
+  dataset_name: string;
+  formatted_name: string;
+  total_files: number;
+}
+
 const modelDatasetMap: Record<string, string[]> = {
   "whisper-base": ["common-voice", "ravdess", "custom"],
   "whisper-large": ["common-voice", "ravdess", "custom"],
@@ -46,6 +54,35 @@ const defaultDatasetForModel: Record<string, string> = {
 };
 
 export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset, onBatchInference}: ToolbarProps) => {
+  const [customDatasets, setCustomDatasets] = useState<CustomDataset[]>([]);
+
+  const fetchCustomDatasets = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/upload/dataset/list`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setCustomDatasets(data.datasets || []);
+      }
+    } catch (err) {
+      console.error('Error fetching custom datasets:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomDatasets();
+  }, []);
+
+  const handleDatasetCreated = (datasetName: string) => {
+    fetchCustomDatasets(); // Refresh the list
+    setDataset(datasetName); // Automatically select the new dataset
+  };
+
+  const handleDatasetSelected = (datasetName: string) => {
+    setDataset(datasetName);
+  };
 
 const onModelChange = (value: string) => {
   setModel(value);
@@ -55,12 +92,15 @@ const onModelChange = (value: string) => {
   const defaultDataset = defaultDatasetForModel[value] || "custom";
 
   console.log("Model selected:", value);
+  
+  // Check if current dataset is a custom dataset
+  const isCurrentCustomDataset = dataset.startsWith('custom:');
 
-  if (!allowedDatasets.includes(dataset)) {
+  if (!allowedDatasets.includes(dataset) && !isCurrentCustomDataset) {
     // Use the canonical handler so all side effects fire (metadata loading)
     onDatasetChange(defaultDataset);
-  } else if (dataset !== 'custom' && onBatchInference) {
-    // Dataset is already valid, fire batch inference directly
+  } else if (!isCurrentCustomDataset && dataset !== 'custom' && onBatchInference) {
+    // Dataset is already valid and not custom, fire batch inference directly
     onBatchInference(value, dataset);
   }
 };
@@ -69,8 +109,11 @@ const onModelChange = (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
     
-    // Trigger batch inference when dataset changes (except for custom)
-    if (value !== 'custom' && onBatchInference) {
+    // Check if this is a custom dataset (formatted as custom:session_id:dataset_name)
+    const isCustomDataset = value.startsWith('custom:');
+    
+    // Trigger batch inference when dataset changes (except for custom datasets)
+    if (!isCustomDataset && value !== 'custom' && onBatchInference) {
       onBatchInference(model, value);
     }
   };
@@ -107,21 +150,35 @@ const onModelChange = (value: string) => {
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Dataset:</span>
             <Select value={dataset} onValueChange={onDatasetChange}>
-              <SelectTrigger className="w-32 h-8">
+              <SelectTrigger className="w-40 h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allowedDatasets.map((ds) => {
+                {/* Built-in datasets */}
+                {allowedDatasets.filter(ds => ds !== 'custom').map((ds) => {
                   let label = ds;
                   if (ds === "common-voice") label = "Common Voice";
                   else if (ds === "ravdess") label = "RAVDESS";
-                  else if (ds === "custom") label = "Custom";
                   return (
                     <SelectItem key={ds} value={ds}>
                       {label}
                     </SelectItem>
                   );
                 })}
+                
+                {/* Custom datasets */}
+                {customDatasets.length > 0 && (
+                  <>
+                    <SelectItem disabled value="separator">
+                      ── Custom Datasets ──
+                    </SelectItem>
+                    {customDatasets.map((customDataset) => (
+                      <SelectItem key={customDataset.formatted_name} value={customDataset.formatted_name}>
+                        {customDataset.dataset_name} ({customDataset.total_files} files)
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -156,6 +213,10 @@ const onModelChange = (value: string) => {
 
       {/* Right side: Action buttons */}
       <div className="flex items-center gap-2">
+        <CustomDatasetManager 
+          onDatasetCreated={handleDatasetCreated}
+          onDatasetSelected={handleDatasetSelected}
+        />
 
         <Button variant="outline" size="sm" className="h-8">
           <Upload className="h-4 w-4 mr-2" />
