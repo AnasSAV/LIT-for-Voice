@@ -7,14 +7,16 @@ import { API_BASE } from '@/lib/api';
 
 interface AudioUploaderProps {
   onUploadSuccess?: (uploadResponse) => void;
+  model?: string;
 }
 
-export const AudioUploader = ({ onUploadSuccess }: AudioUploaderProps) => {
+export const AudioUploader = ({ onUploadSuccess, model }: AudioUploaderProps) => {
   const uploadFile = async (file: File) => {
     console.log('Starting upload for file:', file.name, 'Type:', file.type, 'Size:', file.size);
     
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('model', model || 'whisper-base'); // Default to whisper-base if no model specified
 
     try {
       console.log(`Sending request to ${API_BASE}/upload...`);
@@ -53,7 +55,13 @@ export const AudioUploader = ({ onUploadSuccess }: AudioUploaderProps) => {
     console.log('Files dropped:', acceptedFiles.length, 'files');
     acceptedFiles.forEach(async (file, index) => {
       console.log(`Processing file ${index + 1}:`, file.name, 'Type:', file.type);
-      if (file.type.startsWith('audio/')) {
+      
+      // Check both MIME type and file extension for better .flac support
+      const allowedExtensions = ['.wav', '.mp3', '.m4a', '.flac'];
+      const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+      const isValidFile = file.type.startsWith('audio/') || allowedExtensions.includes(fileExtension);
+      
+      if (isValidFile) {
         try {
           await uploadFile(file);
         } catch (error) {
@@ -61,7 +69,7 @@ export const AudioUploader = ({ onUploadSuccess }: AudioUploaderProps) => {
         }
       } else {
         console.warn('Invalid file type:', file.type);
-        toast.error(`Invalid file type: ${file.name}`);
+        toast.error(`Invalid file type: ${file.name}. Supported formats: WAV, MP3, M4A, FLAC`);
       }
     });
   }, [onUploadSuccess]);

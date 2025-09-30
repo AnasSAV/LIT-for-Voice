@@ -467,14 +467,20 @@ export const AudioDatasetPanel = ({
     if (files) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (file.type.startsWith('audio/')) {
+        
+        // Check both MIME type and file extension for better .flac support
+        const allowedExtensions = ['.wav', '.mp3', '.m4a', '.flac'];
+        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+        const isValidFile = file.type.startsWith('audio/') || allowedExtensions.includes(fileExtension);
+        
+        if (isValidFile) {
           try {
             await uploadFile(file, model ?? "");
           } catch (error) {
             console.error('Upload error:', error);
           }
         } else {
-          toast.error(`Invalid file type: ${file.name}. Only audio files are supported.`);
+          toast.error(`Invalid file type: ${file.name}. Supported formats: WAV, MP3, M4A, FLAC`);
         }
       }
     }
@@ -547,7 +553,7 @@ export const AudioDatasetPanel = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept="audio/*"
+              accept="audio/*,.flac,.wav,.mp3,.m4a"
               multiple
               onChange={handleFileSelect}
               className="hidden"
@@ -589,7 +595,7 @@ export const AudioDatasetPanel = ({
       </div>
       
       {/* Upload overlay */}
-      <AudioUploader onUploadSuccess={onUploadSuccess} />
+      <AudioUploader onUploadSuccess={onUploadSuccess} model={model} />
     </div>
   );
 };

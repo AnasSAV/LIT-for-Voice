@@ -135,10 +135,10 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
           const pred = predictionMap?.[rowId] || data.prediction || "";
           if (!pred) return "";
           
-          // Handle object predictions (wav2vec2 returns an object)
+          // Handle object predictions (different models return different object structures)
           const predictionText = typeof pred === 'string' ? pred : 
             (typeof pred === 'object' && pred !== null) ? 
-              (pred as any).predicted_emotion || (pred as any).prediction || JSON.stringify(pred) : 
+              (pred as any).predicted_transcript || (pred as any).predicted_emotion || (pred as any).prediction || (pred as any).text || JSON.stringify(pred) : 
               String(pred);
           
           return <Badge variant="outline" className="text-xs">{predictionText}</Badge>;
@@ -146,10 +146,10 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
           // This is a dataset file (DatasetRow)
           const pred = predictionMap?.[rowId] ?? "";
           
-          // Handle object predictions (wav2vec2 returns an object)
+          // Handle object predictions (different models return different object structures)
           const predictionText = typeof pred === 'string' ? pred : 
             (typeof pred === 'object' && pred !== null) ? 
-              (pred as any).predicted_emotion || (pred as any).prediction || JSON.stringify(pred) : 
+              (pred as any).predicted_transcript || (pred as any).predicted_emotion || (pred as any).prediction || (pred as any).text || JSON.stringify(pred) : 
               String(pred);
               
           return <span className="text-xs">{predictionText}</span>;
@@ -257,10 +257,10 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
           
           const pred = predictionMap?.[rowId] ?? "";
           
-          // Handle object predictions (wav2vec2 returns an object)
+          // Handle object predictions (different models return different object structures)
           const predictionText = typeof pred === 'string' ? pred : 
             (typeof pred === 'object' && pred !== null) ? 
-              (pred as any).predicted_emotion || (pred as any).prediction || JSON.stringify(pred) : 
+              (pred as any).predicted_transcript || (pred as any).predicted_emotion || (pred as any).prediction || (pred as any).text || JSON.stringify(pred) : 
               String(pred);
               
           return <span className="text-xs">{predictionText || <span className="text-gray-400">No prediction</span>}</span>;
@@ -325,10 +325,10 @@ export const AudioDataTable = ({ selectedRow, onRowSelect, searchQuery, apiData,
           
           const pred = predictionMap?.[rowId] ?? "";
           
-          // Handle object predictions (wav2vec2 returns an object)
+          // Handle object predictions (different models return different object structures)
           const predictionText = typeof pred === 'string' ? pred : 
             (typeof pred === 'object' && pred !== null) ? 
-              (pred as any).predicted_emotion || (pred as any).prediction || JSON.stringify(pred) : 
+              (pred as any).predicted_transcript || (pred as any).predicted_emotion || (pred as any).prediction || (pred as any).text || JSON.stringify(pred) : 
               String(pred);
               
           return <span className="text-xs">{predictionText || <span className="text-gray-400">No prediction</span>}</span>;
