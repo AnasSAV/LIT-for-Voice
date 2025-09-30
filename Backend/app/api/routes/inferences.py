@@ -198,6 +198,8 @@ async def batch_whisper_analysis(request: Request):
         model = body.get("model", "whisper-base")
         dataset = body.get("dataset")
         
+        logger.info(f"batch_whisper_analysis called with: filenames={len(filenames)} files, dataset={dataset}, model={model}")
+        
         if not filenames:
             raise HTTPException(status_code=400, detail="No filenames provided")
         
@@ -231,6 +233,24 @@ async def batch_whisper_analysis(request: Request):
                 # Try to get from cache first
                 cached_result = await get_result(model, cache_key)
                 
+                # If not found and this is a custom dataset with session mismatch, try alternative cache keys
+                if cached_result is None and dataset and dataset.startswith('custom:'):
+                    from app.services.custom_dataset_service import parse_custom_dataset_name
+                    try:
+                        session_id_from_name, dataset_name = parse_custom_dataset_name(dataset)
+                        if session_id_from_name != session_id:
+                            # Try cache key with the original session ID path
+                            from app.services.custom_dataset_service import get_custom_dataset_manager
+                            original_manager = get_custom_dataset_manager(session_id_from_name)
+                            original_file_path = original_manager.resolve_file_path(dataset_name, filename)
+                            original_hash = hashlib.md5(str(original_file_path).encode()).hexdigest()
+                            original_cache_key = f"{model}_{original_hash}"
+                            cached_result = await get_result(model, original_cache_key)
+                            if cached_result is not None:
+                                logger.info(f"Found cached result using original session path for {filename}")
+                    except Exception as e:
+                        logger.warning(f"Could not try alternative cache key for {filename}: {e}")
+                
                 transcript = None
                 if cached_result is not None:
                     # Extract transcript from cached result
@@ -239,11 +259,35 @@ async def batch_whisper_analysis(request: Request):
                     else:
                         transcript = cached_result
                     cached_count += 1
+                    logger.info(f"Using cached transcript for {filename}")
                 else:
-                    # Not in cache - skip this file for now
-                    print(f"No cached transcript found for {filename}")
-                    missing_count += 1
-                    continue
+                    # Not in cache - run inference to generate transcript
+                    logger.info(f"No cached transcript found for {filename}, running inference...")
+                    try:
+                        # Run inference to generate transcript
+                        inference_result = await run_inference(model, None, dataset, filename, session_id)
+                        
+                        if inference_result and isinstance(inference_result, dict):
+                            transcript = inference_result.get("prediction", inference_result.get("transcript"))
+                            if transcript:
+                                logger.info(f"Generated and cached transcript for {filename}")
+                                # The transcript is automatically cached by run_inference
+                            else:
+                                logger.warning(f"No transcript in inference result for {filename}")
+                                missing_count += 1
+                                continue
+                        elif isinstance(inference_result, str):
+                            transcript = inference_result
+                            logger.info(f"Generated transcript for {filename}")
+                        else:
+                            logger.warning(f"Invalid inference result for {filename}: {type(inference_result)}")
+                            missing_count += 1
+                            continue
+                            
+                    except Exception as inference_error:
+                        logger.error(f"Failed to run inference for {filename}: {inference_error}")
+                        missing_count += 1
+                        continue
                 
                 if transcript:
                     # Clean and tokenize transcript
@@ -265,8 +309,9 @@ async def batch_whisper_analysis(request: Request):
                 missing_count += 1
                 continue
         
+        logger.info(f"Successfully processed {len(individual_transcripts)} files out of {len(filenames)} (cached: {cached_count}, generated: {len(individual_transcripts) - cached_count}, failed: {missing_count})")
         if not individual_transcripts:
-            raise HTTPException(status_code=404, detail=f"No cached transcripts found for the selected files. Found {cached_count} cached, {missing_count} missing. Please run inference on these files first.")
+            raise HTTPException(status_code=404, detail=f"Could not process any of the selected files. Failed to generate transcripts for {missing_count} files.")
         
         # Calculate word frequency
         from collections import Counter

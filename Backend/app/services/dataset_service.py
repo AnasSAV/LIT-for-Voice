@@ -47,8 +47,12 @@ def load_metadata(dataset: str, session_id: Optional[str] = None) -> List[Dict[s
             raise ValueError("session_id is required for custom datasets")
         
         session_id_from_name, dataset_name = parse_custom_dataset_name(dataset)
+        logger.info(f"Custom dataset metadata: session_id_from_name='{session_id_from_name}', current_session_id='{session_id}'")
         if session_id_from_name != session_id:
-            raise ValueError("Session ID mismatch for custom dataset")
+            logger.warning(f"Session ID mismatch in metadata: dataset has '{session_id_from_name}' but request has '{session_id}'")
+            # Use the dataset's session ID instead
+            manager = get_custom_dataset_manager(session_id_from_name)
+            return manager.get_dataset_files_as_csv_format(dataset_name)
         
         manager = get_custom_dataset_manager(session_id)
         return manager.get_dataset_files_as_csv_format(dataset_name)
