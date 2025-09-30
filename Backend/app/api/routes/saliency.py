@@ -30,17 +30,23 @@ class SaliencyResponse(BaseModel):
     emotion: Optional[str] = None
     series: Optional[list] = None
 
+def get_session_id(request: Request) -> Optional[str]:
+    """Extract session ID from request (optional for backwards compatibility)"""
+    return getattr(request.state, 'sid', None)
+
 @router.post("/saliency/generate", response_model=SaliencyResponse)
-async def generate_saliency_endpoint(request: SaliencyRequest):
+async def generate_saliency_endpoint(http_request: Request, request: SaliencyRequest):
     if not request.model:
         raise HTTPException(status_code=400, detail="Model is required")
+    
+    session_id = get_session_id(http_request)
     
     resolved_path = None
     if request.file_path:
         resolved_path = Path(request.file_path)
     elif request.dataset and request.dataset_file:
         try:
-            resolved_path = resolve_file(request.dataset, request.dataset_file)
+            resolved_path = resolve_file(request.dataset, request.dataset_file, session_id)
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(status_code=404, detail=str(e))
     else:
