@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { AudioPlayer } from "../audio/AudioPlayer";
 import { WaveformViewer } from "../audio/WaveformViewer";
 import { PredictionDisplay } from "../predictions/PredictionDisplay";
-import { Play, Pause, RotateCcw, Trash2, Plus } from "lucide-react";
+import { Play, Pause, RotateCcw, Trash2, Plus, HelpCircle } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import { API_BASE } from '@/lib/api';
 
@@ -192,58 +193,93 @@ export const DatapointEditorPanel = ({
   }, [selectedFile?.file_id, dataset, showPerturbed, perturbationResult?.filename]);
   
   return (
-    <div className="h-full bg-gray-50 border-l border-gray-200 flex flex-col">
-      <div className="bg-gray-100 p-3 border-b border-gray-200">
-        <h3 className="font-medium text-sm text-gray-800">Datapoint Editor</h3>
-      </div>
+    <TooltipProvider>
+      <div className="h-full bg-gray-50 border-l border-gray-200 flex flex-col">
+        <div className="panel-header p-3 border-b border-gray-200">
+          <h3 className="font-medium text-sm text-gray-800 flex items-center gap-2">
+            Datapoint Editor
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>
+                Edit and analyze individual audio samples with predictions and perturbations
+              </TooltipContent>
+            </Tooltip>
+          </h3>
+        </div>
       
       <div className="flex-1 p-3 overflow-auto space-y-4">
         {/* Sample Info - Top */}
         <Card className="border-gray-200 bg-white">
-          <CardHeader className="pb-2">
+          <CardHeader className="panel-header pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm text-gray-800">Sample Info</CardTitle>
+              <CardTitle className="text-sm text-gray-800 flex items-center gap-2">
+                Sample Info
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Detailed information about the selected audio sample
+                  </TooltipContent>
+                </Tooltip>
+              </CardTitle>
               {perturbationResult?.success && (
                 <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
-                  <Button
-                    variant={!showPerturbed ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setShowPerturbed(false)}
-                    className={`text-xs h-7 px-3 transition-all duration-200 ${
-                      !showPerturbed 
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
-                        : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
-                    }`}
-                  >
-                    Original
-                  </Button>
-                  <Button
-                    variant={showPerturbed ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setShowPerturbed(true)}
-                    className={`text-xs h-7 px-3 transition-all duration-200 ${
-                      showPerturbed 
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
-                        : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
-                    }`}
-                  >
-                    Perturbed
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={!showPerturbed ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setShowPerturbed(false)}
+                        className={`text-xs h-7 px-3 transition-all duration-200 ${
+                          !showPerturbed 
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
+                            : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
+                        }`}
+                      >
+                        Original
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      View the original unmodified audio file
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={showPerturbed ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setShowPerturbed(true)}
+                        className={`text-xs h-7 px-3 transition-all duration-200 ${
+                          showPerturbed 
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
+                            : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
+                        }`}
+                      >
+                        Perturbed
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      View the modified audio file with applied perturbations
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               )}
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="text-xs">
-              <span className="text-gray-600">File:</span>
-              <span className="ml-2 font-mono text-gray-800">{currentFileInfo?.filename || "No file selected"}</span>
+            <div className="text-xs-tight">
+              <span className="text-gray-500">File:</span>
+              <span className="ml-2 font-mono text-gray-700">{currentFileInfo?.filename || "No file selected"}</span>
               {showPerturbed && (
-                <Badge variant="secondary" className="ml-2 text-[10px] bg-blue-100 text-blue-700 border-blue-200">P</Badge>
+                <Badge variant="secondary" className="ml-2 text-[9px] bg-blue-100 text-blue-700 border-blue-200">P</Badge>
               )}
             </div>
-            <div className="text-xs">
-              <span className="text-gray-600">Duration:</span>
-              <span className="ml-2 text-gray-800">
+            <div className="text-xs-tight">
+              <span className="text-gray-500">Duration:</span>
+              <span className="ml-2 text-gray-700">
                 {currentFileInfo?.duration 
                   ? `${currentFileInfo.duration.toFixed(1)}s` 
                   : audioMetadata.duration 
@@ -251,9 +287,9 @@ export const DatapointEditorPanel = ({
                   : "Loading..."}
               </span>
             </div>
-            <div className="text-xs">
-              <span className="text-gray-600">Sample Rate:</span>
-              <span className="ml-2 text-gray-800">
+            <div className="text-xs-tight">
+              <span className="text-gray-500">Sample Rate:</span>
+              <span className="ml-2 text-gray-700">
                 {currentFileInfo?.sample_rate 
                   ? `${(currentFileInfo.sample_rate / 1000).toFixed(1)}kHz` 
                   : audioMetadata.sampleRate 
@@ -262,17 +298,17 @@ export const DatapointEditorPanel = ({
               </span>
             </div>
             {currentFileInfo?.size && (
-              <div className="text-xs">
-                <span className="text-gray-600">Size:</span>
-                <span className="ml-2 text-gray-800">{(currentFileInfo.size / 1024 / 1024).toFixed(2)} MB</span>
+              <div className="text-xs-tight">
+                <span className="text-gray-500">Size:</span>
+                <span className="ml-2 text-gray-700">{(currentFileInfo.size / 1024 / 1024).toFixed(2)} MB</span>
               </div>
             )}
             {showPerturbed && perturbationResult?.applied_perturbations && (
-              <div className="text-xs">
-                <span className="text-gray-600">Applied:</span>
+              <div className="text-xs-tight">
+                <span className="text-gray-500">Applied:</span>
                 <div className="ml-2 mt-1 space-y-1">
                   {perturbationResult.applied_perturbations.map((pert, idx) => (
-                    <Badge key={idx} variant="outline" className="text-[10px] mr-1 border-blue-300 text-blue-700">
+                    <Badge key={idx} variant="outline" className="text-[9px] mr-1 border-blue-300 text-blue-700">
                       {pert.type.replace('_', ' ')}
                     </Badge>
                   ))}
@@ -280,8 +316,8 @@ export const DatapointEditorPanel = ({
               </div>
             )}
             {showPerturbed && perturbationResult?.filename && predictionMap && (
-              <div className="text-xs mt-2">
-                <span className="text-gray-600">Perturbed Prediction:</span>
+              <div className="text-xs-tight mt-2">
+                <span className="text-gray-500">Perturbed Prediction:</span>
                 <div className="ml-2 mt-1">
                   <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 border-blue-200">
                     {predictionMap[perturbationResult.filename] || "Loading..."}
@@ -307,8 +343,18 @@ export const DatapointEditorPanel = ({
 
         {/* Audio Player & Waveform - Bottom */}
         <Card className="border-gray-200 bg-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-800">Audio Playback</CardTitle>
+          <CardHeader className="panel-header pb-2">
+            <CardTitle className="text-sm text-gray-800 flex items-center gap-2">
+              Audio Playback
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Interactive audio player with waveform visualization
+                </TooltipContent>
+              </Tooltip>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <WaveformViewer 
@@ -366,5 +412,6 @@ export const DatapointEditorPanel = ({
         </Card>
       </div>
     </div>
+    </TooltipProvider>
   );
 };

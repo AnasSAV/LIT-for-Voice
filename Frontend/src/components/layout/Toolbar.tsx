@@ -8,7 +8,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Upload, HelpCircle } from "lucide-react";
 import { API_BASE } from '@/lib/api';
 import { CustomDatasetManager } from '@/components/dataset/CustomDatasetManager';
 
@@ -122,34 +123,60 @@ const onModelChange = (value: string) => {
   const allowedDatasets = modelDatasetMap[model] || ["custom"];
 
   return (
-    <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
-      {/* Left side: Model and Dataset selectors */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-foreground">LIT for Voice</span>
-          <Badge variant="outline" className="text-xs">
-            v1.0
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-3">
+    <TooltipProvider>
+      <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
+        {/* Left side: Model and Dataset selectors */}
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Model:</span>
-            <Select value={model} onValueChange={onModelChange}>
-              <SelectTrigger className="w-32 h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="whisper-base">Whisper Base</SelectItem>
-                <SelectItem value="whisper-large">Whisper Large</SelectItem>
-                <SelectItem value="wav2vec2">Wav2Vec2</SelectItem>
-              </SelectContent>
-            </Select>
+            <span className="text-sm font-bold text-foreground">LIT for Voice</span>
+            <Badge variant="outline" className="text-xs">
+              v1.0
+            </Badge>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Dataset:</span>
-            <Select value={dataset} onValueChange={onDatasetChange}>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">Model:</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Choose the AI model for audio analysis:</p>
+                    <p>• Whisper: Speech-to-text transcription</p>
+                    <p>• Wav2Vec2: Emotion recognition</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <Select value={model} onValueChange={onModelChange}>
+                <SelectTrigger className="w-32 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="whisper-base">Whisper Base</SelectItem>
+                  <SelectItem value="whisper-large">Whisper Large</SelectItem>
+                  <SelectItem value="wav2vec2">Wav2Vec2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">Dataset:</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Select the audio dataset to analyze:</p>
+                    <p>• Common Voice: Speech recognition dataset</p>
+                    <p>• RAVDESS: Emotion recognition dataset</p>
+                    <p>• Custom: Your uploaded datasets</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <Select value={dataset} onValueChange={onDatasetChange}>
               <SelectTrigger className="w-40 h-8">
                 <SelectValue />
               </SelectTrigger>
@@ -218,11 +245,19 @@ const onModelChange = (value: string) => {
           onDatasetSelected={handleDatasetSelected}
         />
 
-        <Button variant="outline" size="sm" className="h-8">
-          <Upload className="h-4 w-4 mr-2" />
-          Upload
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8">
+              <Upload className="h-4 w-4 mr-2" />
+              Upload
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Upload audio files for analysis</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
+    </TooltipProvider>
   );
 };

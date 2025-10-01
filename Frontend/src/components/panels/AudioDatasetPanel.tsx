@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Search, Play, Pause, RefreshCw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Upload, Search, Play, Pause, RefreshCw, HelpCircle } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
 import { toast } from "sonner";
@@ -537,31 +538,57 @@ export const AudioDatasetPanel = ({
   };
 
   return (
-    <div className="h-full panel-background flex flex-col">
-      <div className="panel-header p-3 border-b panel-border">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-sm">Audio Dataset</h3>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
-            </Badge>
-            {batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
-              <Badge variant="outline" className="text-xs">
-                Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
+    <TooltipProvider>
+      <div className="h-full panel-background flex flex-col">
+        <div className="panel-header p-3 border-b panel-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium text-info">Audio Dataset</h3>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Browse and manage audio files in your selected dataset.</p>
+                  <p>Upload new files or select from existing datasets.</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs-tight">
+                {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
               </Badge>
-            )}
-            {(batchInferenceStatus === 'done' || isInferenceComplete) && (
-              <Badge variant="default" className="text-xs">
-                ✓ Inference Complete
-              </Badge>
-            )}
-            <Button size="sm" variant="outline" className="h-7" onClick={handleUploadClick}>
-              <Upload className="h-3 w-3 mr-1" />
-              Upload
-            </Button>
-            <Button size="sm" variant="outline" className="h-7" onClick={handleReloadDataset} title="Reload dataset">
-              <RefreshCw className="h-3 w-3" />
-            </Button>
+              {batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
+                <Badge variant="outline" className="text-xs-tight">
+                  Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
+                </Badge>
+              )}
+              {(batchInferenceStatus === 'done' || isInferenceComplete) && (
+                <Badge variant="default" className="text-xs-tight">
+                  ✓ Inference Complete
+                </Badge>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7" onClick={handleUploadClick}>
+                    <Upload className="h-3 w-3 mr-1" />
+                    Upload
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Upload audio files (.wav, .mp3, .m4a, .flac)</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7" onClick={handleReloadDataset} title="Reload dataset">
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reload dataset metadata and refresh the file list</p>
+                </TooltipContent>
+              </Tooltip>
             <input
               ref={fileInputRef}
               type="file"
@@ -576,12 +603,19 @@ export const AudioDatasetPanel = ({
         {/* Search bar */}
         <div className="mt-2 relative">
           <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-          <Input
-            placeholder="Search audio files..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-7 h-8 text-xs"
-          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Input
+                placeholder="Search audio files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-7 h-8 text-xs-tight"
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Search by filename or any metadata field</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
       
@@ -609,5 +643,6 @@ export const AudioDatasetPanel = ({
       {/* Upload overlay */}
       <AudioUploader onUploadSuccess={onUploadSuccess} model={model} />
     </div>
+    </TooltipProvider>
   );
 };
