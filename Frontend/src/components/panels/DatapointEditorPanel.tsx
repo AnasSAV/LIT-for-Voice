@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { AudioPlayer } from "../audio/AudioPlayer";
 import { WaveformViewer } from "../audio/WaveformViewer";
+import { PredictionDisplay } from "../predictions/PredictionDisplay";
 import { Play, Pause, RotateCcw, Trash2, Plus } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import { API_BASE } from '@/lib/api';
@@ -17,6 +18,26 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
+}
+
+interface Wav2Vec2Prediction {
+  predicted_emotion: string;
+  probabilities: Record<string, number>;
+  confidence: number;
+  ground_truth_emotion?: string;
+}
+
+interface WhisperPrediction {
+  predicted_transcript: string;
+  ground_truth: string;
+  accuracy_percentage: number | null;
+  word_error_rate: number | null;
+  character_error_rate: number | null;
+  levenshtein_distance: number | null;
+  exact_match: number | null;
+  character_similarity: number | null;
+  word_count_predicted: number;
+  word_count_truth: number;
 }
 
 interface PerturbationResult {
@@ -36,12 +57,35 @@ interface PerturbationResult {
 
 interface DatapointEditorPanelProps {
   selectedFile?: UploadedFile | null;
-  dataset?: string; // "custom" | dataset key
+  selectedEmbeddingFile?: string | null;
+  dataset?: string; // "custom" | dataset key (effective dataset)
+  originalDataset?: string; // Original dataset selection from toolbar
   perturbationResult?: PerturbationResult | null;
   predictionMap?: Record<string, string>;
+  model?: string;
+  wav2vecPrediction?: Wav2Vec2Prediction | null;
+  whisperPrediction?: WhisperPrediction | null;
+  perturbedPredictions?: Wav2Vec2Prediction | WhisperPrediction | null;
+  isLoadingPredictions?: boolean;
+  isLoadingPerturbed?: boolean;
+  predictionError?: string | null;
 }
 
-export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturbationResult, predictionMap }: DatapointEditorPanelProps) => {
+export const DatapointEditorPanel = ({ 
+  selectedFile, 
+  selectedEmbeddingFile,
+  dataset = "custom", 
+  originalDataset,
+  perturbationResult, 
+  predictionMap,
+  model,
+  wav2vecPrediction,
+  whisperPrediction,
+  perturbedPredictions,
+  isLoadingPredictions,
+  isLoadingPerturbed,
+  predictionError
+}: DatapointEditorPanelProps) => {
   const [selectedLabel, setSelectedLabel] = useState<string>("neutral");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -60,8 +104,6 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     if (!selectedFile) return undefined;
     
     // Check if this is an uploaded file - more precise detection
-    // Uploaded files have file_path that contains "uploads/" OR have specific message types
-    // Dataset files have message "Selected from embeddings" or no uploads/ in path
     const isUploadedFile = selectedFile.file_path && (
       selectedFile.file_path.includes('uploads/') || 
       selectedFile.file_path.startsWith('uploads/') ||
@@ -73,12 +115,27 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     if (isUploadedFile) {
       // This is an uploaded file, use the upload endpoint
       return `${API_BASE}/upload/file/${selectedFile.file_id}`;
-    } else if (dataset) {
-      // This is a dataset file (including custom datasets)
+    }
+    
+    // For dataset files (including files selected from embeddings)
+    // Use original dataset if available and it's a real dataset
+    const datasetToUse = originalDataset && originalDataset !== "custom" ? originalDataset : dataset;
+    
+    if (datasetToUse && datasetToUse !== "custom") {
+      // This is a dataset file from built-in or custom datasets
       const filename = encodeURIComponent(selectedFile.filename);
-      return `${API_BASE}/${encodeURIComponent(dataset)}/file/${filename}`;
+      
+      // Handle custom datasets vs built-in datasets
+      if (datasetToUse.startsWith('custom:')) {
+        // Custom dataset: use the original route /{dataset}/file/{filename}
+        // The backend handles the custom dataset format properly
+        return `${API_BASE}/${encodeURIComponent(datasetToUse)}/file/${filename}`;
+      } else {
+        // Built-in dataset: use /{dataset}/file/{filename}
+        return `${API_BASE}/${encodeURIComponent(datasetToUse)}/file/${filename}`;
+      }
     } else {
-      // Fallback to upload endpoint
+      // Fallback to upload endpoint when dataset is "custom" (generic case)
       return `${API_BASE}/upload/file/${selectedFile.file_id}`;
     }
   })();
@@ -117,8 +174,9 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
   useEffect(() => {
     console.log('DatapointEditorPanel - selectedFile changed:', selectedFile);
     console.log('DatapointEditorPanel - dataset:', dataset);
+    console.log('DatapointEditorPanel - originalDataset:', originalDataset);
     console.log('DatapointEditorPanel - audioUrl:', audioUrl);
-  }, [selectedFile, audioUrl, dataset]);
+  }, [selectedFile, audioUrl, dataset, originalDataset]);
 
   // Reset playback when file changes or when switching between original/perturbed
   useEffect(() => {
@@ -140,7 +198,7 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
       </div>
       
       <div className="flex-1 p-3 overflow-auto space-y-4">
-        {/* File Info */}
+        {/* Sample Info - Top */}
         <Card className="border-gray-200 bg-white">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -234,7 +292,20 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
           </CardContent>
         </Card>
 
-        {/* Audio Player & Waveform */}
+        {/* Predictions Section - Middle */}
+        <PredictionDisplay
+          selectedFile={selectedFile}
+          selectedEmbeddingFile={selectedEmbeddingFile}
+          model={model}
+          wav2vecPrediction={wav2vecPrediction}
+          whisperPrediction={whisperPrediction}
+          perturbedPredictions={perturbedPredictions}
+          isLoading={isLoadingPredictions}
+          isLoadingPerturbed={isLoadingPerturbed}
+          error={predictionError}
+        />
+
+        {/* Audio Player & Waveform - Bottom */}
         <Card className="border-gray-200 bg-white">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-gray-800">Audio Playback</CardTitle>
