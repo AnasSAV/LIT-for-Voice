@@ -2,7 +2,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { ScalersVisualization } from "../visualization/ScalersVisualization";
-import { useState } from "react";
+import { AttentionVisualization } from "../visualization/AttentionVisualization";
+import { useState, useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 
 interface UploadedFile {
   file_id: string;
@@ -27,6 +29,26 @@ interface PerturbationResult {
   }>;
   success: boolean;
   error?: string;
+}
+
+interface Wav2Vec2Prediction {
+  predicted_emotion: string;
+  probabilities: Record<string, number>;
+  confidence: number;
+  attention?: number[][][];
+}
+
+interface WhisperPrediction {
+  predicted_transcript: string;
+  ground_truth: string;
+  accuracy_percentage: number;
+  word_error_rate: number;
+  character_error_rate: number;
+  levenshtein_distance: number;
+  exact_match: number;
+  character_similarity: number;
+  word_count_predicted: number;
+  word_count_truth: number;
 }
 
 interface PredictionPanelProps {
@@ -165,7 +187,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
       setError(null);
       setAttention(null);  // Reset attention when starting new wav2vec2 prediction
       setTranscript(null); // Reset transcript when using wav2vec2
-      setIsLoadingAttention(true); // Start loading attention
       
       try {
         let requestBody: any = {};
@@ -211,14 +232,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         const prediction = await response.json();
         if (isMounted) {
           setWav2vecPrediction(prediction);
-          // Debug: Log prediction structure
           console.log("DEBUG: Wav2Vec2 prediction:", prediction);
-          console.log("DEBUG: Has attention:", !!prediction.attention);
-          // Extract attention data if available
-          if (prediction.attention) {
-            console.log("DEBUG: Setting attention data:", prediction.attention.length, "layers");
-            setAttention(prediction.attention);
-          }
         }
         
         // Update predictionMap for uploaded files (same as dataset files)
@@ -250,7 +264,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
       } finally {
         if (isMounted) {
           setIsLoading(false);
-          setIsLoadingAttention(false); // Stop loading attention
         }
       }
     };
@@ -424,11 +437,13 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="scalers" className="h-full">
         <div className="panel-header border-b panel-border px-3 py-2">
-            <TabsList className="h-7 grid grid-cols-3 w-full">
+            <TabsList className={`h-7 ${model === 'wav2vec2' ? 'grid grid-cols-3' : 'grid grid-cols-4'} w-full`}>
             <TabsTrigger value="scalers" className="text-xs">Scalers</TabsTrigger>
             <TabsTrigger value="saliency" className="text-xs">Saliency</TabsTrigger>
             <TabsTrigger value="perturbation" className="text-xs">Perturbation</TabsTrigger>
-            <TabsTrigger value="attention" className="text-xs">Attention</TabsTrigger>
+            {model !== 'wav2vec2' && (
+              <TabsTrigger value="attention" className="text-xs">Attention</TabsTrigger>
+            )}
           </TabsList>
         </div>
         
@@ -466,15 +481,17 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
             </div>
           </TabsContent>
 
-          <TabsContent value="attention" className="m-0 h-full">
-            <div className="p-3">
-              <AttentionVisualization 
-                attention={attention} 
-                transcript={transcript} 
-                isLoading={isLoadingAttention} 
-              />
-            </div>
-          </TabsContent>
+          {model !== 'wav2vec2' && (
+            <TabsContent value="attention" className="m-0 h-full">
+              <div className="p-3">
+                <AttentionVisualization 
+                  attention={attention} 
+                  transcript={transcript} 
+                  isLoading={isLoadingAttention} 
+                />
+              </div>
+            </TabsContent>
+          )}
         </div>
       </Tabs>
     </div>

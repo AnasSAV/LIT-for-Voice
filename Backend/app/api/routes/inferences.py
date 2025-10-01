@@ -1147,6 +1147,7 @@ async def batch_audio_frequency_analysis(request: Request):
 
 @router.post("/inferences/whisper-attention")
 async def get_whisper_with_attention(
+    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "file_path": "/path/to/audio.wav",
@@ -1160,6 +1161,8 @@ async def get_whisper_with_attention(
     dataset = request.get("dataset")
     dataset_file = request.get("dataset_file")
     
+    session_id = get_session_id(http_request)
+    
     # Validate model
     if not model.startswith("whisper"):
         raise HTTPException(status_code=400, detail="This endpoint is only for Whisper models")
@@ -1170,7 +1173,7 @@ async def get_whisper_with_attention(
         resolved_path = Path(file_path)
     elif dataset and dataset_file:
         try:
-            resolved_path = resolve_file(dataset, dataset_file)
+            resolved_path = resolve_file(dataset, dataset_file, session_id)
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(status_code=404, detail=str(e))
     else:
