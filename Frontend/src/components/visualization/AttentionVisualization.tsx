@@ -1,53 +1,162 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
 
-export const AttentionVisualization = () => {
-  // Generate mock attention matrix
-  const generateAttentionMatrix = () => {
-    const tokens = ["The", "quick", "brown", "fox", "jumps", "over", "the", "lazy"];
-    const matrix = [];
-    
-    for (let i = 0; i < tokens.length; i++) {
-      const row = [];
-      for (let j = 0; j < tokens.length; j++) {
-        const attention = Math.random();
-        row.push(attention);
+interface AttentionVisualizationProps {
+  attention: number[][][] | null;
+  transcript?: string | null;
+  isLoading?: boolean;
+}
+
+export const AttentionVisualization = ({ attention, transcript, isLoading }: AttentionVisualizationProps) => {
+  const [selectedLayer, setSelectedLayer] = useState(0);
+  const [selectedHead, setSelectedHead] = useState(0);
+
+  // Show loading state while attention data is being fetched
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Attention Visualization</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-8">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <span className="text-muted-foreground">Loading attention data...</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // If no real attention data, show placeholder
+  if (!attention || attention.length === 0) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Attention Visualization</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-muted-foreground py-8">
+              {!attention ? 
+                "No attention data available. Select an audio file and run prediction to see attention patterns." :
+                `Attention data received but empty (${attention.length} layers). This may indicate the model doesn't support attention extraction.`
+              }
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Get the selected attention matrix
+  const currentMatrix = attention[selectedLayer] || [];
+  const currentHeadMatrix = currentMatrix[selectedHead] || [];
+
+  // Generate appropriate tokens for visualization based on attention matrix size
+  const generateTokens = (size: number) => {
+    // If we have a transcript, use real words
+    if (transcript && typeof transcript === 'string') {
+      const words = transcript.trim().split(/\s+/);
+      const tokens = [];
+      
+      // Add start token
+      tokens.push("<start>");
+      
+      // Add actual words, but limit to the size we need
+      const availableSlots = Math.max(0, size - 2); // Reserve slots for start and end tokens
+      for (let i = 0; i < availableSlots && i < words.length; i++) {
+        tokens.push(words[i]);
       }
-      matrix.push(row);
+      
+      // Fill remaining slots with generic tokens if needed
+      while (tokens.length < size - 1) {
+        tokens.push(`t${tokens.length}`);
+      }
+      
+      // Add end token
+      if (size > 1) {
+        tokens.push("<end>");
+      }
+      
+      return tokens.slice(0, size); // Ensure exact size
     }
     
-    return { tokens, matrix };
+    // Fallback to generic tokens
+    const tokens = [];
+    for (let i = 0; i < size; i++) {
+      if (i === 0) tokens.push("<start>");
+      else if (i === size - 1) tokens.push("<end>");
+      else tokens.push(`t${i}`);
+    }
+    return tokens;
   };
 
-  const { tokens, matrix } = generateAttentionMatrix();
+  const tokens = generateTokens(currentHeadMatrix.length);
+  
+  // Find high attention pairs from the current matrix
+  const getHighAttentionPairs = () => {
+    const pairs = [];
+    if (currentHeadMatrix && Array.isArray(currentHeadMatrix)) {
+      for (let i = 0; i < currentHeadMatrix.length && i < tokens.length; i++) {
+        const row = currentHeadMatrix[i];
+        if (Array.isArray(row)) {
+          for (let j = 0; j < row.length && j < tokens.length; j++) {
+            const score = row[j];
+            if (typeof score === 'number' && score > 0.5) {  // Threshold for "high" attention
+              pairs.push({
+                from: tokens[i],
+                to: tokens[j],
+                score: score,
+                fromIdx: i,
+                toIdx: j
+              });
+            }
+          }
+        }
+      }
+    }
+    return pairs.sort((a, b) => b.score - a.score).slice(0, 5); // Top 5 pairs
+  };
+
+  const highAttentionPairs = getHighAttentionPairs();
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">Attention Patterns</CardTitle>
+            <div>
+              <CardTitle className="text-sm">Attention Patterns</CardTitle>
+              <div className="text-xs text-muted-foreground mt-1">
+                {attention.length} layers, {currentMatrix.length} heads, {tokens.length}×{tokens.length} matrix
+              </div>
+            </div>
             <div className="flex items-center gap-2">
-              <Select defaultValue="layer-6">
+              <Select value={selectedLayer.toString()} onValueChange={(value) => setSelectedLayer(parseInt(value))}>
                 <SelectTrigger className="w-20 h-6 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="layer-1">L1</SelectItem>
-                  <SelectItem value="layer-2">L2</SelectItem>
-                  <SelectItem value="layer-3">L3</SelectItem>
-                  <SelectItem value="layer-6">L6</SelectItem>
+                  {attention && attention.map((_, index) => (
+                    <SelectItem key={index} value={index.toString()}>L{index + 1}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <Select defaultValue="head-0">
+              <Select value={selectedHead.toString()} onValueChange={(value) => setSelectedHead(parseInt(value))}>
                 <SelectTrigger className="w-16 h-6 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="head-0">H0</SelectItem>
-                  <SelectItem value="head-1">H1</SelectItem>
-                  <SelectItem value="head-2">H2</SelectItem>
+                  {currentMatrix && currentMatrix.map && currentMatrix.map((_, index) => (
+                    <SelectItem key={index} value={index.toString()}>H{index}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -56,7 +165,7 @@ export const AttentionVisualization = () => {
         <CardContent className="space-y-3">
           {/* Attention Matrix */}
           <div className="overflow-auto">
-            <div className="grid grid-cols-9 gap-1 text-xs min-w-fit">
+            <div className="grid gap-1 text-xs min-w-fit" style={{ gridTemplateColumns: `auto repeat(${tokens.length}, 1fr)` }}>
               <div></div>
               {tokens.map((token, idx) => (
                 <div key={idx} className="text-center font-mono text-[10px] p-1">
@@ -64,22 +173,22 @@ export const AttentionVisualization = () => {
                 </div>
               ))}
               
-              {matrix.map((row, i) => (
+              {currentHeadMatrix.map && currentHeadMatrix.map((row, i) => (
                 <div key={i} className="contents">
                   <div className="text-right font-mono text-[10px] p-1">
                     {tokens[i]}
                   </div>
-                  {row.map((attention, j) => (
+                  {Array.isArray(row) && row.map((attentionValue, j) => (
                     <div
                       key={j}
                       className="w-6 h-6 border border-border/20 flex items-center justify-center cursor-pointer"
                       style={{
-                        backgroundColor: `hsl(var(--primary) / ${attention * 0.8})`,
+                        backgroundColor: `hsl(var(--primary) / ${attentionValue * 0.8})`,
                       }}
-                      title={`${tokens[i]} → ${tokens[j]}: ${(attention * 100).toFixed(0)}%`}
+                      title={`${tokens[i]} → ${tokens[j]}: ${(attentionValue * 100).toFixed(0)}%`}
                     >
                       <span className="text-[8px] text-white font-bold">
-                        {attention > 0.5 ? '●' : ''}
+                        {attentionValue > 0.5 ? '●' : ''}
                       </span>
                     </div>
                   ))}
@@ -91,22 +200,24 @@ export const AttentionVisualization = () => {
           {/* Attention Summary */}
           <div className="text-xs space-y-2">
             <div className="font-medium">High Attention Pairs:</div>
-            {[
-              { from: "fox", to: "jumps", score: 0.91 },
-              { from: "quick", to: "brown", score: 0.84 },
-              { from: "over", to: "lazy", score: 0.78 }
-            ].map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono">{item.from}</span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="font-mono">{item.to}</span>
+            {highAttentionPairs.length > 0 ? (
+              highAttentionPairs.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono">{item.from}</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="font-mono">{item.to}</span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px]">
+                    {(item.score * 100).toFixed(0)}%
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="text-[10px]">
-                  {(item.score * 100).toFixed(0)}%
-                </Badge>
+              ))
+            ) : (
+              <div className="text-muted-foreground text-center py-2">
+                No high attention pairs found (threshold &gt; 50%)
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>
