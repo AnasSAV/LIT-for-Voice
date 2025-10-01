@@ -6,6 +6,7 @@ import { DatapointEditorPanel } from "../panels/DatapointEditorPanel";
 import { PredictionPanel } from "../panels/PredictionPanel";
 import { EmbeddingProvider } from "../../contexts/EmbeddingContext";
 import React, { useState, useEffect, useCallback } from "react";
+import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
   file_id: string;
@@ -15,6 +16,27 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
+  prediction?: string;
+}
+
+interface Wav2Vec2Prediction {
+  predicted_emotion: string;
+  probabilities: Record<string, number>;
+  confidence: number;
+  ground_truth_emotion?: string;
+}
+
+interface WhisperPrediction {
+  predicted_transcript: string;
+  ground_truth: string;
+  accuracy_percentage: number | null;
+  word_error_rate: number | null;
+  character_error_rate: number | null;
+  levenshtein_distance: number | null;
+  exact_match: number | null;
+  character_similarity: number | null;
+  word_count_predicted: number;
+  word_count_truth: number;
 }
 
 export const MainLayout = () => {
@@ -23,18 +45,288 @@ export const MainLayout = () => {
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   const [model, setModel] = useState("whisper-base");
   const [dataset, setDataset] = useState("common-voice");
-  
-  // Determine effective dataset based on uploaded files
-  const effectiveDataset = uploadedFiles && uploadedFiles.length > 0 ? "custom" : dataset;
   const [batchInferenceStatus, setBatchInferenceStatus] = useState<'idle' | 'running' | 'done'>('idle');
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
   const [selectedEmbeddingFile, setSelectedEmbeddingFile] = useState<string | null>(null);
   const [perturbationResult, setPerturbationResult] = useState<any>(null);
+  
+  // Prediction state
+  const [wav2vecPrediction, setWav2vecPrediction] = useState<Wav2Vec2Prediction | null>(null);
+  const [whisperPrediction, setWhisperPrediction] = useState<WhisperPrediction | null>(null);
+  const [isLoadingPredictions, setIsLoadingPredictions] = useState(false);
+  const [predictionError, setPredictionError] = useState<string | null>(null);
+  const [perturbedPredictions, setPerturbedPredictions] = useState<Wav2Vec2Prediction | WhisperPrediction | null>(null);
+  const [isLoadingPerturbed, setIsLoadingPerturbed] = useState(false);
 
-  // Clear perturbation result when selected file changes
+  // Clear perturbation result and predictions when selected file changes
   useEffect(() => {
     setPerturbationResult(null);
-  }, [selectedFile]);
+    setWav2vecPrediction(null);
+    setWhisperPrediction(null);
+    setPerturbedPredictions(null);
+    setPredictionError(null);
+  }, [selectedFile, selectedEmbeddingFile]);
+
+  // Fetch wav2vec prediction when model is wav2vec2 and file is selected
+  useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+    
+    const fetchWav2vecPrediction = async () => {
+      if (model !== "wav2vec2" || (!selectedFile && !selectedEmbeddingFile)) {
+        if (isMounted) {
+          setWav2vecPrediction(null);
+          setPredictionError(null);
+          setIsLoadingPredictions(false);
+        }
+        return;
+      }
+
+      setIsLoadingPredictions(true);
+      setPredictionError(null);
+
+      try {
+        let requestBody: any = {};
+        
+        if (selectedFile) {
+          // Check if this is an uploaded file - more precise detection
+          const isUploadedFile = selectedFile.file_path && (
+            selectedFile.file_path.includes('uploads/') || 
+            selectedFile.file_path.startsWith('uploads/') ||
+            selectedFile.message === "Perturbed file" ||
+            selectedFile.message === "File uploaded successfully" ||
+            selectedFile.message === "File uploaded and processed successfully"
+          ) && !selectedFile.message.includes("Selected from");
+          
+          if (isUploadedFile) {
+            // This is an uploaded file, use file_path
+            requestBody.file_path = selectedFile.file_path;
+          } else {
+            // This is a dataset file (including custom datasets), use dataset and dataset_file
+            requestBody.dataset = dataset;
+            requestBody.dataset_file = selectedFile.filename;
+          }
+        } else if (selectedEmbeddingFile && dataset) {
+          // Use embedding file selection
+          requestBody.dataset = dataset;
+          requestBody.dataset_file = selectedEmbeddingFile;
+        }
+
+        const response = await fetch(`${API_BASE}/inferences/wav2vec2-detailed`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: 'include',
+          body: JSON.stringify(requestBody),
+          signal: abortController.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch prediction: ${response.status}`);
+        }
+
+        const prediction = await response.json();
+        if (isMounted) {
+          setWav2vecPrediction(prediction);
+        }
+        
+        // Update predictionMap for uploaded files
+        if (selectedFile && prediction) {
+          const isUploadedFile = selectedFile.file_path && (
+            selectedFile.file_path.includes('uploads/') || 
+            selectedFile.file_path.startsWith('uploads/') ||
+            selectedFile.message === "Perturbed file" ||
+            selectedFile.message === "File uploaded successfully" ||
+            selectedFile.message === "File uploaded and processed successfully"
+          ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
+          
+          if (isUploadedFile) {
+            const predictionText = typeof prediction === 'string' ? prediction : 
+              prediction?.predicted_emotion || prediction?.prediction || prediction?.emotion || JSON.stringify(prediction);
+            handlePredictionUpdate(selectedFile.file_id, predictionText);
+          }
+        }
+      } catch (err) {
+        // Ignore abort errors
+        if (err.name === 'AbortError') return;
+        
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        if (isMounted) {
+          setPredictionError(errorMessage);
+          console.error("Error fetching wav2vec2 prediction:", err);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingPredictions(false);
+        }
+      }
+    };
+
+    fetchWav2vecPrediction();
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, [selectedFile, selectedEmbeddingFile, model, dataset]);
+
+  // Fetch whisper prediction when model includes whisper and file is selected
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchWhisperPrediction = async () => {
+      if (!model?.includes("whisper") || (!selectedFile && !selectedEmbeddingFile)) {
+        if (isMounted) {
+          setWhisperPrediction(null);
+          setPredictionError(null);
+          setIsLoadingPredictions(false);
+        }
+        return;
+      }
+
+      setIsLoadingPredictions(true);
+      setPredictionError(null);
+
+      try {
+        let requestBody: any = {
+          model: model
+        };
+        
+        let isUploadedFile = false;
+        
+        if (selectedFile) {
+          // Check if this is an uploaded file - more precise detection
+          isUploadedFile = selectedFile.file_path && (
+            selectedFile.file_path.includes('uploads/') || 
+            selectedFile.file_path.startsWith('uploads/') ||
+            selectedFile.message === "Perturbed file" ||
+            selectedFile.message === "File uploaded successfully" ||
+            selectedFile.message === "File uploaded and processed successfully"
+          ) && !selectedFile.message.includes("Selected from");
+          
+          if (isUploadedFile) {
+            // This is an uploaded file, use file_path
+            requestBody.file_path = selectedFile.file_path;
+          } else {
+            // This is a dataset file (including custom datasets), use dataset and dataset_file
+            requestBody.dataset = dataset;
+            requestBody.dataset_file = selectedFile.filename;
+          }
+        } else if (selectedEmbeddingFile && dataset) {
+          // Use embedding file selection - this is a dataset file
+          requestBody.dataset = dataset;
+          requestBody.dataset_file = selectedEmbeddingFile;
+          isUploadedFile = false;
+        }
+
+        // Choose the correct endpoint based on file type
+        let endpoint: string;
+        const isCustomDataset = dataset?.startsWith('custom:');
+        
+        if (isUploadedFile || isCustomDataset) {
+          // For uploaded files or custom datasets, use basic inference endpoint (no ground truth available)
+          endpoint = `${API_BASE}/inferences/run`;
+        } else {
+          // For regular dataset files, use accuracy endpoint to get ground truth and metrics
+          endpoint = `${API_BASE}/inferences/whisper-accuracy`;
+        }
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: 'include',
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch whisper prediction: ${response.status}`);
+        }
+
+        const prediction = await response.json();
+        
+        let whisperPrediction: WhisperPrediction;
+        
+        if (isUploadedFile || isCustomDataset) {
+          // For uploaded files or custom datasets, convert basic prediction to expected format
+          whisperPrediction = {
+            predicted_transcript: typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction),
+            ground_truth: "",
+            accuracy_percentage: null,
+            word_error_rate: null,
+            character_error_rate: null,
+            levenshtein_distance: null,
+            exact_match: null,
+            character_similarity: null,
+            word_count_predicted: 0,
+            word_count_truth: 0
+          };
+        } else {
+          // For regular dataset files, the accuracy endpoint returns all the metrics
+          whisperPrediction = {
+            predicted_transcript: prediction.predicted_transcript || "",
+            ground_truth: prediction.ground_truth || "",
+            accuracy_percentage: prediction.accuracy_percentage || null,
+            word_error_rate: prediction.word_error_rate || null,
+            character_error_rate: prediction.character_error_rate || null,
+            levenshtein_distance: prediction.levenshtein_distance || null,
+            exact_match: prediction.exact_match || null,
+            character_similarity: prediction.character_similarity || null,
+            word_count_predicted: prediction.word_count_predicted || 0,
+            word_count_truth: prediction.word_count_truth || 0
+          };
+        }
+        
+        if (isMounted) {
+          setWhisperPrediction(whisperPrediction);
+        }
+        
+        // Update predictionMap for uploaded files and custom datasets
+        if (selectedFile && (isUploadedFile || isCustomDataset)) {
+          handlePredictionUpdate(selectedFile.file_id, whisperPrediction.predicted_transcript);
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        if (isMounted) {
+          setPredictionError(errorMessage);
+          console.error("Error fetching whisper prediction:", err);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingPredictions(false);
+        }
+      }
+    };
+
+    fetchWhisperPrediction();
+  }, [selectedFile, selectedEmbeddingFile, model, dataset]);
+  
+  // Determine effective dataset based on uploaded files and custom datasets
+  const effectiveDataset = (() => {
+    // If a custom dataset is selected (starts with custom:), use it as-is
+    if (dataset.startsWith('custom:')) {
+      return dataset;
+    }
+    // Legacy behavior: if there are uploaded files and no custom dataset, show as "custom"
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      return "custom";
+    }
+    // Otherwise use the selected dataset
+    return dataset;
+  })();
+
+  const [predictionMap, setPredictionMap] = useState<Record<string, string>>({});
+
+  const handlePredictionUpdate = (fileId: string, prediction: string) => {
+    console.log("DEBUG: MainLayout handlePredictionUpdate called with:", fileId, prediction);
+    setPredictionMap(prev => {
+      const updated = { ...prev, [fileId]: prediction };
+      console.log("DEBUG: MainLayout - Updated predictionMap:", updated);
+      return updated;
+    });
+  };
 
   const handleUploadSuccess = (uploadResponse: UploadedFile) => {
     console.log("DEBUG: Upload success response:", uploadResponse);
@@ -114,17 +406,6 @@ export const MainLayout = () => {
     }
   };
 
-  const [predictionMap, setPredictionMap] = useState<Record<string, string>>({});
-
-  const handlePredictionUpdate = (fileId: string, prediction: string) => {
-    console.log("DEBUG: MainLayout handlePredictionUpdate called with:", fileId, prediction);
-    setPredictionMap(prev => {
-      const updated = { ...prev, [fileId]: prediction };
-      console.log("DEBUG: MainLayout - Updated predictionMap:", updated);
-      return updated;
-    });
-  };
-
   const handleBatchInferenceStart = useCallback(() => {
     setBatchInferenceStatus('running');
   }, []);
@@ -133,8 +414,20 @@ export const MainLayout = () => {
     setBatchInferenceStatus('done');
   }, []);
 
+  // Clear predictions when model or dataset changes
+  useEffect(() => {
+    console.log('Model or dataset changed, clearing predictions:', model, dataset);
+    setPredictionMap({});
+    setBatchInferenceStatus('idle');
+  }, [model, dataset]);
+
   const handleBatchInference = async (selectedModel: string, selectedDataset: string) => {
+    // Don't run batch inference for legacy "custom" (uploaded files only)
     if (selectedDataset === 'custom') return;
+    
+    // Clear predictions when dataset/model changes to avoid showing old predictions
+    console.log('Clearing predictions for new dataset/model combination:', selectedModel, selectedDataset);
+    setPredictionMap({});
     
     setBatchInferenceStatus('running');
     console.log(`Starting batch inference for ${selectedModel} on ${selectedDataset} dataset`);
@@ -226,10 +519,19 @@ export const MainLayout = () => {
             {/* Right Panel: Audio Player & Label Editor */}
             <Panel defaultSize={25} minSize={20}>
               <DatapointEditorPanel 
-                selectedFile={selectedFile} 
-                dataset={dataset} 
+                selectedFile={selectedFile}
+                selectedEmbeddingFile={selectedEmbeddingFile}
+                dataset={effectiveDataset}
+                originalDataset={dataset}
                 perturbationResult={perturbationResult}
                 predictionMap={predictionMap}
+                model={model}
+                wav2vecPrediction={wav2vecPrediction}
+                whisperPrediction={whisperPrediction}
+                perturbedPredictions={perturbedPredictions}
+                isLoadingPredictions={isLoadingPredictions}
+                isLoadingPerturbed={isLoadingPerturbed}
+                predictionError={predictionError}
               />
             </Panel>
           </PanelGroup>

@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Search, Play, Pause } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Upload, Search, Play, Pause, RefreshCw, HelpCircle } from "lucide-react";
 import { AudioUploader } from "../audio/AudioUploader";
 import { AudioDataTable } from "../audio/AudioDataTable";
 import { toast } from "sonner";
@@ -133,7 +134,7 @@ export const AudioDatasetPanel = ({
       file_id: String(id),
       filename,
       file_path: pathVal || filename,
-      message: "Selected from dataset", // This indicates it's a dataset file
+      message: dataset.startsWith('custom:') ? "Selected from custom dataset" : "Selected from dataset", // This indicates it's a dataset file
     };
 
     // Just select the file for UI purposes, no inference
@@ -162,6 +163,7 @@ export const AudioDatasetPanel = ({
       hasModel: !!model
     });
     
+    // Skip batch inference for legacy "custom" (uploaded files) but allow for custom datasets
     if (dataset === "custom" || !model) return;
     if (datasetMetadata.length === 0) return;
     
@@ -187,6 +189,7 @@ export const AudioDatasetPanel = ({
     setIsInferenceComplete(false);
     setCurrentInferenceIndex(0);
     setBatchInferenceQueue([]);
+    setInferenceStatus({}); // Clear inference status for new dataset
     
     // First, check what's already cached
     const checkCachedResults = async () => {
@@ -372,6 +375,43 @@ export const AudioDatasetPanel = ({
   }, [batchInferenceQueue, currentInferenceIndex, datasetMetadata, model, dataset, originalDataset, onBatchInferenceComplete]);
 
   // Cleanup on unmount or when dataset changes
+  // Reload function to refresh dataset metadata
+  const handleReloadDataset = useCallback(async () => {
+    const allowed = ["common-voice", "ravdess"];
+    const datasetToUse = originalDataset || dataset;
+    if (!allowed.includes(datasetToUse)) {
+      setDatasetMetadata([]);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_BASE}/${dataset}/metadata`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setDatasetMetadata(data as Record<string, string | number>[]);
+        
+        // Extract filenames for embeddings
+        const filenames = data.map((row: Record<string, string | number>) => {
+          const pathVal = row["path"] || row["filepath"] || row["file"] || row["filename"];
+          const filename = typeof pathVal === 'string' ? 
+            (pathVal.split("/").pop() || pathVal.split("\\").pop() || pathVal) : 
+            String(pathVal);
+          return filename;
+        });
+        
+        onAvailableFilesChange?.(filenames);
+        toast.success("Dataset reloaded successfully");
+      } else {
+        setDatasetMetadata([]);
+        onAvailableFilesChange?.([]);
+      }
+    } catch (error) {
+      console.error('Failed to reload dataset:', error);
+      toast.error("Failed to reload dataset");
+    }
+  }, [dataset, originalDataset, onAvailableFilesChange]);
+
   useEffect(() => {
     abortControllerRef.current = new AbortController();
     return () => {
@@ -381,18 +421,29 @@ export const AudioDatasetPanel = ({
     };
   }, [model, dataset]);
 
-  // Fetch dataset metadata when originalDataset changes (for non-custom datasets)
+  // Fetch dataset metadata when originalDataset changes 
   useEffect(() => {
-    const allowed = ["common-voice", "ravdess"];
     const datasetToUse = originalDataset || dataset;
-    if (!allowed.includes(datasetToUse)) {
+    
+    // Skip legacy "custom" (individual uploaded files)
+    if (datasetToUse === "custom") {
       setDatasetMetadata([]);
       return;
     }
+    
+    // Handle both global datasets and custom datasets
+    const allowed = ["common-voice", "ravdess"];
+    const isCustomDataset = datasetToUse.startsWith('custom:');
+    
+    if (!allowed.includes(datasetToUse) && !isCustomDataset) {
+      setDatasetMetadata([]);
+      return;
+    }
+    
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/${dataset}/metadata`, { signal: ac.signal, credentials: 'include' });
+        const res = await fetch(`${API_BASE}/${datasetToUse}/metadata`, { signal: ac.signal, credentials: 'include' });
         if (!res.ok) throw new Error(`Failed to fetch metadata: ${res.status}`);
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -429,14 +480,20 @@ export const AudioDatasetPanel = ({
     if (files) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (file.type.startsWith('audio/')) {
+        
+        // Check both MIME type and file extension for better .flac support
+        const allowedExtensions = ['.wav', '.mp3', '.m4a', '.flac'];
+        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+        const isValidFile = file.type.startsWith('audio/') || allowedExtensions.includes(fileExtension);
+        
+        if (isValidFile) {
           try {
             await uploadFile(file, model ?? "");
           } catch (error) {
             console.error('Upload error:', error);
           }
         } else {
-          toast.error(`Invalid file type: ${file.name}. Only audio files are supported.`);
+          toast.error(`Invalid file type: ${file.name}. Supported formats: WAV, MP3, M4A, FLAC`);
         }
       }
     }
@@ -481,32 +538,61 @@ export const AudioDatasetPanel = ({
   };
 
   return (
-    <div className="h-full panel-background flex flex-col">
-      <div className="panel-header p-3 border-b panel-border">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-sm">Audio Dataset</h3>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
-            </Badge>
-            {dataset !== 'custom' && batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
-              <Badge variant="outline" className="text-xs">
-                Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
+    <TooltipProvider>
+      <div className="h-full panel-background flex flex-col">
+        <div className="panel-header p-3 border-b panel-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="font-weight-bold text-gray-700 text-sm">Audio Dataset</h3>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="text-xs-tight space-y-1">
+                  <p className="font-sm">Browse and manage audio files in your selected dataset.</p>
+                  <p className="font-sm">Upload new files or select from existing datasets.</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs-tight">
+                {uploadedFiles ? `${uploadedFiles.length} uploaded` : "0 files"}
               </Badge>
-            )}
-            {dataset !== 'custom' && (batchInferenceStatus === 'done' || isInferenceComplete) && (
-              <Badge variant="default" className="text-xs">
-                ✓ Inference Complete
-              </Badge>
-            )}
-            <Button size="sm" variant="outline" className="h-7" onClick={handleUploadClick}>
-              <Upload className="h-3 w-3 mr-1" />
-              Upload
-            </Button>
+              {batchInferenceStatus === 'running' && batchInferenceQueue.length > 0 && (
+                <Badge variant="outline" className="text-xs-tight">
+                  Inferencing... {currentInferenceIndex}/{batchInferenceQueue.length}
+                </Badge>
+              )}
+              {(batchInferenceStatus === 'done' || isInferenceComplete) && (
+                <Badge variant="default" className="text-xs-tight text-white font-normal">
+                  ✓ Inference Complete
+                </Badge>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7" onClick={handleUploadClick}>
+                    <Upload className="h-3 w-3 mr-1" />
+                    Upload
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Upload audio files (.wav, .mp3, .m4a, .flac)</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-7" onClick={handleReloadDataset} title="Reload dataset">
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reload dataset metadata and refresh the file list</p>
+                </TooltipContent>
+              </Tooltip>
             <input
               ref={fileInputRef}
               type="file"
-              accept="audio/*"
+              accept="audio/*,.flac,.wav,.mp3,.m4a"
               multiple
               onChange={handleFileSelect}
               className="hidden"
@@ -517,12 +603,19 @@ export const AudioDatasetPanel = ({
         {/* Search bar */}
         <div className="mt-2 relative">
           <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-          <Input
-            placeholder="Search audio files..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-7 h-8 text-xs"
-          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Input
+                placeholder="Search audio files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-7 h-8 text-xs-tight"
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Search by filename or any metadata field</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
       
@@ -548,7 +641,8 @@ export const AudioDatasetPanel = ({
       </div>
       
       {/* Upload overlay */}
-      <AudioUploader onUploadSuccess={onUploadSuccess} />
+      <AudioUploader onUploadSuccess={onUploadSuccess} model={model} />
     </div>
+    </TooltipProvider>
   );
 };

@@ -27,6 +27,7 @@ interface SaliencyVisualizationProps {
   selectedFile?: any;
   model?: string;
   dataset?: string;
+  originalDataset?: string;
 }
 
 interface StaticWaveformProps {
@@ -160,7 +161,7 @@ const StaticWaveform = ({ audioUrl, duration }: StaticWaveformProps) => {
   );
 };
 
-export const SaliencyVisualization = ({ selectedFile, model, dataset }: SaliencyVisualizationProps) => {
+export const SaliencyVisualization = ({ selectedFile, model, dataset, originalDataset }: SaliencyVisualizationProps) => {
   const [saliencyData, setSaliencyData] = useState<SaliencyData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,19 +177,38 @@ export const SaliencyVisualization = ({ selectedFile, model, dataset }: Saliency
   const audioUrl = useMemo(() => {
     if (!selectedFile) return '';
     
-    if (dataset && dataset !== 'custom') {
+    // Check if this is an uploaded file
+    const isUploadedFile = typeof selectedFile === 'object' && selectedFile.file_path && (
+      selectedFile.file_path.includes('uploads/') || 
+      selectedFile.file_path.startsWith('uploads/') ||
+      selectedFile.message === "Perturbed file" ||
+      selectedFile.message === "File uploaded successfully" ||
+      selectedFile.message === "File uploaded and processed successfully"
+    ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
+    
+    if (isUploadedFile) {
+      // This is an uploaded file, use the upload endpoint
+      return `${API_BASE}/upload/file/${selectedFile.file_id}`;
+    }
+    
+    // Use original dataset if available and it's a real dataset
+    const datasetToUse = originalDataset && originalDataset !== "custom" ? originalDataset : dataset;
+    
+    if (datasetToUse && datasetToUse !== 'custom') {
       const filename = typeof selectedFile === 'string' 
         ? selectedFile 
         : selectedFile?.filename;
       if (filename) {
-        return `${API_BASE}/${dataset}/file/${filename}`;
+        // Both built-in and custom datasets use the same route pattern
+        return `${API_BASE}/${encodeURIComponent(datasetToUse)}/file/${encodeURIComponent(filename)}`;
       }
     } else if (typeof selectedFile === 'object' && selectedFile.file_path) {
+      // Fallback for uploaded files
       return `${API_BASE}/upload/file/${selectedFile.file_path.split('/').pop()}`;
     }
     
     return '';
-  }, [selectedFile, dataset]);
+  }, [selectedFile, dataset, originalDataset]);
 
   const fetchSaliencyData = async () => {
     if (!selectedFile || !model) return;
@@ -200,9 +220,13 @@ export const SaliencyVisualization = ({ selectedFile, model, dataset }: Saliency
       // Send through the selected model so backend can infer base vs large
       const backendModel = model;
 
+      // Determine which dataset to use for request
+      // Use original dataset if available and it's a real dataset
+      const datasetToUse = originalDataset && originalDataset !== "custom" ? originalDataset : dataset;
+
       // Generate unique request identifier to prevent stale results
-      const fileIdentifier = dataset && dataset !== 'custom' 
-        ? `${dataset}_${selectedFile?.filename || selectedFile}` 
+      const fileIdentifier = datasetToUse && datasetToUse !== 'custom' 
+        ? `${datasetToUse}_${selectedFile?.filename || selectedFile}` 
         : `custom_${selectedFile?.file_path || selectedFile?.file_id}`;
       
       const requestBody: any = {
@@ -212,22 +236,38 @@ export const SaliencyVisualization = ({ selectedFile, model, dataset }: Saliency
         _file_id: fileIdentifier, // Add for debugging
       };
 
-      if (dataset && dataset !== 'custom') {
+      // Check if this is an uploaded file
+      const isUploadedFile = typeof selectedFile === 'object' && selectedFile.file_path && (
+        selectedFile.file_path.includes('uploads/') || 
+        selectedFile.file_path.startsWith('uploads/') ||
+        selectedFile.message === "Perturbed file" ||
+        selectedFile.message === "File uploaded successfully" ||
+        selectedFile.message === "File uploaded and processed successfully"
+      ) && selectedFile.message !== "Selected from embeddings" && selectedFile.message !== "Selected from dataset";
+
+      if (isUploadedFile) {
+        // This is an uploaded file, use file_path
+        requestBody.file_path = selectedFile.file_path;
+      } else if (datasetToUse && datasetToUse !== 'custom') {
+        // This is a dataset file (built-in or custom dataset)
         const dsFilename = typeof selectedFile === 'string' 
           ? selectedFile 
           : (selectedFile?.filename as string | undefined);
         if (!dsFilename) {
           throw new Error('No dataset file selected.');
         }
-        requestBody.dataset = dataset;
+        requestBody.dataset = datasetToUse;
         requestBody.dataset_file = dsFilename;
-      } else if (typeof selectedFile === 'object' && (selectedFile.file_path || selectedFile.file_id)) {
-        if (!selectedFile.file_path) {
-          throw new Error('Selected upload has no file_path.');
-        }
-        requestBody.file_path = selectedFile.file_path;
       } else {
-        throw new Error('Invalid file selection or missing file information.');
+        // Fallback for generic "custom" case (uploaded files)
+        if (typeof selectedFile === 'object' && (selectedFile.file_path || selectedFile.file_id)) {
+          if (!selectedFile.file_path) {
+            throw new Error('Selected upload has no file_path.');
+          }
+          requestBody.file_path = selectedFile.file_path;
+        } else {
+          throw new Error('Invalid file selection or missing file information.');
+        }
       }
 
       const response = await fetch(`${API_BASE}/saliency/generate`, {

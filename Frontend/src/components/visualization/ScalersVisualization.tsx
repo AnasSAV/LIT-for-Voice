@@ -6,7 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
 import { API_BASE } from '@/lib/api';
+import { getFeatureExplanation } from "@/lib/audioFeatures";
 
 interface ScalersVisualizationProps {
   model?: string;
@@ -157,12 +160,15 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
       }
 
       console.log('Fetching audio frequency analysis for:', requestBody);
+      console.log('Browser cookies:', document.cookie);
+      console.log('Dataset being sent:', dataset);
 
       const response = await fetch("http://localhost:8000/inferences/audio-frequency-batch", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include', // Include session cookies
         body: JSON.stringify(requestBody),
       });
 
@@ -317,9 +323,9 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
     );
   }
 
-  // Create colors for selected vs unselected points
+  // Create colors for selected vs unselected points - using gold for selected to match EmbeddingPlot
   const colors = text.map(filename => 
-    selectedPoints.includes(filename) ? '#ef4444' : '#3b82f6'
+    selectedPoints.includes(filename) ? '#FFD700' : '#3b82f6'
   );
 
   const trace = {
@@ -360,17 +366,14 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
   };
 
   const config = {
-    displayModeBar: true,
-    modeBarButtonsToRemove: [
-      'zoom2d', 'pan2d', 'autoScale2d', 'resetScale2d',
-      'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleHover'
-    ],
+    displayModeBar: false, // Hide the mode bar completely
     displaylogo: false,
     responsive: true
   };
 
   return (
-    <div className="h-full flex flex-col space-y-3">
+    <TooltipProvider>
+      <div className="h-full flex flex-col space-y-3">
       {/* Controls */}
       <div className="flex flex-wrap gap-2 items-center text-xs">
         
@@ -452,7 +455,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
               ) : analysisType === "frequency" && audioFrequencyAnalysis ? (
                 <>
                   {/* Audio Frequency Analysis Results */}
-                  {/* Cache Info */}
+                  {/* Cache Info
                   {audioFrequencyAnalysis.cache_info && (
                     <div className="space-y-2">
                       <div className="text-xs font-medium">Cache Performance</div>
@@ -471,31 +474,64 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                         </div>
                       </div>
                     </div>
-                  )}
+                  )} */}
 
                   {/* Summary */}
                   <div className="space-y-2">
-                    <div className="text-xs font-medium">Summary</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                      <div>Files: {audioFrequencyAnalysis.summary.total_files}</div>
-                      <div>Features: {audioFrequencyAnalysis.summary.total_features_extracted}</div>
-                      <div>Avg Duration: {audioFrequencyAnalysis.summary.avg_duration.toFixed(1)}s</div>
-                      <div>Avg Tempo: {audioFrequencyAnalysis.summary.avg_tempo.toFixed(0)} BPM</div>
+                    <div className="text-sm-tight font-medium">Summary Statistics</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="text-xs-tight text-gray-500">
+                        <span className="text-gray-700 font-medium">Files:</span> {audioFrequencyAnalysis.summary.total_files}
+                      </div>
+                      <div className="text-xs-tight text-gray-500">
+                        <span className="text-gray-700 font-medium">Features:</span> {audioFrequencyAnalysis.summary.total_features_extracted}
+                      </div>
+                      <div className="text-xs-tight text-gray-500">
+                        <span className="text-gray-700 font-medium">Avg Duration:</span> {audioFrequencyAnalysis.summary.avg_duration.toFixed(1)}s
+                      </div>
+                      <div className="text-xs-tight text-gray-500">
+                        <span className="text-gray-700 font-medium">Avg Tempo:</span> {audioFrequencyAnalysis.summary.avg_tempo.toFixed(0)} BPM
+                      </div>
                     </div>
                   </div>
 
                   {/* Most Common Features */}
                   <div className="space-y-2">
-                    <div className="text-xs font-medium">Top 5 Most Common Features</div>
-                    <div className="space-y-1">
+                    <div className="text-sm-tight font-medium flex items-center gap-2">
+                      Top 5 Most Common Features
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          Features ranked by prevalence and stability across all audio files
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <div className="space-y-2">
                       {audioFrequencyAnalysis.most_common_features.slice(0, 5).map((feature, index) => (
-                        <div key={index} className="space-y-1">
-                          <div className="flex justify-between text-xs">
-                            <span className="font-mono text-blue-700 truncate">{feature.feature.replace(/_/g, ' ')}</span>
-                            <span>Score: {feature.prevalence_score.toFixed(2)}</span>
+                        <div key={index} className="p-2 bg-gray-50 rounded border">
+                          <div className="flex justify-between items-start text-xs-tight">
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="font-mono text-blue-700 font-medium">
+                                {feature.feature.replace(/_/g, ' ').toUpperCase()}
+                              </span>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <HelpCircle className="h-3 w-3 text-gray-400 hover:text-gray-600" />
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-sm">
+                                  <div className="space-y-1">
+                                    <div className="font-medium text-xs">{feature.feature.replace(/_/g, ' ')}</div>
+                                    <div className="text-xs">{getFeatureExplanation(feature.feature)}</div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                            <span className="text-gray-600">Score: {feature.prevalence_score.toFixed(2)}</span>
                           </div>
-                          <div className="text-xs text-gray-500">
-                            μ={feature.mean.toFixed(2)}, σ={feature.std.toFixed(2)}
+                          <div className="text-xs-tight text-gray-500 mt-1">
+                            Mean: {feature.mean.toFixed(3)} • Std: {feature.std.toFixed(3)} • Stability: {feature.stability_score.toFixed(2)}
                           </div>
                         </div>
                       ))}
@@ -504,18 +540,37 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
 
                   {/* Feature Categories */}
                   <div className="space-y-2">
-                    <div className="text-xs font-medium">Feature Categories</div>
-                    <div className="space-y-1">
+                    <div className="text-sm-tight font-medium flex items-center gap-2">
+                      Feature Categories
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          Audio features grouped by type: spectral (frequency-based), temporal (time-based), and harmonic (pitch-based)
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       {Object.entries(audioFrequencyAnalysis.feature_categories)
                         .filter(([_, features]) => features.length > 0)
                         .map(([category, features]) => (
-                          <div key={category} className="text-xs">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs capitalize">
+                          <div key={category} className="p-2 bg-gray-50 rounded border">
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline" className="text-xs-tight capitalize">
                                 {category}
                               </Badge>
-                              <span className="text-gray-600">{features.length} features</span>
+                              <span className="text-xs-tight text-gray-600">{features.length}</span>
                             </div>
+                            {features.length <= 3 && (
+                              <div className="mt-1 space-y-1">
+                                {features.map((feature, idx) => (
+                                  <div key={idx} className="text-xs-tight text-gray-500 truncate">
+                                    {feature.replace(/_/g, ' ')}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                     </div>
@@ -523,22 +578,22 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
 
                   {/* Individual Files */}
                   <div className="space-y-2">
-                    <div className="text-xs font-medium">Individual Files</div>
+                    <div className="text-sm-tight font-medium">Individual Files ({audioFrequencyAnalysis.individual_analyses.length} total)</div>
                     <div className="max-h-32 overflow-y-auto space-y-1">
-                      {audioFrequencyAnalysis.individual_analyses.slice(0, 10).map((analysis, index) => (
-                        <div key={index} className="text-xs p-2 bg-gray-50 rounded border">
-                          <div className="font-mono text-blue-700 truncate">
+                      {audioFrequencyAnalysis.individual_analyses.slice(0, 8).map((analysis, index) => (
+                        <div key={index} className="text-xs-tight p-2 bg-gray-50 rounded border">
+                          <div className="font-mono text-blue-700 truncate text-xs-tight">
                             {analysis.filename}
                           </div>
-                          <div className="text-gray-600 mt-1 flex justify-between">
-                            <span>{analysis.features.duration?.toFixed(1)}s</span>
-                            <span>{analysis.features.tempo?.toFixed(0)} BPM</span>
+                          <div className="text-gray-500 mt-1 flex justify-between">
+                            <span>Duration: {analysis.features.duration?.toFixed(1)}s</span>
+                            <span>Tempo: {analysis.features.tempo?.toFixed(0)} BPM</span>
                           </div>
                         </div>
                       ))}
-                      {audioFrequencyAnalysis.individual_analyses.length > 10 && (
-                        <div className="text-xs text-gray-500 text-center pt-1">
-                          ... and {audioFrequencyAnalysis.individual_analyses.length - 10} more files
+                      {audioFrequencyAnalysis.individual_analyses.length > 8 && (
+                        <div className="text-xs-tight text-gray-500 text-center pt-1">
+                          ... and {audioFrequencyAnalysis.individual_analyses.length - 8} more files
                         </div>
                       )}
                     </div>
@@ -547,7 +602,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
               ) : analysisType === "default" && model === 'wav2vec2' && batchPrediction ? (
                 <>
                   {/* Wav2Vec2 Emotion Analysis */}
-                  {/* Cache Info */}
+                  {/* Cache Info
                   {batchPrediction.cache_info && (
                     <div className="space-y-2">
                       <div className="text-xs font-medium">Cache Performance</div>
@@ -571,7 +626,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                         )}
                       </div>
                     </div>
-                  )}
+                  )} */}
 
                   {/* Summary */}
                   <div className="space-y-2">
@@ -716,5 +771,6 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 };

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Layers3, Target } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCcw, Layers3, Target } from "lucide-react";
 
 interface EmbeddingPlotProps {
   selectedMethod?: string;
@@ -17,10 +17,18 @@ interface EmbeddingPlotProps {
 
 type PlaneType = 'none' | 'xy' | 'xz' | 'yz';
 
-export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSelect, onAngleRangeSelect, selectedFile }: EmbeddingPlotProps) => {
+// Separate component for the actual plot content
+interface EmbeddingPlotContentProps {
+  selectedMethod: string;
+  is3D: boolean;
+  onPointSelect?: (filename: string, coordinates: number[]) => void;
+  onAngleRangeSelect?: (selectedFiles: string[]) => void;
+  selectedFile?: string | null;
+}
+
+const EmbeddingPlotContent = ({ selectedMethod, is3D, onPointSelect, onAngleRangeSelect, selectedFile }: EmbeddingPlotContentProps) => {
   const { embeddingData, isLoading, error } = useEmbedding();
   const plotRef = useRef<any>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedPlane, setSelectedPlane] = useState<PlaneType>('none');
   const [angleMin, setAngleMin] = useState<number>(40);
   const [angleMax, setAngleMax] = useState<number>(50);
@@ -64,76 +72,6 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
       }
     }
   }, [onPointSelect, is3D]);
-
-  // Zoom control functions
-  const handleZoomIn = useCallback(() => {
-    if (plotRef.current) {
-      const plot = plotRef.current;
-      if (is3D) {
-        // For 3D plots, adjust camera distance
-        const currentEye = plot.layout.scene?.camera?.eye || { x: 1.5, y: 1.5, z: 1.5 };
-        const newEye = {
-          x: currentEye.x * 0.8,
-          y: currentEye.y * 0.8,
-          z: currentEye.z * 0.8
-        };
-        plot.relayout({ 'scene.camera.eye': newEye });
-      } else {
-        // For 2D plots, use Plotly's zoom functionality
-        plot.relayout({
-          'xaxis.range': plot._fullLayout.xaxis.range ? 
-            [plot._fullLayout.xaxis.range[0] * 0.8, plot._fullLayout.xaxis.range[1] * 0.8] : undefined,
-          'yaxis.range': plot._fullLayout.yaxis.range ?
-            [plot._fullLayout.yaxis.range[0] * 0.8, plot._fullLayout.yaxis.range[1] * 0.8] : undefined
-        });
-      }
-    }
-  }, [is3D]);
-
-  const handleZoomOut = useCallback(() => {
-    if (plotRef.current) {
-      const plot = plotRef.current;
-      if (is3D) {
-        // For 3D plots, adjust camera distance
-        const currentEye = plot.layout.scene?.camera?.eye || { x: 1.5, y: 1.5, z: 1.5 };
-        const newEye = {
-          x: currentEye.x * 1.25,
-          y: currentEye.y * 1.25,
-          z: currentEye.z * 1.25
-        };
-        plot.relayout({ 'scene.camera.eye': newEye });
-      } else {
-        // For 2D plots, use Plotly's zoom functionality
-        plot.relayout({
-          'xaxis.range': plot._fullLayout.xaxis.range ? 
-            [plot._fullLayout.xaxis.range[0] * 1.25, plot._fullLayout.xaxis.range[1] * 1.25] : undefined,
-          'yaxis.range': plot._fullLayout.yaxis.range ?
-            [plot._fullLayout.yaxis.range[0] * 1.25, plot._fullLayout.yaxis.range[1] * 1.25] : undefined
-        });
-      }
-    }
-  }, [is3D]);
-
-  const handleResetZoom = useCallback(() => {
-    if (plotRef.current) {
-      const plot = plotRef.current;
-      if (is3D) {
-        plot.relayout({ 
-          'scene.camera.eye': { x: 1.5, y: 1.5, z: 1.5 },
-          'scene.camera.center': { x: 0, y: 0, z: 0 }
-        });
-      } else {
-        plot.relayout({
-          'xaxis.autorange': true,
-          'yaxis.autorange': true
-        });
-      }
-    }
-  }, [is3D]);
-
-  const toggleFullscreen = useCallback(() => {
-    setIsFullscreen(!isFullscreen);
-  }, [isFullscreen]);
 
   // Use real embedding data if available, otherwise fall back to mock data
   const getPlotData = () => {
@@ -201,11 +139,12 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
   const createPlane = (planeType: PlaneType, bounds: { x: [number, number], y: [number, number], z: [number, number] }) => {
     if (!is3D || planeType === 'none') return null;
 
-    const [xMin, xMax] = bounds.x;
-    const [yMin, yMax] = bounds.y;
-    const [zMin, zMax] = bounds.z;
+    // Make bounds bigger for more visible plane
+    const [xMin, xMax] = [bounds.x[0] * 1.3, bounds.x[1] * 1.3];
+    const [yMin, yMax] = [bounds.y[0] * 1.3, bounds.y[1] * 1.3];
+    const [zMin, zMax] = [bounds.z[0] * 1.3, bounds.z[1] * 1.3];
 
-    const planeAlpha = 0.2; // 80% transparency (20% opacity)
+    const planeAlpha = 0.35; // Increased opacity (35% instead of 20%)
     
     switch (planeType) {
       case 'xy': // X-Y plane through origin (Z = 0)
@@ -215,7 +154,7 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
           y: [[yMin, yMin], [yMax, yMax]],
           z: [[0, 0], [0, 0]], // Always pass through Z = 0 (origin)
           opacity: planeAlpha,
-          colorscale: [[0, 'rgba(59, 130, 246, 0.3)'], [1, 'rgba(59, 130, 246, 0.3)']], // Blue
+          colorscale: [[0, 'rgba(59, 130, 246, 0.5)'], [1, 'rgba(59, 130, 246, 0.5)']], // Blue with higher opacity
           showscale: false,
           hoverinfo: 'skip',
           name: 'X-Y Plane (Z=0)'
@@ -227,7 +166,7 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
           y: [[0, 0], [0, 0]], // Always pass through Y = 0 (origin)
           z: [[zMin, zMin], [zMax, zMax]],
           opacity: planeAlpha,
-          colorscale: [[0, 'rgba(16, 185, 129, 0.3)'], [1, 'rgba(16, 185, 129, 0.3)']], // Green
+          colorscale: [[0, 'rgba(16, 185, 129, 0.5)'], [1, 'rgba(16, 185, 129, 0.5)']], // Green with higher opacity
           showscale: false,
           hoverinfo: 'skip',
           name: 'X-Z Plane (Y=0)'
@@ -239,7 +178,7 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
           y: [[yMin, yMax], [yMin, yMax]],
           z: [[zMin, zMin], [zMax, zMax]],
           opacity: planeAlpha,
-          colorscale: [[0, 'rgba(239, 68, 68, 0.3)'], [1, 'rgba(239, 68, 68, 0.3)']], // Red
+          colorscale: [[0, 'rgba(239, 68, 68, 0.5)'], [1, 'rgba(239, 68, 68, 0.5)']], // Red with higher opacity
           showscale: false,
           hoverinfo: 'skip',
           name: 'Y-Z Plane (X=0)'
@@ -309,68 +248,9 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     }
   }, [selectedFiles, onAngleRangeSelect]); // Remove selectedByAngle from dependencies to prevent loops
 
-  // Select points based on angle range
-  const selectPointsByAngleRange = useCallback(() => {
-    if (!is3D || selectedPlane === 'none' || !embeddingData?.reduced_embeddings) {
-      setSelectedByAngle([]);
-      return;
-    }
-
-    const selectedFiles = embeddingData.reduced_embeddings
-      .filter(point => {
-        if (point.coordinates.length < 3) return false;
-        
-        const [x, y, z] = point.coordinates;
-        const angle = calculateAngleToPlane(x, y, z, selectedPlane);
-        
-        return angle >= angleMin && angle <= angleMax;
-      })
-      .map(point => point.filename);
-
-    setSelectedByAngle(selectedFiles);
-    
-    // Notify parent component
-    if (onAngleRangeSelect) {
-      onAngleRangeSelect(selectedFiles);
-    }
-  }, [is3D, selectedPlane, angleMin, angleMax, embeddingData, onAngleRangeSelect]);
-
-  // Auto-update selection when parameters change
-  useEffect(() => {
-    selectPointsByAngleRange();
-  }, [selectPointsByAngleRange]);
-
   const plotData = getPlotData();
   const { x, y, colors, text } = plotData;
   const z = 'z' in plotData ? plotData.z : undefined;
-
-  // Enhanced color mapping for emotions and spatial regions
-  const colorMap = {
-    // Emotion-based colors (vibrant and distinct)
-    'neutral': '#94a3b8',      // Slate gray
-    'happy': '#fbbf24',        // Amber
-    'sad': '#3b82f6',          // Blue
-    'angry': '#ef4444',        // Red
-    'fear': '#8b5cf6',         // Purple
-    'disgust': '#10b981',      // Emerald
-    'surprise': '#f97316',     // Orange
-    'calm': '#06b6d4',         // Cyan
-    
-    // Spatial region colors (cooler palette for non-emotion data)
-    'region1': '#ec4899',      // Pink - Top-right
-    'region2': '#8b5cf6',      // Purple - Top-left
-    'region3': '#06b6d4',      // Cyan - Bottom-left
-    'region4': '#10b981',      // Emerald - Bottom-right
-    'center': '#f59e0b',       // Amber - Center
-    'mid_vertical': '#6366f1',  // Indigo - Middle vertical
-    'mid_horizontal': '#84cc16', // Lime - Middle horizontal
-    'unknown': '#6b7280'       // Gray
-  };
-
-  const numericColors = colors.map(color => {
-    const colorKeys = Object.keys(colorMap);
-    return colorKeys.indexOf(color) >= 0 ? colorKeys.indexOf(color) : colorKeys.indexOf('unknown');
-  });
 
   // Calculate bounds for plane creation
   const bounds = x.length > 0 ? {
@@ -410,9 +290,9 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
 
   // Create marker colors based on selection
   const markerColors = text.map(filename => {
-    if (selectedFile === filename) return '#fbbf24'; // Amber for selected file
+    if (selectedFile === filename) return '#FFD700'; // Gold for selected file
     if (selectedByAngle.includes(filename)) return '#ef4444'; // Red for angle selected
-    return numericColors[text.indexOf(filename)]; // Default color mapping
+    return '#3b82f6'; // Blue for all other points
   });
 
   // Create marker opacities based on selection
@@ -421,7 +301,8 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     if (!hasSelection) return 0.8; // Default opacity when no selection
     if (selectedFile === filename) return 1.0; // Full opacity for selected file
     if (selectedByAngle.includes(filename)) return 0.9; // High opacity for angle selected
-    return 0.15; // Very low opacity (85% transparent) for non-selected when there's a selection
+    // Different transparency for 2D vs 3D unselected points
+    return is3D ? 0.1 : 0.45; // More transparent in 3D, slightly visible in 2D
   });
 
   // Create traces array - start with main scatter plot
@@ -451,10 +332,6 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
     marker: {
       size: markerSizes,
       color: markerColors,
-      colorscale: Object.entries(colorMap).map(([key, value], index) => [
-        index / (Object.keys(colorMap).length - 1),
-        value
-      ]),
       showscale: false,
       line: {
         width: 0, // Remove marker outlines
@@ -688,20 +565,18 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
       )}
       
       <Plot
+        ref={plotRef}
         data={traces}
         layout={layout}
         onClick={handlePointClick}
         config={{
-          displayModeBar: true,
-          modeBarButtonsToRemove: is3D 
-            ? ['pan2d', 'lasso2d', 'select2d'] 
-            : [],
+          displayModeBar: false, // Hide the mode bar completely
           displaylogo: false,
           responsive: true,
           autosizable: true,
           scrollZoom: true,
           doubleClick: 'reset+autosize',
-          showTips: true,
+          showTips: false, // Hide hover tips,
           toImageButtonOptions: {
             format: 'png',
             filename: `embeddings_${selectedMethod}_${is3D ? '3D' : '2D'}${selectedPlane !== 'none' ? `_${selectedPlane}` : ''}`,
@@ -712,6 +587,20 @@ export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSel
         }}
         style={{ width: '100%', height: '100%' }}
         useResizeHandler={true}
+      />
+    </div>
+  );
+};
+
+export const EmbeddingPlot = ({ selectedMethod = "pca", is3D = false, onPointSelect, onAngleRangeSelect, selectedFile }: EmbeddingPlotProps) => {
+  return (
+    <div className="w-full h-full min-h-0 relative">
+      <EmbeddingPlotContent
+        selectedMethod={selectedMethod}
+        is3D={is3D}
+        onPointSelect={onPointSelect}
+        onAngleRangeSelect={onAngleRangeSelect}
+        selectedFile={selectedFile}
       />
     </div>
   );

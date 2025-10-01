@@ -3,9 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { AudioPlayer } from "../audio/AudioPlayer";
 import { WaveformViewer } from "../audio/WaveformViewer";
-import { Play, Pause, RotateCcw, Trash2, Plus } from "lucide-react";
+import { PredictionDisplay } from "../predictions/PredictionDisplay";
+import { Play, Pause, RotateCcw, Trash2, Plus, HelpCircle } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import { API_BASE } from '@/lib/api';
 
@@ -17,6 +19,26 @@ interface UploadedFile {
   size?: number;
   duration?: number;
   sample_rate?: number;
+}
+
+interface Wav2Vec2Prediction {
+  predicted_emotion: string;
+  probabilities: Record<string, number>;
+  confidence: number;
+  ground_truth_emotion?: string;
+}
+
+interface WhisperPrediction {
+  predicted_transcript: string;
+  ground_truth: string;
+  accuracy_percentage: number | null;
+  word_error_rate: number | null;
+  character_error_rate: number | null;
+  levenshtein_distance: number | null;
+  exact_match: number | null;
+  character_similarity: number | null;
+  word_count_predicted: number;
+  word_count_truth: number;
 }
 
 interface PerturbationResult {
@@ -36,12 +58,35 @@ interface PerturbationResult {
 
 interface DatapointEditorPanelProps {
   selectedFile?: UploadedFile | null;
-  dataset?: string; // "custom" | dataset key
+  selectedEmbeddingFile?: string | null;
+  dataset?: string; // "custom" | dataset key (effective dataset)
+  originalDataset?: string; // Original dataset selection from toolbar
   perturbationResult?: PerturbationResult | null;
   predictionMap?: Record<string, string>;
+  model?: string;
+  wav2vecPrediction?: Wav2Vec2Prediction | null;
+  whisperPrediction?: WhisperPrediction | null;
+  perturbedPredictions?: Wav2Vec2Prediction | WhisperPrediction | null;
+  isLoadingPredictions?: boolean;
+  isLoadingPerturbed?: boolean;
+  predictionError?: string | null;
 }
 
-export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturbationResult, predictionMap }: DatapointEditorPanelProps) => {
+export const DatapointEditorPanel = ({ 
+  selectedFile, 
+  selectedEmbeddingFile,
+  dataset = "custom", 
+  originalDataset,
+  perturbationResult, 
+  predictionMap,
+  model,
+  wav2vecPrediction,
+  whisperPrediction,
+  perturbedPredictions,
+  isLoadingPredictions,
+  isLoadingPerturbed,
+  predictionError
+}: DatapointEditorPanelProps) => {
   const [selectedLabel, setSelectedLabel] = useState<string>("neutral");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -60,8 +105,6 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     if (!selectedFile) return undefined;
     
     // Check if this is an uploaded file - more precise detection
-    // Uploaded files have file_path that contains "uploads/" OR have specific message types
-    // Dataset files have message "Selected from embeddings" or no uploads/ in path
     const isUploadedFile = selectedFile.file_path && (
       selectedFile.file_path.includes('uploads/') || 
       selectedFile.file_path.startsWith('uploads/') ||
@@ -73,12 +116,27 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
     if (isUploadedFile) {
       // This is an uploaded file, use the upload endpoint
       return `${API_BASE}/upload/file/${selectedFile.file_id}`;
-    } else if (dataset && dataset !== "custom") {
-      // This is a dataset file
+    }
+    
+    // For dataset files (including files selected from embeddings)
+    // Use original dataset if available and it's a real dataset
+    const datasetToUse = originalDataset && originalDataset !== "custom" ? originalDataset : dataset;
+    
+    if (datasetToUse && datasetToUse !== "custom") {
+      // This is a dataset file from built-in or custom datasets
       const filename = encodeURIComponent(selectedFile.filename);
-      return `${API_BASE}/${dataset}/file/${filename}`;
+      
+      // Handle custom datasets vs built-in datasets
+      if (datasetToUse.startsWith('custom:')) {
+        // Custom dataset: use the original route /{dataset}/file/{filename}
+        // The backend handles the custom dataset format properly
+        return `${API_BASE}/${encodeURIComponent(datasetToUse)}/file/${filename}`;
+      } else {
+        // Built-in dataset: use /{dataset}/file/{filename}
+        return `${API_BASE}/${encodeURIComponent(datasetToUse)}/file/${filename}`;
+      }
     } else {
-      // Fallback to upload endpoint
+      // Fallback to upload endpoint when dataset is "custom" (generic case)
       return `${API_BASE}/upload/file/${selectedFile.file_id}`;
     }
   })();
@@ -116,8 +174,10 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
   // Debug logging for selectedFile and audioUrl
   useEffect(() => {
     console.log('DatapointEditorPanel - selectedFile changed:', selectedFile);
+    console.log('DatapointEditorPanel - dataset:', dataset);
+    console.log('DatapointEditorPanel - originalDataset:', originalDataset);
     console.log('DatapointEditorPanel - audioUrl:', audioUrl);
-  }, [selectedFile, audioUrl]);
+  }, [selectedFile, audioUrl, dataset, originalDataset]);
 
   // Reset playback when file changes or when switching between original/perturbed
   useEffect(() => {
@@ -133,58 +193,93 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
   }, [selectedFile?.file_id, dataset, showPerturbed, perturbationResult?.filename]);
   
   return (
-    <div className="h-full bg-gray-50 border-l border-gray-200 flex flex-col">
-      <div className="bg-gray-100 p-3 border-b border-gray-200">
-        <h3 className="font-medium text-sm text-gray-800">Datapoint Editor</h3>
-      </div>
+    <TooltipProvider>
+      <div className="h-full bg-white border-l border-gray-200 flex flex-col">
+        <div className="panel-header p-3 border-b border-gray-200">
+          <h3 className="font-medium text-sm text-gray-800 flex items-center gap-2">
+            Datapoint Editor
+            <Tooltip>
+              <TooltipTrigger>
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent className="font-normal">
+                Edit and analyze individual audio samples with predictions and perturbations
+              </TooltipContent>
+            </Tooltip>
+          </h3>
+        </div>
       
       <div className="flex-1 p-3 overflow-auto space-y-4">
-        {/* File Info */}
+        {/* Sample Info - Top */}
         <Card className="border-gray-200 bg-white">
-          <CardHeader className="pb-2">
+          <CardHeader className="panel-header pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm text-gray-800">Sample Info</CardTitle>
+              <CardTitle className="text-sm text-gray-800 flex items-center gap-2">
+                Sample Info
+                <Tooltip>
+                  <TooltipTrigger>
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="font-normal">
+                    Detailed information about the selected audio sample
+                  </TooltipContent>
+                </Tooltip>
+              </CardTitle>
               {perturbationResult?.success && (
-                <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
-                  <Button
-                    variant={!showPerturbed ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setShowPerturbed(false)}
-                    className={`text-xs h-7 px-3 transition-all duration-200 ${
-                      !showPerturbed 
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
-                        : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
-                    }`}
-                  >
-                    Original
-                  </Button>
-                  <Button
-                    variant={showPerturbed ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setShowPerturbed(true)}
-                    className={`text-xs h-7 px-3 transition-all duration-200 ${
-                      showPerturbed 
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
-                        : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
-                    }`}
-                  >
-                    Perturbed
-                  </Button>
+                <div className="flex items-center gap-1 p-1 bg-white border border-gray-200 rounded-lg">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={!showPerturbed ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setShowPerturbed(false)}
+                        className={`text-xs h-7 px-3 transition-all duration-200 ${
+                          !showPerturbed 
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
+                            : 'text-gray-600 hover:bg-blue-50 hover:text-gray-800'
+                        }`}
+                      >
+                        Original
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="font-normal">
+                      View the original unmodified audio file
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={showPerturbed ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => setShowPerturbed(true)}
+                        className={`text-xs h-7 px-3 transition-all duration-200 ${
+                          showPerturbed 
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
+                            : 'text-gray-600 hover:bg-blue-50 hover:text-gray-800'
+                        }`}
+                      >
+                        Perturbed
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="font-normal">
+                      View the modified audio file with applied perturbations
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               )}
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="text-xs">
-              <span className="text-gray-600">File:</span>
-              <span className="ml-2 font-mono text-gray-800">{currentFileInfo?.filename || "No file selected"}</span>
+            <div className="text-xs-tight">
+              <span className="text-gray-500">File:</span>
+              <span className="ml-2 font-mono text-gray-700">{currentFileInfo?.filename || "No file selected"}</span>
               {showPerturbed && (
-                <Badge variant="secondary" className="ml-2 text-[10px] bg-blue-100 text-blue-700 border-blue-200">P</Badge>
+                <Badge variant="secondary" className="ml-2 text-[9px] bg-blue-100 text-blue-700 border-blue-200">P</Badge>
               )}
             </div>
-            <div className="text-xs">
-              <span className="text-gray-600">Duration:</span>
-              <span className="ml-2 text-gray-800">
+            <div className="text-xs-tight">
+              <span className="text-gray-500">Duration:</span>
+              <span className="ml-2 text-gray-700">
                 {currentFileInfo?.duration 
                   ? `${currentFileInfo.duration.toFixed(1)}s` 
                   : audioMetadata.duration 
@@ -192,9 +287,9 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
                   : "Loading..."}
               </span>
             </div>
-            <div className="text-xs">
-              <span className="text-gray-600">Sample Rate:</span>
-              <span className="ml-2 text-gray-800">
+            <div className="text-xs-tight">
+              <span className="text-gray-500">Sample Rate:</span>
+              <span className="ml-2 text-gray-700">
                 {currentFileInfo?.sample_rate 
                   ? `${(currentFileInfo.sample_rate / 1000).toFixed(1)}kHz` 
                   : audioMetadata.sampleRate 
@@ -203,17 +298,17 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
               </span>
             </div>
             {currentFileInfo?.size && (
-              <div className="text-xs">
-                <span className="text-gray-600">Size:</span>
-                <span className="ml-2 text-gray-800">{(currentFileInfo.size / 1024 / 1024).toFixed(2)} MB</span>
+              <div className="text-xs-tight">
+                <span className="text-gray-500">Size:</span>
+                <span className="ml-2 text-gray-700">{(currentFileInfo.size / 1024 / 1024).toFixed(2)} MB</span>
               </div>
             )}
             {showPerturbed && perturbationResult?.applied_perturbations && (
-              <div className="text-xs">
-                <span className="text-gray-600">Applied:</span>
+              <div className="text-xs-tight">
+                <span className="text-gray-500">Applied:</span>
                 <div className="ml-2 mt-1 space-y-1">
                   {perturbationResult.applied_perturbations.map((pert, idx) => (
-                    <Badge key={idx} variant="outline" className="text-[10px] mr-1 border-blue-300 text-blue-700">
+                    <Badge key={idx} variant="outline" className="text-[9px] mr-1 border-blue-300 text-blue-700">
                       {pert.type.replace('_', ' ')}
                     </Badge>
                   ))}
@@ -221,8 +316,8 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
               </div>
             )}
             {showPerturbed && perturbationResult?.filename && predictionMap && (
-              <div className="text-xs mt-2">
-                <span className="text-gray-600">Perturbed Prediction:</span>
+              <div className="text-xs-tight mt-2">
+                <span className="text-gray-500">Perturbed Prediction:</span>
                 <div className="ml-2 mt-1">
                   <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 border-blue-200">
                     {predictionMap[perturbationResult.filename] || "Loading..."}
@@ -233,10 +328,33 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
           </CardContent>
         </Card>
 
-        {/* Audio Player & Waveform */}
+        {/* Predictions Section - Middle */}
+        <PredictionDisplay
+          selectedFile={selectedFile}
+          selectedEmbeddingFile={selectedEmbeddingFile}
+          model={model}
+          wav2vecPrediction={wav2vecPrediction}
+          whisperPrediction={whisperPrediction}
+          perturbedPredictions={perturbedPredictions}
+          isLoading={isLoadingPredictions}
+          isLoadingPerturbed={isLoadingPerturbed}
+          error={predictionError}
+        />
+
+        {/* Audio Player & Waveform - Bottom */}
         <Card className="border-gray-200 bg-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-800">Audio Playback</CardTitle>
+          <CardHeader className="panel-header pb-2">
+            <CardTitle className="text-sm text-gray-800 flex items-center gap-2">
+              Audio Playback
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent className="font-normal">
+                  Interactive audio player with waveform visualization
+                </TooltipContent>
+              </Tooltip>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <WaveformViewer 
@@ -294,5 +412,6 @@ export const DatapointEditorPanel = ({ selectedFile, dataset = "custom", perturb
         </Card>
       </div>
     </div>
+    </TooltipProvider>
   );
 };

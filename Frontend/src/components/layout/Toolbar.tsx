@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -8,8 +8,10 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Upload, HelpCircle } from "lucide-react";
 import { API_BASE } from '@/lib/api';
+import { CustomDatasetManager } from '@/components/dataset/CustomDatasetManager';
 
 interface UploadedFile {
   file_id: string;
@@ -33,10 +35,17 @@ interface ToolbarProps {
   setDataset: (dataset: string) => void;
   onBatchInference?: (model: string, dataset: string) => void; // New callback for batch inference
 }
+
+interface CustomDataset {
+  dataset_name: string;
+  formatted_name: string;
+  total_files: number;
+}
+
 const modelDatasetMap: Record<string, string[]> = {
-  "whisper-base": ["common-voice", "custom"],
-  "whisper-large": ["common-voice", "custom"],
-  "wav2vec2": ["ravdess", "custom"],
+  "whisper-base": ["common-voice", "ravdess", "custom"],
+  "whisper-large": ["common-voice", "ravdess", "custom"],
+  "wav2vec2": ["common-voice", "ravdess", "custom"],
 };
 
 const defaultDatasetForModel: Record<string, string> = {
@@ -46,6 +55,35 @@ const defaultDatasetForModel: Record<string, string> = {
 };
 
 export const Toolbar = ({apiData, setApiData, selectedFile, uploadedFiles, onFileSelect, model, setModel, dataset, setDataset, onBatchInference}: ToolbarProps) => {
+  const [customDatasets, setCustomDatasets] = useState<CustomDataset[]>([]);
+
+  const fetchCustomDatasets = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/upload/dataset/list`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setCustomDatasets(data.datasets || []);
+      }
+    } catch (err) {
+      console.error('Error fetching custom datasets:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomDatasets();
+  }, []);
+
+  const handleDatasetCreated = (datasetName: string) => {
+    fetchCustomDatasets(); // Refresh the list
+    setDataset(datasetName); // Automatically select the new dataset
+  };
+
+  const handleDatasetSelected = (datasetName: string) => {
+    setDataset(datasetName);
+  };
 
 const onModelChange = (value: string) => {
   setModel(value);
@@ -55,12 +93,15 @@ const onModelChange = (value: string) => {
   const defaultDataset = defaultDatasetForModel[value] || "custom";
 
   console.log("Model selected:", value);
+  
+  // Check if current dataset is a custom dataset
+  const isCurrentCustomDataset = dataset.startsWith('custom:');
 
-  if (!allowedDatasets.includes(dataset)) {
+  if (!allowedDatasets.includes(dataset) && !isCurrentCustomDataset) {
     // Use the canonical handler so all side effects fire (metadata loading)
     onDatasetChange(defaultDataset);
-  } else if (dataset !== 'custom' && onBatchInference) {
-    // Dataset is already valid, fire batch inference directly
+  } else if (!isCurrentCustomDataset && dataset !== 'custom' && onBatchInference) {
+    // Dataset is already valid and not custom, fire batch inference directly
     onBatchInference(value, dataset);
   }
 };
@@ -69,8 +110,11 @@ const onModelChange = (value: string) => {
     setDataset(value);
     console.log("Dataset selected:", value);
     
-    // Trigger batch inference when dataset changes (except for custom)
-    if (value !== 'custom' && onBatchInference) {
+    // Check if this is a custom dataset (formatted as custom:session_id:dataset_name)
+    const isCustomDataset = value.startsWith('custom:');
+    
+    // Trigger batch inference when dataset changes (except for custom datasets)
+    if (!isCustomDataset && value !== 'custom' && onBatchInference) {
       onBatchInference(model, value);
     }
   };
@@ -79,49 +123,89 @@ const onModelChange = (value: string) => {
   const allowedDatasets = modelDatasetMap[model] || ["custom"];
 
   return (
-    <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
-      {/* Left side: Model and Dataset selectors */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-foreground">LIT for Voice</span>
-          <Badge variant="outline" className="text-xs">
-            v1.0
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-3">
+    <TooltipProvider>
+      <div className="h-14 panel-header border-b panel-border px-4 flex items-center justify-between">
+        {/* Left side: Model and Dataset selectors */}
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Model:</span>
-            <Select value={model} onValueChange={onModelChange}>
-              <SelectTrigger className="w-32 h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="whisper-base">Whisper Base</SelectItem>
-                <SelectItem value="whisper-large">Whisper Large</SelectItem>
-                <SelectItem value="wav2vec2">Wav2Vec2</SelectItem>
-              </SelectContent>
-            </Select>
+            <span className="text-sm font-bold text-foreground">LIT for Voice</span>
+            <Badge variant="outline" className="text-xs">
+              v1.0
+            </Badge>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Dataset:</span>
-            <Select value={dataset} onValueChange={onDatasetChange}>
-              <SelectTrigger className="w-32 h-8">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">Model:</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground font-small cursor-help" />
+                  </TooltipTrigger>
+                    <TooltipContent className="space-y-1">
+                    <p className="text-sm">Choose the AI model for audio analysis:</p>
+                    <p className="text-sm">• Whisper: Speech-to-text transcription</p>
+                    <p className="text-sm">• Wav2Vec2: Emotion recognition</p>
+                    </TooltipContent>
+                </Tooltip>
+              </div>
+              <Select value={model} onValueChange={onModelChange}>
+                <SelectTrigger className="w-32 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="whisper-base">Whisper Base</SelectItem>
+                  <SelectItem value="whisper-large">Whisper Large</SelectItem>
+                  <SelectItem value="wav2vec2">Wav2Vec2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">Dataset:</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="space-y-1">
+                    <p className="text-sm">Select the audio dataset to analyze:</p>
+                    <p className="text-sm">• Common Voice: Speech recognition dataset</p>
+                    <p className="text-sm">• RAVDESS: Emotion recognition dataset</p>
+                    <p className="text-sm">• Custom: Your uploaded datasets</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <Select value={dataset} onValueChange={onDatasetChange}>
+              <SelectTrigger className="w-40 h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allowedDatasets.map((ds) => {
+                {/* Built-in datasets */}
+                {allowedDatasets.filter(ds => ds !== 'custom').map((ds) => {
                   let label = ds;
                   if (ds === "common-voice") label = "Common Voice";
                   else if (ds === "ravdess") label = "RAVDESS";
-                  else if (ds === "custom") label = "Custom";
                   return (
                     <SelectItem key={ds} value={ds}>
                       {label}
                     </SelectItem>
                   );
                 })}
+                
+                {/* Custom datasets */}
+                {customDatasets.length > 0 && (
+                  <>
+                    <SelectItem disabled value="separator">
+                      ── Custom Datasets ──
+                    </SelectItem>
+                    {customDatasets.map((customDataset) => (
+                      <SelectItem key={customDataset.formatted_name} value={customDataset.formatted_name}>
+                        {customDataset.dataset_name}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -156,31 +240,24 @@ const onModelChange = (value: string) => {
 
       {/* Right side: Action buttons */}
       <div className="flex items-center gap-2">
+        <CustomDatasetManager 
+          onDatasetCreated={handleDatasetCreated}
+          onDatasetSelected={handleDatasetSelected}
+        />
 
-        <Button variant="outline" size="sm" className="h-8">
-          <Upload className="h-4 w-4 mr-2" />
-          Upload
-        </Button>
-
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="h-8"
-          onClick={async () => {
-            try {
-              const response = await fetch(`${API_BASE}/upload/test`, { credentials: 'include' });
-              const data = await response.json();
-              console.log('Backend test:', data);
-              alert(`Backend is ${response.ok ? 'working' : 'not working'}: ${JSON.stringify(data)}`);
-            } catch (error) {
-              console.error('Backend test failed:', error);
-              alert(`Backend test failed: ${error.message}`);
-            }
-          }}
-        >
-          Test Backend
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8">
+              <Upload className="h-4 w-4 mr-2" />
+              Upload
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Upload audio files for analysis</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
     </div>
+    </TooltipProvider>
   );
 };
