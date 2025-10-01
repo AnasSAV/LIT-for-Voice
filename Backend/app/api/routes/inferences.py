@@ -741,17 +741,32 @@ async def get_wav2vec2_detailed_prediction(
     # Check if result is cached
     cached_result = await get_result("wav2vec2", cache_key)
     if cached_result is not None:
-        logger.info(f"Returning cached detailed wav2vec2 result for {resolved_path}")
+        logger.info(f"Found cached detailed wav2vec2 result for {resolved_path}")
         cached_prediction = cached_result.get("prediction", cached_result)
-        # Debug: Check if cached result has attention
+        
+        # Check if cached result has attention data
         cached_has_attention = cached_prediction.get("attention") is not None if isinstance(cached_prediction, dict) else False
-        cached_layers = len(cached_prediction.get("attention", [])) if cached_has_attention else 0
-        logger.info(f"Cached wav2vec2 result has attention: {cached_has_attention}, layers: {cached_layers}")
-        return cached_prediction
+        
+        # If attention is requested but not in cache, we need to regenerate
+        if include_attention and not cached_has_attention:
+            logger.info(f"Attention requested but not in cache, regenerating for {resolved_path}")
+        else:
+            # Debug: Check if cached result has attention
+            cached_layers = len(cached_prediction.get("attention", [])) if cached_has_attention else 0
+            logger.info(f"Returning cached wav2vec2 result - has attention: {cached_has_attention}, layers: {cached_layers}")
+            return cached_prediction
     
-    # Get detailed prediction with probabilities and attention (always include attention)
+    # Get detailed prediction with probabilities and conditionally include attention
     try:
-        detailed_result = await asyncio.to_thread(predict_emotion_wave2vec_with_attention, str(resolved_path))
+        if include_attention:
+            # Use the more expensive attention-enabled function
+            detailed_result = await asyncio.to_thread(predict_emotion_wave2vec_with_attention, str(resolved_path))
+        else:
+            # Use the regular prediction function which is faster
+            detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
+            # Ensure the result has the expected structure
+            if "attention" not in detailed_result:
+                detailed_result["attention"] = None
         
         # Try to get ground truth emotion if we have dataset information
         ground_truth_emotion = ""
@@ -775,9 +790,15 @@ async def get_wav2vec2_detailed_prediction(
         else:
             detailed_result["ground_truth_emotion"] = None
         
-        # Cache the detailed result
-        await cache_result("wav2vec2", cache_key, {"prediction": detailed_result}, ttl=6*60*60)
-        logger.info(f"Cached detailed wav2vec2 prediction for {resolved_path}")
+        # Cache the detailed result without attention data to avoid memory issues
+        cache_data = detailed_result.copy()
+        if "attention" in cache_data:
+            # Remove attention data from cache to prevent MemoryError
+            cache_data["attention"] = None
+            logger.info(f"Excluded attention data from cache to prevent memory issues")
+        
+        await cache_result("wav2vec2", cache_key, {"prediction": cache_data}, ttl=6*60*60)
+        logger.info(f"Cached detailed wav2vec2 prediction for {resolved_path} (without attention data)")
         
         # Debug: Log if attention data is present
         has_attention = detailed_result.get("attention") is not None

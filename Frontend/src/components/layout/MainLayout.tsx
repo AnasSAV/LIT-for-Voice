@@ -5,7 +5,7 @@ import { AudioDatasetPanel } from "../panels/AudioDatasetPanel";
 import { DatapointEditorPanel } from "../panels/DatapointEditorPanel";
 import { PredictionPanel } from "../panels/PredictionPanel";
 import { EmbeddingProvider } from "../../contexts/EmbeddingContext";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { API_BASE } from '@/lib/api';
 
 interface UploadedFile {
@@ -58,6 +58,10 @@ export const MainLayout = () => {
   const [perturbedPredictions, setPerturbedPredictions] = useState<Wav2Vec2Prediction | WhisperPrediction | null>(null);
   const [isLoadingPerturbed, setIsLoadingPerturbed] = useState(false);
 
+  // Refs to track ongoing requests and prevent duplicates
+  const wav2vecRequestRef = useRef<AbortController | null>(null);
+  const whisperRequestRef = useRef<AbortController | null>(null);
+
   // Clear perturbation result and predictions when selected file changes
   useEffect(() => {
     setPerturbationResult(null);
@@ -69,18 +73,22 @@ export const MainLayout = () => {
 
   // Fetch wav2vec prediction when model is wav2vec2 and file is selected
   useEffect(() => {
-    let isMounted = true;
-    const abortController = new AbortController();
-    
     const fetchWav2vecPrediction = async () => {
       if (model !== "wav2vec2" || (!selectedFile && !selectedEmbeddingFile)) {
-        if (isMounted) {
-          setWav2vecPrediction(null);
-          setPredictionError(null);
-          setIsLoadingPredictions(false);
-        }
+        setWav2vecPrediction(null);
+        setPredictionError(null);
+        setIsLoadingPredictions(false);
         return;
       }
+
+      // Cancel any existing request
+      if (wav2vecRequestRef.current) {
+        wav2vecRequestRef.current.abort();
+      }
+
+      // Create new abort controller
+      const abortController = new AbortController();
+      wav2vecRequestRef.current = abortController;
 
       setIsLoadingPredictions(true);
       setPredictionError(null);
@@ -112,6 +120,9 @@ export const MainLayout = () => {
           requestBody.dataset_file = selectedEmbeddingFile;
         }
 
+        // Add option to disable attention for better performance
+        requestBody.include_attention = false;  // Set to false by default to improve performance
+
         const response = await fetch(`${API_BASE}/inferences/wav2vec2-detailed`, {
           method: "POST",
           headers: {
@@ -127,9 +138,7 @@ export const MainLayout = () => {
         }
 
         const prediction = await response.json();
-        if (isMounted) {
-          setWav2vecPrediction(prediction);
-        }
+        setWav2vecPrediction(prediction);
         
         // Update predictionMap for uploaded files
         if (selectedFile && prediction) {
@@ -152,38 +161,46 @@ export const MainLayout = () => {
         if (err.name === 'AbortError') return;
         
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (isMounted) {
-          setPredictionError(errorMessage);
-          console.error("Error fetching wav2vec2 prediction:", err);
-        }
+        setPredictionError(errorMessage);
+        console.error("Error fetching wav2vec2 prediction:", err);
       } finally {
-        if (isMounted) {
-          setIsLoadingPredictions(false);
+        setIsLoadingPredictions(false);
+        // Clear the request ref if this is the current request
+        if (wav2vecRequestRef.current === abortController) {
+          wav2vecRequestRef.current = null;
         }
       }
     };
 
     fetchWav2vecPrediction();
     
+    // Cleanup function
     return () => {
-      isMounted = false;
-      abortController.abort();
+      if (wav2vecRequestRef.current) {
+        wav2vecRequestRef.current.abort();
+        wav2vecRequestRef.current = null;
+      }
     };
   }, [selectedFile, selectedEmbeddingFile, model, dataset]);
 
   // Fetch whisper prediction when model includes whisper and file is selected
   useEffect(() => {
-    let isMounted = true;
-    
     const fetchWhisperPrediction = async () => {
       if (!model?.includes("whisper") || (!selectedFile && !selectedEmbeddingFile)) {
-        if (isMounted) {
-          setWhisperPrediction(null);
-          setPredictionError(null);
-          setIsLoadingPredictions(false);
-        }
+        setWhisperPrediction(null);
+        setPredictionError(null);
+        setIsLoadingPredictions(false);
         return;
       }
+
+      // Cancel any existing request
+      if (whisperRequestRef.current) {
+        whisperRequestRef.current.abort();
+      }
+
+      // Create new abort controller
+      const abortController = new AbortController();
+      whisperRequestRef.current = abortController;
 
       setIsLoadingPredictions(true);
       setPredictionError(null);
@@ -285,9 +302,7 @@ export const MainLayout = () => {
           };
         }
         
-        if (isMounted) {
-          setWhisperPrediction(whisperPrediction);
-        }
+        setWhisperPrediction(whisperPrediction);
         
         // Update predictionMap for uploaded files and custom datasets
         if (selectedFile && (isUploadedFile || isCustomDataset)) {
@@ -295,18 +310,26 @@ export const MainLayout = () => {
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (isMounted) {
-          setPredictionError(errorMessage);
-          console.error("Error fetching whisper prediction:", err);
-        }
+        setPredictionError(errorMessage);
+        console.error("Error fetching whisper prediction:", err);
       } finally {
-        if (isMounted) {
-          setIsLoadingPredictions(false);
+        setIsLoadingPredictions(false);
+        // Clear the request ref if this is the current request
+        if (whisperRequestRef.current === abortController) {
+          whisperRequestRef.current = null;
         }
       }
     };
 
     fetchWhisperPrediction();
+    
+    // Cleanup function
+    return () => {
+      if (whisperRequestRef.current) {
+        whisperRequestRef.current.abort();
+        whisperRequestRef.current = null;
+      }
+    };
   }, [selectedFile, selectedEmbeddingFile, model, dataset]);
   
   // Determine effective dataset based on uploaded files and custom datasets
