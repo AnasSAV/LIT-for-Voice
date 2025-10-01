@@ -451,7 +451,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
               ) : analysisType === "frequency" && audioFrequencyAnalysis ? (
                 <>
                   {/* Audio Frequency Analysis Results */}
-                  {/* Cache Info */}
+                  {/* Cache Info
                   {audioFrequencyAnalysis.cache_info && (
                     <div className="space-y-2">
                       <div className="text-xs font-medium">Cache Performance</div>
@@ -470,7 +470,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                         </div>
                       </div>
                     </div>
-                  )}
+                  )} */}
 
                   {/* Summary */}
                   <div className="space-y-2">
@@ -546,7 +546,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
               ) : analysisType === "default" && model === 'wav2vec2' && batchPrediction ? (
                 <>
                   {/* Wav2Vec2 Emotion Analysis */}
-                  {/* Cache Info */}
+                  {/* Cache Info
                   {batchPrediction.cache_info && (
                     <div className="space-y-2">
                       <div className="text-xs font-medium">Cache Performance</div>
@@ -570,7 +570,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                         )}
                       </div>
                     </div>
-                  )}
+                  )} */}
 
                   {/* Summary */}
                   <div className="space-y-2">

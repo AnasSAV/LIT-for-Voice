@@ -222,25 +222,6 @@ const onModelChange = (value: string) => {
           <Upload className="h-4 w-4 mr-2" />
           Upload
         </Button>
-
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="h-8"
-          onClick={async () => {
-            try {
-              const response = await fetch(`${API_BASE}/upload/test`, { credentials: 'include' });
-              const data = await response.json();
-              console.log('Backend test:', data);
-              alert(`Backend is ${response.ok ? 'working' : 'not working'}: ${JSON.stringify(data)}`);
-            } catch (error) {
-              console.error('Backend test failed:', error);
-              alert(`Backend test failed: ${error.message}`);
-            }
-          }}
-        >
-          Test Backend
-        </Button>
       </div>
     </div>
   );

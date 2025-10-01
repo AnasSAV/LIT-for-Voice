@@ -293,9 +293,6 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
                         {selectedByAngle.length} files
                       </Badge>
                     </div>
-                    <TabsList className="grid w-24 grid-cols-1">
-                      <TabsTrigger value="frequency" className="text-xs">Results</TabsTrigger>
-                    </TabsList>
                   </div>
                 </div>
                 
@@ -313,7 +310,7 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
                       </div>
                     ) : audioFrequencyAnalysis ? (
                       <div className="space-y-4">
-                        {/* Cache Info */}
+                        {/* Cache Info
                         {audioFrequencyAnalysis.cache_info && (
                           <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
                             <div className="flex justify-between">
@@ -329,7 +326,7 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
                               <span>{(audioFrequencyAnalysis.cache_info.cache_hit_rate * 100).toFixed(1)}%</span>
                             </div>
                           </div>
-                        )}
+                        )} */}
 
                         {/* Summary */}
                         <div className="grid grid-cols-2 gap-4 text-xs">
