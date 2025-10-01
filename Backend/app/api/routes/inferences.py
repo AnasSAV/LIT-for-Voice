@@ -19,6 +19,8 @@ from app.services.model_loader_service import (
     reduce_dimensions,
     predict_emotion_wave2vec,
     extract_audio_frequency_features,
+    transcribe_whisper_with_attention,
+    predict_emotion_wave2vec_with_attention,
 )
 from app.services.dataset_service import resolve_file
 from app.core.redis import get_result, cache_result
@@ -688,13 +690,15 @@ async def get_wav2vec2_detailed_prediction(
     request: dict = Body(..., example={
         "file_path": "/path/to/audio.wav",
         "dataset": "common-voice", 
-        "dataset_file": "sample-001.mp3"
+        "dataset_file": "sample-001.mp3",
+        "include_attention": True
     })
 ):
     """Get detailed wav2vec2 prediction with probabilities for all emotions and ground truth if available"""
     file_path = request.get("file_path")
     dataset = request.get("dataset")
     dataset_file = request.get("dataset_file")
+    include_attention = request.get("include_attention", True)  # Default to True for attention extraction
     
     session_id = get_session_id(http_request)
     
@@ -716,19 +720,24 @@ async def get_wav2vec2_detailed_prediction(
     if not resolved_path.exists():
         raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
     
-    # Create cache key for detailed predictions
+    # Create cache key for detailed predictions (v3 after fixing attention extraction)
     file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
-    cache_key = f"wav2vec2_detailed_{file_content_hash}"
+    cache_key = f"wav2vec2_detailed_attention_v3_{file_content_hash}"
     
     # Check if result is cached
     cached_result = await get_result("wav2vec2", cache_key)
     if cached_result is not None:
         logger.info(f"Returning cached detailed wav2vec2 result for {resolved_path}")
-        return cached_result.get("prediction", cached_result)
+        cached_prediction = cached_result.get("prediction", cached_result)
+        # Debug: Check if cached result has attention
+        cached_has_attention = cached_prediction.get("attention") is not None if isinstance(cached_prediction, dict) else False
+        cached_layers = len(cached_prediction.get("attention", [])) if cached_has_attention else 0
+        logger.info(f"Cached wav2vec2 result has attention: {cached_has_attention}, layers: {cached_layers}")
+        return cached_prediction
     
-    # Get detailed prediction with probabilities
+    # Get detailed prediction with probabilities and attention (always include attention)
     try:
-        detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
+        detailed_result = await asyncio.to_thread(predict_emotion_wave2vec_with_attention, str(resolved_path))
         
         # Try to get ground truth emotion if we have dataset information
         ground_truth_emotion = ""
@@ -756,11 +765,31 @@ async def get_wav2vec2_detailed_prediction(
         await cache_result("wav2vec2", cache_key, {"prediction": detailed_result}, ttl=6*60*60)
         logger.info(f"Cached detailed wav2vec2 prediction for {resolved_path}")
         
+        # Debug: Log if attention data is present
+        has_attention = detailed_result.get("attention") is not None
+        logger.info(f"Wav2Vec2 result has attention data: {has_attention}")
+        if has_attention:
+            attention_shape = f"layers: {len(detailed_result['attention'])}"
+            logger.info(f"Attention shape: {attention_shape}")
+        
         return detailed_result
         
     except Exception as e:
         logger.error(f"Error getting detailed wav2vec2 prediction: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Return a fallback response instead of raising 500 error
+        fallback_result = {
+            "predicted_emotion": "unknown",
+            "probabilities": {"unknown": 1.0},
+            "confidence": 0.0,
+            "attention": None,
+            "error": str(e),
+            "fallback": True
+        }
+        logger.info("Returning fallback result for wav2vec2 prediction")
+        return fallback_result
 
 
 @router.post("/inferences/embeddings")
@@ -1114,6 +1143,81 @@ async def batch_audio_frequency_analysis(request: Request):
     except Exception as e:
         print(f"Error in batch audio frequency analysis: {e}")
         raise HTTPException(status_code=500, detail=f"Audio frequency analysis failed: {str(e)}")
+
+
+@router.post("/inferences/whisper-attention")
+async def get_whisper_with_attention(
+    request: dict = Body(..., example={
+        "model": "whisper-base",
+        "file_path": "/path/to/audio.wav",
+        "dataset": "common-voice", 
+        "dataset_file": "sample-001.mp3"
+    })
+):
+    """Get Whisper transcription with attention weights"""
+    model = request.get("model", "whisper-base")
+    file_path = request.get("file_path")
+    dataset = request.get("dataset")
+    dataset_file = request.get("dataset_file")
+    
+    # Validate model
+    if not model.startswith("whisper"):
+        raise HTTPException(status_code=400, detail="This endpoint is only for Whisper models")
+    
+    # Resolve file path
+    resolved_path = None
+    if file_path:
+        resolved_path = Path(file_path)
+    elif dataset and dataset_file:
+        try:
+            resolved_path = resolve_file(dataset, dataset_file)
+        except (FileNotFoundError, ValueError) as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing audio reference. Provide either 'file_path' or 'dataset' + 'dataset_file'."
+        )
+    
+    if not resolved_path.exists():
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
+    
+    # Create cache key for attention predictions (v2 to avoid old cache)
+    file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+    cache_key = f"{model}_attention_v2_{file_content_hash}"
+    
+    # Check if result is cached
+    cached_result = await get_result(model, cache_key)
+    if cached_result is not None:
+        logger.info(f"Returning cached {model} attention result for {resolved_path}")
+        cached_prediction = cached_result.get("prediction", cached_result)
+        # Debug: Check if cached result has attention
+        cached_has_attention = cached_prediction.get("attention") is not None if isinstance(cached_prediction, dict) else False
+        cached_layers = len(cached_prediction.get("attention", [])) if cached_has_attention else 0
+        logger.info(f"Cached result has attention: {cached_has_attention}, layers: {cached_layers}")
+        return cached_prediction
+    
+    # Get transcription with attention
+    try:
+        model_size = "base" if "base" in model else "large"
+        result = await asyncio.to_thread(transcribe_whisper_with_attention, str(resolved_path), model_size)
+        
+        # Cache the result
+        await cache_result(model, cache_key, {"prediction": result}, ttl=6*60*60)
+        logger.info(f"Cached {model} attention prediction for {resolved_path}")
+        
+        # Debug: Log if attention data is present
+        has_attention = result.get("attention") is not None
+        logger.info(f"Whisper result has attention data: {has_attention}")
+        if has_attention:
+            attention_shape = f"layers: {len(result['attention'])}"
+            logger.info(f"Attention shape: {attention_shape}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting {model} transcription with attention: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Transcription with attention failed: {str(e)}")
 
 
     return {
