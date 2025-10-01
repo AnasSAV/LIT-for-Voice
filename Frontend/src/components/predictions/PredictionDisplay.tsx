@@ -172,34 +172,45 @@ export const PredictionDisplay = ({
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="text-xs font-semibold">Transcription Metrics</div>
-                  {whisperPrediction.accuracy_percentage !== null && whisperPrediction.word_error_rate !== null ? (
+                  {whisperPrediction.ground_truth && whisperPrediction.ground_truth.trim() !== "" ? (
                     // Show metrics when ground truth is available
-                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                      <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                        <div className="text-[10px] text-gray-500">WER</div>
-                        <div className="font-medium">{whisperPrediction.word_error_rate.toFixed(3)}</div>
+                    whisperPrediction.accuracy_percentage !== null && whisperPrediction.word_error_rate !== null ? (
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                          <div className="text-[10px] text-gray-500">WER</div>
+                          <div className="font-medium">{whisperPrediction.word_error_rate.toFixed(3)}</div>
+                        </div>
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                          <div className="text-[10px] text-gray-500">CER</div>
+                          <div className="font-medium">{whisperPrediction.character_error_rate.toFixed(3)}</div>
+                        </div>
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                          <div className="text-[10px] text-gray-500">Accuracy</div>
+                          <div className="font-medium">{whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
+                        </div>
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                          <div className="text-[10px] text-gray-500">Words (Pred)</div>
+                          <div className="font-medium">{whisperPrediction.word_count_predicted}</div>
+                        </div>
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                          <div className="text-[10px] text-gray-500">Words (Truth)</div>
+                          <div className="font-medium">{whisperPrediction.word_count_truth}</div>
+                        </div>
+                        <div className="p-2 bg-gray-50 rounded border text-gray-700">
+                          <div className="text-[10px] text-gray-500">Levenshtein</div>
+                          <div className="font-medium">{whisperPrediction.levenshtein_distance}</div>
+                        </div>
                       </div>
-                      <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                        <div className="text-[10px] text-gray-500">CER</div>
-                        <div className="font-medium">{whisperPrediction.character_error_rate.toFixed(3)}</div>
+                    ) : (
+                      // Ground truth exists but metrics aren't calculated yet
+                      <div className="mt-2 p-3 bg-blue-50 rounded border border-blue-200 text-xs text-blue-700">
+                        <div className="font-medium">Ground Truth Available</div>
+                        <div className="mt-1">Accuracy metrics are being calculated...</div>
+                        <div className="mt-1 text-xs text-gray-600">
+                          DEBUG: accuracy_percentage={whisperPrediction.accuracy_percentage}, word_error_rate={whisperPrediction.word_error_rate}
+                        </div>
                       </div>
-                      <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                        <div className="text-[10px] text-gray-500">Accuracy</div>
-                        <div className="font-medium">{whisperPrediction.accuracy_percentage.toFixed(1)}%</div>
-                      </div>
-                      <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                        <div className="text-[10px] text-gray-500">Words (Pred)</div>
-                        <div className="font-medium">{whisperPrediction.word_count_predicted}</div>
-                      </div>
-                      <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                        <div className="text-[10px] text-gray-500">Words (Truth)</div>
-                        <div className="font-medium">{whisperPrediction.word_count_truth}</div>
-                      </div>
-                      <div className="p-2 bg-gray-50 rounded border text-gray-700">
-                        <div className="text-[10px] text-gray-500">Levenshtein</div>
-                        <div className="font-medium">{whisperPrediction.levenshtein_distance}</div>
-                      </div>
-                    </div>
+                    )
                   ) : (
                     // Show message when ground truth is not available
                     <div className="mt-2 p-3 bg-yellow-50 rounded border border-yellow-200 text-xs text-yellow-700">
@@ -210,23 +221,31 @@ export const PredictionDisplay = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs font-medium">Predicted Transcript</div>
-                  <div className="text-xs p-2 bg-blue-50 rounded border font-mono whitespace-pre-wrap">
-                    {whisperPrediction.predicted_transcript ? `"${whisperPrediction.predicted_transcript}"` : <span className="italic text-gray-400">No prediction</span>}
+              {whisperPrediction.ground_truth ? (
+                // When ground truth is available, show both in grid layout
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs font-medium">Predicted Transcript</div>
+                    <div className="text-xs p-2 bg-blue-50 rounded border font-mono whitespace-pre-wrap">
+                      {whisperPrediction.predicted_transcript ? `"${whisperPrediction.predicted_transcript}"` : <span className="italic text-gray-400">No prediction</span>}
+                    </div>
                   </div>
-                </div>
-
-                {whisperPrediction.ground_truth && (
                   <div>
                     <div className="text-xs font-medium">Ground Truth</div>
                     <div className="text-xs p-2 bg-green-50 rounded border font-mono whitespace-pre-wrap">
                       {`"${whisperPrediction.ground_truth}"`}
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                // When no ground truth is available, show predicted transcript in full width with larger format
+                <div className="w-full">
+                  <div className="text-xs font-medium mb-2">Predicted Transcript</div>
+                  <div className="text-xs p-4 bg-blue-50 rounded-lg border border-blue-200 font-mono whitespace-pre-wrap leading-relaxed">
+                    {whisperPrediction.predicted_transcript ? `"${whisperPrediction.predicted_transcript}"` : <span className="italic text-gray-400">No prediction available</span>}
+                  </div>
+                </div>
+              )}
 
               {perturbedPredictions && (
                 <div className="pt-2 border-t border-gray-100">

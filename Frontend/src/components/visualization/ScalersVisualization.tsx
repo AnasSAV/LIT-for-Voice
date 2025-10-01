@@ -325,7 +325,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
 
   // Create colors for selected vs unselected points - using gold for selected to match EmbeddingPlot
   const colors = text.map(filename => 
-    selectedPoints.includes(filename) ? '#FFD700' : '#3b82f6'
+    selectedPoints.includes(filename) ? '#ff0000ff' : '#3b82f6'
   );
 
   const trace = {

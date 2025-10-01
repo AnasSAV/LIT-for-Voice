@@ -247,6 +247,12 @@ export const MainLayout = () => {
 
         const prediction = await response.json();
         
+        console.log("DEBUG: Whisper prediction response:", prediction);
+        console.log("DEBUG: Has ground truth:", !!prediction.ground_truth);
+        console.log("DEBUG: Ground truth value:", prediction.ground_truth);
+        console.log("DEBUG: Accuracy percentage:", prediction.accuracy_percentage);
+        console.log("DEBUG: Word error rate:", prediction.word_error_rate);
+        
         let whisperPrediction: WhisperPrediction;
         
         if (isUploadedFile || isCustomDataset) {
@@ -268,12 +274,12 @@ export const MainLayout = () => {
           whisperPrediction = {
             predicted_transcript: prediction.predicted_transcript || "",
             ground_truth: prediction.ground_truth || "",
-            accuracy_percentage: prediction.accuracy_percentage || null,
-            word_error_rate: prediction.word_error_rate || null,
-            character_error_rate: prediction.character_error_rate || null,
-            levenshtein_distance: prediction.levenshtein_distance || null,
-            exact_match: prediction.exact_match || null,
-            character_similarity: prediction.character_similarity || null,
+            accuracy_percentage: prediction.accuracy_percentage !== null ? prediction.accuracy_percentage : null,
+            word_error_rate: prediction.word_error_rate !== null ? prediction.word_error_rate : null,
+            character_error_rate: prediction.character_error_rate !== null ? prediction.character_error_rate : null,
+            levenshtein_distance: prediction.levenshtein_distance !== null ? prediction.levenshtein_distance : null,
+            exact_match: prediction.exact_match !== null ? prediction.exact_match : null,
+            character_similarity: prediction.character_similarity !== null ? prediction.character_similarity : null,
             word_count_predicted: prediction.word_count_predicted || 0,
             word_count_truth: prediction.word_count_truth || 0
           };

@@ -155,7 +155,6 @@ const onModelChange = (value: string) => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="whisper-base">Whisper Base</SelectItem>
-                  <SelectItem value="whisper-large">Whisper Large</SelectItem>
                   <SelectItem value="wav2vec2">Wav2Vec2</SelectItem>
                 </SelectContent>
               </Select>

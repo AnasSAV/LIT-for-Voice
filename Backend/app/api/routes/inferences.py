@@ -430,28 +430,42 @@ async def get_whisper_accuracy(request: Request):
             
             if metadata_path and metadata_path.exists():
                 df = pd.read_csv(metadata_path)
+                print(f"DEBUG: Loaded metadata from {metadata_path} with {len(df)} rows")
+                print(f"DEBUG: Columns in metadata: {df.columns.tolist()}")
+                print(f"DEBUG: Looking for dataset_file: {dataset_file}")
+                
                 # Find the row for this file
                 # Try both with and without path prefix
                 file_rows = df[df['filename'] == dataset_file]
+                print(f"DEBUG: Direct match found: {len(file_rows)} rows")
+                
                 if file_rows.empty:
                     # Try with path prefix for common-voice
                     if dataset == "common-voice":
-                        file_rows = df[df['filename'] == f"cv-valid-dev/{dataset_file}"]
+                        prefixed_filename = f"cv-valid-dev/{dataset_file}"
+                        file_rows = df[df['filename'] == prefixed_filename]
+                        print(f"DEBUG: Prefixed match ({prefixed_filename}) found: {len(file_rows)} rows")
                 
                 if not file_rows.empty:
+                    print(f"DEBUG: Found matching row: {file_rows.iloc[0].to_dict()}")
                     # Try different column names for transcript/text
                     if dataset == "common-voice":
                         # For common-voice, use 'text' column
                         for col in ['text', 'transcript', 'sentence', 'label']:
                             if col in df.columns:
                                 ground_truth = str(file_rows.iloc[0][col])
+                                print(f"DEBUG: Found ground truth in column '{col}': {ground_truth}")
                                 break
                     elif dataset == "ravdess":
                         # For RAVDESS, use 'statement' column
                         for col in ['statement', 'text', 'transcript', 'sentence']:
                             if col in df.columns:
                                 ground_truth = str(file_rows.iloc[0][col])
+                                print(f"DEBUG: Found ground truth in column '{col}': {ground_truth}")
                                 break
+                else:
+                    print(f"DEBUG: No matching row found for {dataset_file}")
+                    print(f"DEBUG: Available filenames (first 10): {df['filename'].head(10).tolist()}")
         
         # If ground truth is not available, we'll return None for metrics but still provide the prediction
         has_ground_truth = bool(ground_truth)
