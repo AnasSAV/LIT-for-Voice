@@ -543,14 +543,14 @@ export const AudioDatasetPanel = ({
         <div className="panel-header p-3 border-b panel-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h3 className="font-medium text-info">Audio Dataset</h3>
+              <h3 className="font-weight-bold text-gray-700 text-sm">Audio Dataset</h3>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>Browse and manage audio files in your selected dataset.</p>
-                  <p>Upload new files or select from existing datasets.</p>
+                <TooltipContent className="text-xs-tight space-y-1">
+                  <p className="font-sm">Browse and manage audio files in your selected dataset.</p>
+                  <p className="font-sm">Upload new files or select from existing datasets.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -564,7 +564,7 @@ export const AudioDatasetPanel = ({
                 </Badge>
               )}
               {(batchInferenceStatus === 'done' || isInferenceComplete) && (
-                <Badge variant="default" className="text-xs-tight">
+                <Badge variant="default" className="text-xs-tight text-white font-normal">
                   ✓ Inference Complete
                 </Badge>
               )}

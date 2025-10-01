@@ -59,7 +59,7 @@ export const PredictionDisplay = ({
     return (
       <Card className="border-gray-200 bg-white">
         <CardContent className="p-4 text-center text-gray-500">
-          <div className="text-sm">No file selected</div>
+          <div className="text-sm-tight">No file selected</div>
         </CardContent>
       </Card>
     );
@@ -68,15 +68,15 @@ export const PredictionDisplay = ({
   return (
     <Card className="border-gray-200 bg-white">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">
+        <CardTitle className="text-info">
           {model === "wav2vec2" ? "Classification Results" : model?.includes("whisper") ? "Transcription Results" : "Prediction Results"}
           {model === "wav2vec2" && (
-            <Badge variant="secondary" className="ml-2 text-[10px]">
+            <Badge variant="secondary" className="ml-2 text-xs-tight">
               Wav2Vec2 Emotion
             </Badge>
           )}
           {model?.includes("whisper") && (
-            <Badge variant="secondary" className="ml-2 text-[10px]">
+            <Badge variant="secondary" className="ml-2 text-xs-tight">
               {model.includes("large") ? "Whisper Large" : "Whisper Base"}
             </Badge>
           )}
@@ -84,14 +84,14 @@ export const PredictionDisplay = ({
       </CardHeader>
       <CardContent className="space-y-2">
         {isLoading && (
-          <div className="text-xs text-gray-500 flex items-center gap-2">
+          <div className="text-xs-tight text-gray-500 flex items-center gap-2">
             <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
             Loading prediction...
           </div>
         )}
         
         {error && (
-          <div className="text-xs text-red-500 p-2 bg-red-50 rounded border">
+          <div className="text-xs-tight text-red-500 p-2 bg-red-50 rounded border">
             Error: {error}
           </div>
         )}
@@ -102,19 +102,19 @@ export const PredictionDisplay = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Original Prediction */}
               <div className="space-y-2 border-r md:border-r border-gray-200 pr-2">
-                <div className="text-xs font-medium flex items-center gap-2">
+                <div className="text-xs-tight font-medium flex items-center gap-2">
                   Original Audio
-                  <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Original</span>
+                  <span className="text-xs-tight text-gray-500 border border-gray-300 px-1 rounded">Original</span>
                 </div>
                 {Object.entries(wav2vecPrediction.probabilities)
                   .sort(([,a], [,b]) => b - a)
                   .map(([emotion, probability]) => {
                     const isPredicted = emotion === wav2vecPrediction.predicted_emotion;
                     return (
-                      <div key={emotion} className="flex items-center justify-between text-xs">
+                      <div key={emotion} className="flex items-center justify-between text-xs-tight">
                         <div className="flex items-center gap-2">
                           <span className="capitalize">{emotion}</span>
-                          {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
+                          {isPredicted && <span className="text-xs-tight text-gray-600 font-medium">Predicted</span>}
                         </div>
                         <div className="flex items-center gap-2 flex-1 max-w-[120px]">
                           <Progress value={probability * 100} className="h-2" />
@@ -129,9 +129,9 @@ export const PredictionDisplay = ({
 
               {/* Perturbed Prediction */}
               <div className="space-y-2 pl-2">
-                <div className="text-xs font-medium flex items-center gap-2">
+                <div className="text-xs-tight font-medium flex items-center gap-2">
                   Perturbed Audio
-                  <span className="text-[10px] text-gray-500 border border-gray-300 px-1 rounded">Perturbed</span>
+                  <span className="text-xs-tight text-gray-500 border border-gray-300 px-1 rounded">Perturbed</span>
                   {isLoadingPerturbed && (
                     <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
                   )}
@@ -143,10 +143,10 @@ export const PredictionDisplay = ({
                     const originalProb = wav2vecPrediction.probabilities[emotion] || 0;
                     const change = (probability - originalProb) * 100;
                     return (
-                      <div key={emotion} className="flex items-center justify-between text-xs">
+                      <div key={emotion} className="flex items-center justify-between text-xs-tight">
                         <div className="flex items-center gap-2">
                           <span className="capitalize">{emotion}</span>
-                          {isPredicted && <span className="text-[10px] text-gray-600 font-medium">Predicted</span>}
+                          {isPredicted && <span className="text-xs-tight text-gray-600 font-medium">Predicted</span>}
                         </div>
                         <div className="flex items-center gap-2 flex-1 max-w-[120px]">
                           <Progress value={probability * 100} className="h-2" />

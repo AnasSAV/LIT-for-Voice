@@ -194,7 +194,7 @@ export const DatapointEditorPanel = ({
   
   return (
     <TooltipProvider>
-      <div className="h-full bg-gray-50 border-l border-gray-200 flex flex-col">
+      <div className="h-full bg-white border-l border-gray-200 flex flex-col">
         <div className="panel-header p-3 border-b border-gray-200">
           <h3 className="font-medium text-sm text-gray-800 flex items-center gap-2">
             Datapoint Editor
@@ -202,7 +202,7 @@ export const DatapointEditorPanel = ({
               <TooltipTrigger>
                 <HelpCircle className="h-4 w-4 text-muted-foreground" />
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent className="font-normal">
                 Edit and analyze individual audio samples with predictions and perturbations
               </TooltipContent>
             </Tooltip>
@@ -220,13 +220,13 @@ export const DatapointEditorPanel = ({
                   <TooltipTrigger>
                     <HelpCircle className="h-4 w-4 text-muted-foreground" />
                   </TooltipTrigger>
-                  <TooltipContent>
+                  <TooltipContent className="font-normal">
                     Detailed information about the selected audio sample
                   </TooltipContent>
                 </Tooltip>
               </CardTitle>
               {perturbationResult?.success && (
-                <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+                <div className="flex items-center gap-1 p-1 bg-white border border-gray-200 rounded-lg">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -236,13 +236,13 @@ export const DatapointEditorPanel = ({
                         className={`text-xs h-7 px-3 transition-all duration-200 ${
                           !showPerturbed 
                             ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
-                            : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
+                            : 'text-gray-600 hover:bg-blue-50 hover:text-gray-800'
                         }`}
                       >
                         Original
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent className="font-normal">
                       View the original unmodified audio file
                     </TooltipContent>
                   </Tooltip>
@@ -255,13 +255,13 @@ export const DatapointEditorPanel = ({
                         className={`text-xs h-7 px-3 transition-all duration-200 ${
                           showPerturbed 
                             ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm border-0 scale-[1.02]' 
-                            : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800'
+                            : 'text-gray-600 hover:bg-blue-50 hover:text-gray-800'
                         }`}
                       >
                         Perturbed
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
+                    <TooltipContent className="font-normal">
                       View the modified audio file with applied perturbations
                     </TooltipContent>
                   </Tooltip>
@@ -350,7 +350,7 @@ export const DatapointEditorPanel = ({
                 <TooltipTrigger>
                   <HelpCircle className="h-4 w-4 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent>
+                <TooltipContent className="font-normal">
                   Interactive audio player with waveform visualization
                 </TooltipContent>
               </Tooltip>

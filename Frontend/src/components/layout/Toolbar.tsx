@@ -140,13 +140,13 @@ const onModelChange = (value: string) => {
                 <span className="text-sm text-muted-foreground">Model:</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                    <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground font-small cursor-help" />
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Choose the AI model for audio analysis:</p>
-                    <p>• Whisper: Speech-to-text transcription</p>
-                    <p>• Wav2Vec2: Emotion recognition</p>
-                  </TooltipContent>
+                    <TooltipContent className="space-y-1">
+                    <p className="text-sm">Choose the AI model for audio analysis:</p>
+                    <p className="text-sm">• Whisper: Speech-to-text transcription</p>
+                    <p className="text-sm">• Wav2Vec2: Emotion recognition</p>
+                    </TooltipContent>
                 </Tooltip>
               </div>
               <Select value={model} onValueChange={onModelChange}>
@@ -168,11 +168,11 @@ const onModelChange = (value: string) => {
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Select the audio dataset to analyze:</p>
-                    <p>• Common Voice: Speech recognition dataset</p>
-                    <p>• RAVDESS: Emotion recognition dataset</p>
-                    <p>• Custom: Your uploaded datasets</p>
+                  <TooltipContent className="space-y-1">
+                    <p className="text-sm">Select the audio dataset to analyze:</p>
+                    <p className="text-sm">• Common Voice: Speech recognition dataset</p>
+                    <p className="text-sm">• RAVDESS: Emotion recognition dataset</p>
+                    <p className="text-sm">• Custom: Your uploaded datasets</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -201,7 +201,7 @@ const onModelChange = (value: string) => {
                     </SelectItem>
                     {customDatasets.map((customDataset) => (
                       <SelectItem key={customDataset.formatted_name} value={customDataset.formatted_name}>
-                        {customDataset.dataset_name} ({customDataset.total_files} files)
+                        {customDataset.dataset_name}
                       </SelectItem>
                     ))}
                   </>

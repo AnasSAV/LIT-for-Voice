@@ -12,50 +12,7 @@ import { EmbeddingPlot } from "../visualization/EmbeddingPlot";
 import { ScalarPlot } from "../visualization/ScalarPlot";
 import { useEmbedding } from "../../contexts/EmbeddingContext";
 import { RefreshCw, Eye, Box, Square, BarChart3, HelpCircle } from "lucide-react";
-
-// Audio Feature Explanations (shared with ScalersVisualization)
-const AUDIO_FEATURE_EXPLANATIONS: Record<string, string> = {
-  'spectral_rolloff': 'The frequency below which 85% of spectral energy is contained. Indicates brightness vs darkness of audio.',
-  'spectral_centroid': 'The center of mass of the spectrum. Higher values indicate brighter sounds with more high-frequency content.',
-  'spectral_bandwidth': 'The width of the spectrum. Measures how spread out the frequency content is.',
-  'spectral_contrast': 'The difference in amplitude between peaks and valleys in the spectrum. Indicates audio clarity.',
-  'spectral_flatness': 'Measures how noise-like vs tone-like the spectrum is. Values near 0 = tonal, near 1 = noise-like.',
-  'zero_crossing_rate': 'Rate at which the audio signal changes from positive to negative. Higher for noisy/unvoiced sounds.',
-  'tempo': 'The perceived speed of the music in beats per minute (BPM). Estimated from onset detection.',
-  'duration': 'Length of the audio file in seconds.',
-  'rms': 'Root Mean Square energy. Measures the overall loudness/power of the audio signal.',
-  'mfcc_1': 'First Mel-frequency cepstral coefficient. Represents overall spectral shape and timbre.',
-  'mfcc_2': 'Second MFCC. Captures the balance between low and high frequencies.',
-  'mfcc_3': 'Third MFCC. Related to the slope of the spectral envelope.',
-  'mfcc_4': 'Fourth MFCC. Captures finer spectral details and formant information.',
-  'mfcc_5': 'Fifth MFCC. Represents additional spectral shape characteristics.',
-  'mfcc_6': 'Sixth MFCC. Captures mid-frequency spectral features.',
-  'mfcc_7': 'Seventh MFCC. Related to spectral fine structure.',
-  'mfcc_8': 'Eighth MFCC. Represents higher-order spectral relationships.',
-  'mfcc_9': 'Ninth MFCC. Captures additional timbral characteristics.',
-  'mfcc_10': 'Tenth MFCC. Represents complex spectral interactions.',
-  'chroma_1': 'First chroma feature. Represents the energy in the C pitch class.',
-  'chroma_2': 'Second chroma feature. Represents the energy in the C#/Db pitch class.',
-  'chroma_3': 'Third chroma feature. Represents the energy in the D pitch class.',
-  'chroma_4': 'Fourth chroma feature. Represents the energy in the D#/Eb pitch class.',
-  'chroma_5': 'Fifth chroma feature. Represents the energy in the E pitch class.',
-  'chroma_6': 'Sixth chroma feature. Represents the energy in the F pitch class.',
-  'tonnetz_1': 'First tonal centroid. Represents the position in tonal space along the circle of fifths.',
-  'tonnetz_2': 'Second tonal centroid. Captures major vs minor tonality.',
-  'tonnetz_3': 'Third tonal centroid. Represents the diminished chord dimension.',
-  'rolloff': 'Alias for spectral_rolloff. The frequency below which 85% of spectral energy is contained.',
-  'centroid': 'Alias for spectral_centroid. The center of mass of the spectrum.',
-  'bandwidth': 'Alias for spectral_bandwidth. The width of the spectrum.',
-  'contrast': 'Alias for spectral_contrast. The difference between spectral peaks and valleys.',
-  'flatness': 'Alias for spectral_flatness. Measures how noise-like vs tone-like the audio is.',
-  'zcr': 'Alias for zero_crossing_rate. Rate of signal sign changes.'
-};
-
-// Helper function to get feature explanation
-const getFeatureExplanation = (featureName: string): string => {
-  const normalizedName = featureName.toLowerCase().replace(/[_\s-]/g, '_');
-  return AUDIO_FEATURE_EXPLANATIONS[normalizedName] || 'Audio feature - no description available.';
-};
+import { getFeatureExplanation } from "@/lib/audioFeatures";
 
 interface EmbeddingPanelProps {
   model?: string;
