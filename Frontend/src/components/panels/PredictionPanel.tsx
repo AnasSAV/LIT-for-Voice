@@ -73,6 +73,9 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
   const [originalFile, setOriginalFile] = useState<UploadedFile | null>(selectedFile || null);
   const [perturbedFile, setPerturbedFile] = useState<UploadedFile | null>(null);
   const [isLoadingPerturbed, setIsLoadingPerturbed] = useState(false);
+  const [attention, setAttention] = useState<number[][][] | null>(null);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [isLoadingAttention, setIsLoadingAttention] = useState(false);
 
 
   // Handle perturbation completion
@@ -172,7 +175,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         console.log("DEBUG: Calling onPredictionRefresh for perturbed file:", perturbedFile.filename, predictionText);
         onPredictionRefresh(perturbedFile, predictionText);
       }
-    } catch (err) {
+    } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
       console.error("Error fetching perturbed prediction:", err);
@@ -190,6 +193,8 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
       if (model !== "wav2vec2" || (!selectedFile && !selectedEmbeddingFile)) {
         if (isMounted) {
           setWav2vecPrediction(null);
+          setAttention(null);  // Reset attention when not wav2vec2
+          setTranscript(null); // Reset transcript when not using Whisper
           setError(null);
           setIsLoading(false);
         }
@@ -198,7 +203,10 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
 
       setIsLoading(true);
       setError(null);
-
+      setAttention(null);  // Reset attention when starting new wav2vec2 prediction
+      setTranscript(null); // Reset transcript when using wav2vec2
+      setIsLoadingAttention(true); // Start loading attention
+      
       try {
         let requestBody: any = {};
         
@@ -243,6 +251,14 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         const prediction = await response.json();
         if (isMounted) {
           setWav2vecPrediction(prediction);
+          // Debug: Log prediction structure
+          console.log("DEBUG: Wav2Vec2 prediction:", prediction);
+          console.log("DEBUG: Has attention:", !!prediction.attention);
+          // Extract attention data if available
+          if (prediction.attention) {
+            console.log("DEBUG: Setting attention data:", prediction.attention.length, "layers");
+            setAttention(prediction.attention);
+          }
         }
         
         // Update predictionMap for uploaded files (same as dataset files)
@@ -262,7 +278,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
             onPredictionUpdate(selectedFile.file_id, predictionText);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         // Ignore abort errors
         if (err.name === 'AbortError') return;
         
@@ -274,6 +290,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
       } finally {
         if (isMounted) {
           setIsLoading(false);
+          setIsLoadingAttention(false); // Stop loading attention
         }
       }
     };
@@ -294,6 +311,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
       if (!model?.includes("whisper") || (!selectedFile && !selectedEmbeddingFile)) {
         if (isMounted) {
           setWhisperPrediction(null);
+          setAttention(null);  // Reset attention when not whisper
           setError(null);
           setIsLoading(false);
         }
@@ -302,6 +320,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
 
       setIsLoading(true);
       setError(null);
+      setAttention(null);  // Reset attention when starting new whisper prediction
 
       try {
         let requestBody: any = {
@@ -394,12 +413,42 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         
         setWhisperPrediction(whisperPrediction);
         
+        // Fetch attention data separately using the new endpoint
+        setIsLoadingAttention(true);
+        try {
+          const attentionResponse = await fetch(`${API_BASE}/inferences/whisper-attention`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: 'include',
+            body: JSON.stringify(requestBody),
+          });
+          
+          if (attentionResponse.ok) {
+            const attentionData = await attentionResponse.json();
+            console.log("DEBUG: Whisper attention response:", attentionData);
+            console.log("DEBUG: Has attention:", !!attentionData.attention);
+            if (attentionData.attention) {
+              console.log("DEBUG: Setting Whisper attention data:", attentionData.attention.length, "layers");
+              setAttention(attentionData.attention);
+              // Set the transcript for token labeling in attention visualization
+              setTranscript(whisperPrediction.predicted_transcript);
+            }
+          }
+        } catch (attentionError: any) {
+          console.warn("Failed to fetch attention data:", attentionError);
+          // Don't fail the main prediction if attention fails
+        } finally {
+          setIsLoadingAttention(false);
+        }
+        
         // Update predictionMap for uploaded files (same as dataset files)
         if (selectedFile && onPredictionUpdate && isUploadedFile) {
           console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Whisper:", selectedFile.file_id, whisperPrediction.predicted_transcript);
           onPredictionUpdate(selectedFile.file_id, whisperPrediction.predicted_transcript);
         }
-      } catch (err) {
+      } catch (err: any) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
         setError(errorMessage);
         console.error("Error fetching whisper prediction:", err);
@@ -415,12 +464,12 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="predictions" className="h-full">
         <div className="panel-header border-b panel-border px-3 py-2">
-            <TabsList className="h-7 grid grid-cols-4 w-full">
+            <TabsList className="h-7 grid grid-cols-5 w-full">
             <TabsTrigger value="predictions" className="text-xs">Predictions</TabsTrigger>
             <TabsTrigger value="scalers" className="text-xs">Scalers</TabsTrigger>
             <TabsTrigger value="saliency" className="text-xs">Saliency</TabsTrigger>
-            
             <TabsTrigger value="perturbation" className="text-xs">Perturbation</TabsTrigger>
+            <TabsTrigger value="attention" className="text-xs">Attention</TabsTrigger>
           </TabsList>
         </div>
         
@@ -712,6 +761,16 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                 model={model}
                 dataset={dataset}
                 originalDataset={originalDataset}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="attention" className="m-0 h-full">
+            <div className="p-3">
+              <AttentionVisualization 
+                attention={attention} 
+                transcript={transcript} 
+                isLoading={isLoadingAttention} 
               />
             </div>
           </TabsContent>
