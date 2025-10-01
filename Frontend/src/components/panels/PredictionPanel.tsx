@@ -81,6 +81,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                 selectedFile={selectedFile || selectedEmbeddingFile} 
                 model={model} 
                 dataset={dataset} 
+                originalDataset={originalDataset}
               />
             </div>
           </TabsContent>
