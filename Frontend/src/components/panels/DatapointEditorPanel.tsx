@@ -339,6 +339,7 @@ export const DatapointEditorPanel = ({
           isLoading={isLoadingPredictions}
           isLoadingPerturbed={isLoadingPerturbed}
           error={predictionError}
+          showPerturbed={showPerturbed}
         />
 
         {/* Audio Player & Waveform - Bottom */}

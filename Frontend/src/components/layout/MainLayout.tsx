@@ -71,6 +71,62 @@ export const MainLayout = () => {
     setPredictionError(null);
   }, [selectedFile, selectedEmbeddingFile]);
 
+  // Fetch perturbed predictions when perturbation result is available
+  useEffect(() => {
+    const fetchPerturbedPredictions = async () => {
+      if (!perturbationResult?.success || !model) {
+        setPerturbedPredictions(null);
+        return;
+      }
+
+      setIsLoadingPerturbed(true);
+      setPredictionError(null);
+
+      try {
+        let requestBody: any = {
+          file_path: perturbationResult.perturbed_file
+        };
+
+        let endpoint: string;
+        if (model === "wav2vec2") {
+          endpoint = `${API_BASE}/inferences/wav2vec2-detailed`;
+          requestBody.include_attention = false; // Disable attention for better performance
+        } else if (model?.includes("whisper")) {
+          endpoint = `${API_BASE}/inferences/whisper-accuracy`;
+          requestBody.model = model;
+        } else {
+          return; // Unsupported model
+        }
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: 'include',
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch perturbed prediction: ${response.status}`);
+        }
+
+        const prediction = await response.json();
+        setPerturbedPredictions(prediction);
+        
+        console.log("DEBUG: Fetched perturbed predictions:", prediction);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        setPredictionError(errorMessage);
+        console.error("Error fetching perturbed predictions:", err);
+      } finally {
+        setIsLoadingPerturbed(false);
+      }
+    };
+
+    fetchPerturbedPredictions();
+  }, [perturbationResult, model]);
+
   // Fetch wav2vec prediction when model is wav2vec2 and file is selected
   useEffect(() => {
     const fetchWav2vecPrediction = async () => {
@@ -399,6 +455,9 @@ export const MainLayout = () => {
 
   const handlePerturbationComplete = (result: any) => {
     setPerturbationResult(result);
+    
+    // Clear any existing perturbed predictions since we have a new perturbation
+    setPerturbedPredictions(null);
   };
 
   const handlePredictionRefresh = (file: UploadedFile, prediction: string) => {
