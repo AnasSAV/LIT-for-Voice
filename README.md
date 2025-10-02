@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="1920" height="1080" alt="LIT for Voice" src="https://github.com/user-attachments/assets/42155dcb-2526-4780-ab5c-8374777a4144" />
+  <img width="1920" height="1080" alt="LIT for Voice (1)" src="https://github.com/user-attachments/assets/353fc2ea-d292-43e2-bfcb-04572453fcf2" />
 </p>
 
 # LIT for Voice
@@ -28,18 +28,18 @@ Interpreting how deep learning models make decisions is crucial, especially in h
 
 LIT for Voice extends the interpretability paradigm to audio models, providing researchers and developers with tools to analyze and debug speech models with greater transparency. Through interactive visualizations, attention mechanisms, and perturbation analyses, you can gain deeper insights into how your audio models make decisions.
 
-## 🚀 Features
+## Features
 
-* 🔊 **Audio Data Management**: Upload and manage audio datasets with metadata
-* 📊 **Waveform Visualization**: Interactive waveform viewer with playback controls
-* 🧠 **Model Prediction Analysis**: Examine model predictions and confidence scores
-* 👀 **Attention Visualization**: Explore attention patterns in transformer-based audio models
-* 📈 **Embedding Analysis**: Visualize high-dimensional audio embeddings in 2D/3D space
-* 🔍 **Saliency Mapping**: Identify important regions in audio input using gradient-based methods
-* 🔄 **Perturbation Tools**: Apply various audio perturbations to test model robustness
-* 💻 **Interactive Dashboard**: Comprehensive interface for exploring model behavior
+* **Audio Data Management**: Upload and manage audio datasets with metadata
+* **Waveform Visualization**: Interactive waveform viewer with playback controls
+* **Model Prediction Analysis**: Examine model predictions and confidence scores
+* **Attention Visualization**: Explore attention patterns in transformer-based audio models
+* **Embedding Analysis**: Visualize high-dimensional audio embeddings in 2D/3D space
+* **Saliency Mapping**: Identify important regions in audio input using gradient-based methods
+* **Perturbation Tools**: Apply various audio perturbations to test model robustness
+* **Interactive Dashboard**: Comprehensive interface for exploring model behavior
 
-## 🧰 Tech Stack
+## Tech Stack
 
 * **Frontend**: React 18 + TypeScript + Vite
 * **UI Framework**: Tailwind CSS + shadcn/ui components
@@ -50,7 +50,7 @@ LIT for Voice extends the interpretability paradigm to audio models, providing r
 * **Models**: Transformer-based audio models (Whisper, Wav2Vec2)
 * **Storage**: Redis for caching predictions and results
 
-## 📋 Prerequisites
+## Prerequisites
 
 - **Frontend**:
   - Node.js (v18 or higher)
@@ -60,7 +60,7 @@ LIT for Voice extends the interpretability paradigm to audio models, providing r
   - Python 3.11
   - Docker (for Redis)
 
-## 🛠️ Installation
+## Installation
 
 ### 1. Clone the repository
 ```bash
@@ -120,7 +120,7 @@ uvicorn app.main:app --reload
 Open your browser and navigate to [http://localhost:8080](http://localhost:8080)
 
 
-## 📚 Project Structure
+## Project Structure
 
 ```
 LIT-for-Voice/
@@ -152,7 +152,7 @@ LIT-for-Voice/
 └── SECURITY.md              # Security policy
 ```
 
-## 🧪 Available Scripts
+## Available Scripts
 
 ### Frontend
 - `npm run dev` - Start development server
@@ -164,7 +164,7 @@ LIT-for-Voice/
 - `pytest` - Run backend tests
 - `uvicorn app.main:app --reload` - Start the API server in development mode
 
-## 🔍 Usage
+## Usage
 
 1. **Upload Audio Data**: Use the audio uploader to load your audio files
 2. **Select Models**: Choose from available audio models for analysis
@@ -176,27 +176,30 @@ LIT-for-Voice/
 4. **Apply Perturbations**: Test model robustness with various audio perturbations
 5. **Analyze Results**: Use the interactive dashboard to gain insights
 
-## 👥 Contributing
+## Contributing
 
 We welcome contributions! Please read our [Contributing Guidelines](CONTRIBUTING.md) for more information.
 
-## 🛡️ Security
+## Security
 
 For security-related issues, please refer to our [Security Policy](SECURITY.md).
 
-## 👨‍💻 Authors
+## Authors
 
 - **Anas Hussaindeen** - [GitHub Profile](https://github.com/AnasSAV)
 - **Chandupa Ambepitiya** - [GitHub Profile](https://github.com/Chand2103)
 - **Dewmike Amarasinghe** - [GitHub Profile](https://github.com/DewmikeAmarasinghe)
 
-## 🙏 Acknowledgments
+## Mentor
+- **Dr Uthayasanker Thayasivam** - NLP Researcher & Senior Lecturer and Head of Department at Computer Science & Engineering, University of Moratuwa, Sri Lanka
+
+## Acknowledgments
 
 - Inspired by Google's [Learning Interpretability Tool (LIT)](https://github.com/PAIR-code/lit)
 - Built with modern React ecosystem and TypeScript
 - Special thanks to the open-source community for the amazing tools and libraries
 
-## 🛣️ Roadmap
+## Roadmap
 
 - [ ] Backend API enhancements for model serving
 - [ ] Support for more audio model architectures
@@ -206,12 +209,12 @@ For security-related issues, please refer to our [Security Policy](SECURITY.md).
 - [ ] Multi-language support
 - [ ] Plugin system for custom analysis tools
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
 <p align="center">
-  <sub>Built with ❤️ for audio model interpretability</sub>
+  <sub>Built for audio model interpretability</sub>
 </p>
