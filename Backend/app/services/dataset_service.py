@@ -18,12 +18,14 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 # CSV metadata files per dataset
 DATASET_PATHS: Dict[str, Path] = {
     "common-voice": DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv",
+    "cv-valid-dev": DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv",
     "ravdess": DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv",
 }
 
 # Base directories for dataset audio files
 DATASET_BASE_DIRS: Dict[str, Path] = {
     "common-voice": DATA_DIR / "common_voice_valid_dev",
+    "cv-valid-dev": DATA_DIR / "common_voice_valid_dev", 
     "ravdess": DATA_DIR / "ravdess_subset",
 }
 

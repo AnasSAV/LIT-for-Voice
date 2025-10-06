@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, RefreshCw } from "lucide-react";
+import { API_BASE } from "@/lib/api";
 
 interface AttentionPair {
   from_word: string;
@@ -39,8 +40,6 @@ interface Props {
   dataset?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-
 export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, dataset }) => {
   const [attentionData, setAttentionData] = useState<AttentionData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -50,7 +49,15 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
   const [viewMode, setViewMode] = useState<"pairs" | "timeline">("pairs");
 
   const fetchAttentionData = async () => {
+    console.log("AttentionVisualization - fetchAttentionData called:", {
+      selectedFile,
+      model,
+      dataset,
+      modelIncludesWhisper: model?.includes('whisper')
+    });
+
     if (!selectedFile || !model || !model.includes('whisper')) {
+      console.log("AttentionVisualization - Skipping fetch due to conditions");
       return;
     }
 
@@ -64,16 +71,31 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
         head: selectedHead
       };
 
-      if (selectedFile.file_id) {
-        // Uploaded file
-        requestBody.file_path = selectedFile.file_path;
-      } else if (dataset && selectedFile) {
-        // Dataset file
-        requestBody.dataset = dataset;
-        requestBody.dataset_file = selectedFile;
+      // Handle different file selection scenarios
+      if (typeof selectedFile === 'string') {
+        // Dataset file (filename as string)
+        if (dataset) {
+          requestBody.dataset = dataset;
+          requestBody.dataset_file = selectedFile;
+        } else {
+          throw new Error("Dataset required for dataset file selection");
+        }
+      } else if (typeof selectedFile === 'object' && selectedFile) {
+        // Uploaded file (object with file_path or file_id)
+        if (selectedFile.file_path) {
+          requestBody.file_path = selectedFile.file_path;
+        } else if (selectedFile.file_id) {
+          // If only file_id is available, construct path
+          requestBody.file_path = selectedFile.file_path || `/uploads/${selectedFile.file_id}`;
+        } else {
+          throw new Error("Selected upload has no file_path or file_id");
+        }
       } else {
         throw new Error("No valid file selected");
       }
+
+      console.log("AttentionVisualization - Request body:", requestBody);
+      console.log("AttentionVisualization - API URL:", `${API_BASE}/inferences/attention-pairs`);
 
       const response = await fetch(`${API_BASE}/inferences/attention-pairs`, {
         method: "POST",
@@ -85,7 +107,8 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch attention data: ${response.status}`);
+        const errorText = await response.text().catch(() => 'Unknown server error');
+        throw new Error(`Failed to fetch attention data: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -94,6 +117,7 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
         throw new Error(data.error);
       }
 
+      console.log("AttentionVisualization - Success:", data);
       setAttentionData(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
