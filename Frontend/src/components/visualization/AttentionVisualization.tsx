@@ -12,7 +12,9 @@ interface AttentionPair {
   to_word: string;
   from_time: [number, number];
   to_time: [number, number];
-  attention_weight: number;
+  attention_weight: number;  // Raw attention value (0.001-0.008)
+  attention_normalized?: number;  // 0-100 percentage of maximum
+  attention_relative?: number;  // Relative to average
   from_index: number;
   to_index: number;
 }
@@ -301,7 +303,7 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
                           <span className="font-mono font-medium">{pair.to_word}</span>
                         </div>
                         <Badge variant="outline" className="text-[10px]">
-                          {(pair.attention_weight * 100).toFixed(1)}%
+                          {pair.attention_normalized?.toFixed(1) || (pair.attention_weight * 100).toFixed(1)}%
                         </Badge>
                       </div>
                     ))}
