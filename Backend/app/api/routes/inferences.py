@@ -1043,8 +1043,13 @@ async def extract_attention_pairs_endpoint(
             resolved_path = Path(file_path)
         elif dataset and dataset_file:
             try:
+                logger.info(f"Resolving file: dataset='{dataset}', file='{dataset_file}'")
                 resolved_path = resolve_file(dataset, dataset_file)
+                logger.info(f"Resolved to: {resolved_path}")
+                logger.info(f"Path exists: {resolved_path.exists()}")
+                logger.info(f"Path is file: {resolved_path.is_file() if resolved_path.exists() else 'N/A'}")
             except (FileNotFoundError, ValueError) as e:
+                logger.error(f"resolve_file failed: {e}")
                 raise HTTPException(status_code=404, detail=str(e))
         else:
             raise HTTPException(
@@ -1053,6 +1058,7 @@ async def extract_attention_pairs_endpoint(
             )
         
         if not resolved_path.exists():
+            logger.error(f"Resolved path does not exist: {resolved_path}")
             raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
         
         # Create cache key for attention pairs
