@@ -51,6 +51,8 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
   const fetchAttentionData = async () => {
     console.log("AttentionVisualization - fetchAttentionData called:", {
       selectedFile,
+      selectedFileType: typeof selectedFile,
+      selectedFileValue: selectedFile,
       model,
       dataset,
       modelIncludesWhisper: model?.includes('whisper')
@@ -76,13 +78,34 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
         // Dataset file (filename as string)
         if (dataset) {
           requestBody.dataset = dataset;
-          requestBody.dataset_file = selectedFile;
+          // Extract just the filename if it includes dataset prefix
+          const cleanFileName = selectedFile.includes('\\') || selectedFile.includes('/') 
+            ? selectedFile.split(/[\\\/]/).pop() 
+            : selectedFile;
+          console.log("AttentionVisualization - File processing:", {
+            originalSelectedFile: selectedFile,
+            cleanFileName: cleanFileName,
+            dataset: dataset
+          });
+          requestBody.dataset_file = cleanFileName;
         } else {
           throw new Error("Dataset required for dataset file selection");
         }
       } else if (typeof selectedFile === 'object' && selectedFile) {
-        // Uploaded file (object with file_path or file_id)
-        if (selectedFile.file_path) {
+        // Check if it's a dataset file (file_path contains dataset prefix)
+        if (selectedFile.file_path && dataset && 
+            (selectedFile.file_path.includes('/') || selectedFile.file_path.includes('\\'))) {
+          // Dataset file with path like "cv-valid-dev/sample-000775.mp3"
+          const cleanFileName = selectedFile.file_path.split(/[\\\/]/).pop();
+          console.log("AttentionVisualization - Dataset object processing:", {
+            originalFilePath: selectedFile.file_path,
+            cleanFileName: cleanFileName,
+            dataset: dataset
+          });
+          requestBody.dataset = dataset;
+          requestBody.dataset_file = cleanFileName;
+        } else if (selectedFile.file_path) {
+          // Regular uploaded file
           requestBody.file_path = selectedFile.file_path;
         } else if (selectedFile.file_id) {
           // If only file_id is available, construct path
