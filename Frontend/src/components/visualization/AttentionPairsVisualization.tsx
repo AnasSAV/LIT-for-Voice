@@ -35,7 +35,15 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
   const [error, setError] = useState<string | null>(null);
 
   const fetchAttentionData = async () => {
+    console.log("AttentionPairsVisualization - fetchAttentionData called:", {
+      selectedFile,
+      model,
+      dataset,
+      hasWhisper: model?.includes('whisper')
+    });
+
     if (!selectedFile || !model || !model.includes('whisper')) {
+      console.log("AttentionPairsVisualization - Skipping fetch due to conditions");
       return;
     }
 
@@ -73,6 +81,9 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
         throw new Error("No valid file selected");
       }
 
+      console.log("AttentionPairsVisualization - Request body:", requestBody);
+      console.log("AttentionPairsVisualization - API URL:", `${API_BASE}/inferences/attention-pairs`);
+
       const response = await fetch(`${API_BASE}/inferences/attention-pairs`, {
         method: "POST",
         headers: {
@@ -88,9 +99,11 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
       }
 
       const data = await response.json();
+      console.log("AttentionPairsVisualization - Response data:", data);
       setAttentionData(data);
 
     } catch (err: any) {
+      console.error("AttentionPairsVisualization - Error:", err);
       setError(err.message);
     } finally {
       setIsLoading(false);
