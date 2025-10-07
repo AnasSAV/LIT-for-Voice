@@ -897,20 +897,25 @@ def process_attention_into_pairs(attention_result, audio_file_path, model_size, 
             if attention_data[0] and len(attention_data[0]) > 0:
                 logger.info(f"First head shape: {len(attention_data[0][0]) if attention_data[0][0] else 0}")
         
-        if not attention_data or layer_idx >= len(attention_data):
-            logger.warning(f"No attention data for layer {layer_idx} (available layers: {len(attention_data) if attention_data else 0})")
+        if not attention_data:
+            logger.warning("No attention data found")
             return {
                 "attention_pairs": [],
                 "timestamp_attention": [],
                 "total_duration": 0,
-                "error": "No attention data available for specified layer"
+                "error": "No attention data available"
             }
+        
+        # Adjust layer index if it's out of bounds
+        if layer_idx >= len(attention_data):
+            logger.warning(f"Layer {layer_idx} out of bounds, using layer 0 (available: {len(attention_data)})")
+            layer_idx = 0
         
         # Get layer attention
         layer_attention = attention_data[layer_idx]
         if head_idx >= len(layer_attention):
+            logger.warning(f"Head {head_idx} out of bounds, using head 0 (available: {len(layer_attention)})")
             head_idx = 0
-            logger.warning(f"Head index too high, using head {head_idx}")
         
         head_attention = layer_attention[head_idx]
         
