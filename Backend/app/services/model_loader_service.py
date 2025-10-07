@@ -863,9 +863,18 @@ def process_attention_into_pairs(attention_result, audio_file_path, model_size, 
     logger.info(f"Processing attention into pairs: layer={layer_idx}, head={head_idx}")
     
     try:
-        # Get transcription with timestamps using your existing function
-        timestamp_data = transcribe_whisper_with_timestamps(audio_file_path, model_size)
-        chunks = timestamp_data.get("chunks", [])
+        # Use chunks from the combined attention result if available
+        chunks = attention_result.get("chunks", [])
+        
+        # If no chunks in attention result, get them separately
+        if not chunks:
+            logger.info("No chunks in attention result, getting timestamps separately")
+            timestamp_data = transcribe_whisper_with_timestamps(audio_file_path, model_size)
+            chunks = timestamp_data.get("chunks", [])
+        
+        logger.info(f"Timestamp data: {len(chunks) if chunks else 0} chunks found")
+        if chunks:
+            logger.info(f"First few chunks: {chunks[:3]}")
         
         if not chunks:
             logger.warning("No word chunks found for attention processing")
@@ -880,8 +889,16 @@ def process_attention_into_pairs(attention_result, audio_file_path, model_size, 
         
         # Extract attention weights from your existing result format
         attention_data = attention_result.get("attention", [])
+        logger.info(f"Attention result keys: {list(attention_result.keys()) if attention_result else 'None'}")
+        logger.info(f"Attention data type: {type(attention_data)}, length: {len(attention_data) if attention_data else 0}")
+        
+        if attention_data and len(attention_data) > 0:
+            logger.info(f"First layer shape: {len(attention_data[0]) if attention_data[0] else 0}")
+            if attention_data[0] and len(attention_data[0]) > 0:
+                logger.info(f"First head shape: {len(attention_data[0][0]) if attention_data[0][0] else 0}")
+        
         if not attention_data or layer_idx >= len(attention_data):
-            logger.warning(f"No attention data for layer {layer_idx}")
+            logger.warning(f"No attention data for layer {layer_idx} (available layers: {len(attention_data) if attention_data else 0})")
             return {
                 "attention_pairs": [],
                 "timestamp_attention": [],

@@ -21,6 +21,7 @@ from app.services.model_loader_service import (
     extract_audio_frequency_features,
     transcribe_whisper_with_attention,
     predict_emotion_wave2vec_with_attention,
+    transcribe_whisper_with_timestamps,
 )
 from app.services.dataset_service import resolve_file
 from app.core.redis import get_result, cache_result
@@ -1324,14 +1325,29 @@ async def extract_attention_pairs_endpoint(
         # Use your existing attention function as base
         attention_result = transcribe_whisper_with_attention(str(resolved_path), model_size)
         
+        logger.info(f"Attention result type: {type(attention_result)}")
+        logger.info(f"Attention result keys: {list(attention_result.keys()) if isinstance(attention_result, dict) else 'Not a dict'}")
+        
         if not attention_result or "attention" not in attention_result:
+            logger.error(f"No attention in result. Available keys: {list(attention_result.keys()) if attention_result else 'None'}")
             raise HTTPException(status_code=500, detail="Failed to extract attention from model")
+        
+        # Also get timestamps separately since attention result doesn't include them
+        timestamp_result = transcribe_whisper_with_timestamps(str(resolved_path), model_size)
+        
+        # Combine attention and timestamp data
+        combined_result = {
+            **attention_result,
+            "chunks": timestamp_result.get("chunks", []),
+            "audio": timestamp_result.get("audio"),
+            "sample_rate": timestamp_result.get("sample_rate")
+        }
         
         # Process attention data into pairs and timeline format
         from app.services.model_loader_service import process_attention_into_pairs
         
         attention_pairs_data = process_attention_into_pairs(
-            attention_result,
+            combined_result,
             str(resolved_path),
             model_size,
             layer_idx,

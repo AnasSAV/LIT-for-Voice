@@ -438,7 +438,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="scalers" className="h-full">
         <div className="panel-header border-b panel-border px-3 py-2">
-            <TabsList className={`h-7 ${model === 'wav2vec2' ? 'grid grid-cols-3' : 'grid grid-cols-5'} w-full`}>
+            <TabsList className={`h-7 ${model === 'wav2vec2' ? 'grid grid-cols-3' : 'grid grid-cols-4'} w-full`}>
             <TabsTrigger value="scalers" className="text-xs">Scalers</TabsTrigger>
             <TabsTrigger value="saliency" className="text-xs">Saliency</TabsTrigger>
             <TabsTrigger value="perturbation" className="text-xs">Perturbation</TabsTrigger>
