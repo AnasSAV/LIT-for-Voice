@@ -1258,6 +1258,100 @@ async def get_whisper_with_attention(
         raise HTTPException(status_code=500, detail=f"Transcription with attention failed: {str(e)}")
 
 
+@router.post("/inferences/attention-pairs")
+async def extract_attention_pairs_endpoint(
+    request: Request,
+    body: dict = Body(..., example={
+        "model": "whisper-base",
+        "file_path": "/path/to/audio.wav", 
+        "dataset": "common-voice",
+        "dataset_file": "sample-001.mp3",
+        "layer": 6,
+        "head": 0
+    })
+):
+    """Extract word-to-word attention relationships and timestamp-level attention from Whisper model"""
+    try:
+        # Get session ID following your pattern
+        session_id = get_session_id(request)
+        
+        # Extract parameters
+        model = body.get("model", "whisper-base")
+        file_path = body.get("file_path")
+        dataset = body.get("dataset")
+        dataset_file = body.get("dataset_file")
+        layer_idx = body.get("layer", 6)
+        head_idx = body.get("head", 0)
+        
+        # Validate model (following your pattern)
+        if "whisper" not in model.lower():
+            raise HTTPException(status_code=400, detail="Attention pairs extraction only supports Whisper models")
+        
+        # Resolve file path following your exact pattern
+        resolved_path: Optional[Path] = None
+        
+        if file_path:
+            resolved_path = Path(file_path)
+        elif dataset and dataset_file:
+            try:
+                resolved_path = resolve_file(dataset, dataset_file, session_id)
+            except FileNotFoundError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing audio reference. Provide either 'file_path' or 'dataset' + 'dataset_file'."
+            )
+        
+        if not resolved_path.exists():
+            raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
+        
+        # Create cache key following your pattern
+        file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+        cache_key = f"{model}_attention_pairs_{file_content_hash}_l{layer_idx}_h{head_idx}"
+        
+        # Check cache following your pattern
+        cached_result = await get_result(model, cache_key)
+        if cached_result is not None:
+            logger.info(f"Returning cached attention pairs for {resolved_path}")
+            return cached_result
+        
+        # Extract attention pairs using your existing infrastructure
+        model_size = "base" if "base" in model else "large"
+        
+        # Use your existing attention function as base
+        attention_result = transcribe_whisper_with_attention(str(resolved_path), model_size)
+        
+        if not attention_result or "attention" not in attention_result:
+            raise HTTPException(status_code=500, detail="Failed to extract attention from model")
+        
+        # Process attention data into pairs and timeline format
+        from app.services.model_loader_service import process_attention_into_pairs
+        
+        attention_pairs_data = process_attention_into_pairs(
+            attention_result,
+            str(resolved_path),
+            model_size,
+            layer_idx,
+            head_idx
+        )
+        
+        # Cache result following your pattern
+        await cache_result(model, cache_key, attention_pairs_data, ttl=24*60*60)
+        
+        logger.info(f"Generated attention pairs: {len(attention_pairs_data.get('attention_pairs', []))} pairs")
+        
+        return attention_pairs_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error extracting attention pairs: {e}")
+        raise HTTPException(status_code=500, detail=f"Attention extraction failed: {str(e)}")
+
+
     return {
         "model": model,
         "file_path": str(resolved_path),

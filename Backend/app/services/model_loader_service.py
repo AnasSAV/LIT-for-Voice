@@ -854,3 +854,116 @@ def extract_audio_frequency_features(audio_file_path: str) -> dict:
     
     return flattened_features
 
+
+def process_attention_into_pairs(attention_result, audio_file_path, model_size, layer_idx, head_idx):
+    """
+    Process raw attention data into word-to-word pairs and timeline format
+    Following your existing patterns and infrastructure
+    """
+    logger.info(f"Processing attention into pairs: layer={layer_idx}, head={head_idx}")
+    
+    try:
+        # Get transcription with timestamps using your existing function
+        timestamp_data = transcribe_whisper_with_timestamps(audio_file_path, model_size)
+        chunks = timestamp_data.get("chunks", [])
+        
+        if not chunks:
+            logger.warning("No word chunks found for attention processing")
+            return {
+                "attention_pairs": [],
+                "timestamp_attention": [], 
+                "total_duration": 0,
+                "model": f"whisper-{model_size}",
+                "layer": layer_idx,
+                "head": head_idx
+            }
+        
+        # Extract attention weights from your existing result format
+        attention_data = attention_result.get("attention", [])
+        if not attention_data or layer_idx >= len(attention_data):
+            logger.warning(f"No attention data for layer {layer_idx}")
+            return {
+                "attention_pairs": [],
+                "timestamp_attention": [],
+                "total_duration": 0,
+                "error": "No attention data available for specified layer"
+            }
+        
+        # Get layer attention
+        layer_attention = attention_data[layer_idx]
+        if head_idx >= len(layer_attention):
+            head_idx = 0
+            logger.warning(f"Head index too high, using head {head_idx}")
+        
+        head_attention = layer_attention[head_idx]
+        
+        # Calculate duration
+        audio_duration = chunks[-1]["timestamp"][1] if chunks else 0
+        
+        # Generate word-to-word attention pairs
+        attention_pairs = []
+        for i, word1 in enumerate(chunks):
+            for j, word2 in enumerate(chunks):
+                try:
+                    # Map word positions to attention matrix indices
+                    # This is a simplified mapping - you may want to adjust based on your attention matrix structure
+                    att_i = min(i, len(head_attention) - 1)
+                    att_j = min(j, len(head_attention[0]) - 1) if head_attention else 0
+                    
+                    attention_weight = head_attention[att_i][att_j] if head_attention else 0.0
+                    
+                    attention_pairs.append({
+                        "from_word": word1.get("text", "").strip(),
+                        "to_word": word2.get("text", "").strip(), 
+                        "from_time": word1.get("timestamp", [0, 0]),
+                        "to_time": word2.get("timestamp", [0, 0]),
+                        "attention_weight": float(attention_weight),
+                        "from_index": i,
+                        "to_index": j
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error processing word pair {i}-{j}: {e}")
+                    continue
+        
+        # Generate timestamp-level attention (timeline view)
+        timestamp_attention = []
+        time_resolution = 0.1  # 100ms resolution
+        
+        for t in np.arange(0, audio_duration, time_resolution):
+            # Find corresponding attention value for this timestamp
+            frame_idx = int(t / audio_duration * len(head_attention)) if head_attention else 0
+            frame_idx = min(frame_idx, len(head_attention) - 1) if head_attention else 0
+            
+            # Average attention from this frame to all other frames
+            avg_attention = float(np.mean(head_attention[frame_idx])) if head_attention else 0.0
+            
+            timestamp_attention.append({
+                "time": float(t),
+                "attention": avg_attention,
+                "frame_index": frame_idx
+            })
+        
+        result = {
+            "model": f"whisper-{model_size}",
+            "layer": layer_idx,
+            "head": head_idx,
+            "attention_pairs": attention_pairs,
+            "timestamp_attention": timestamp_attention,
+            "total_duration": float(audio_duration),
+            "sequence_length": len(head_attention) if head_attention else 0,
+            "word_chunks": chunks
+        }
+        
+        logger.info(f"Generated {len(attention_pairs)} attention pairs and {len(timestamp_attention)} timestamp points")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error processing attention into pairs: {e}")
+        return {
+            "attention_pairs": [],
+            "timestamp_attention": [],
+            "total_duration": 0,
+            "error": f"Processing failed: {str(e)}"
+        }
+

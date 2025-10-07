@@ -3,6 +3,7 @@ import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { ScalersVisualization } from "../visualization/ScalersVisualization";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
+import { AttentionPairsVisualization } from "../visualization/AttentionPairsVisualization";
 import { useState, useEffect } from "react";
 import { API_BASE } from "@/lib/api";
 
@@ -437,7 +438,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="scalers" className="h-full">
         <div className="panel-header border-b panel-border px-3 py-2">
-            <TabsList className={`h-7 ${model === 'wav2vec2' ? 'grid grid-cols-3' : 'grid grid-cols-4'} w-full`}>
+            <TabsList className={`h-7 ${model === 'wav2vec2' ? 'grid grid-cols-3' : 'grid grid-cols-5'} w-full`}>
             <TabsTrigger value="scalers" className="text-xs">Scalers</TabsTrigger>
             <TabsTrigger value="saliency" className="text-xs">Saliency</TabsTrigger>
             <TabsTrigger value="perturbation" className="text-xs">Perturbation</TabsTrigger>
@@ -484,11 +485,19 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           {model !== 'wav2vec2' && (
             <TabsContent value="attention" className="m-0 h-full">
               <div className="p-3">
-                <AttentionVisualization 
-                  attention={attention} 
-                  transcript={transcript} 
-                  isLoading={isLoadingAttention} 
-                />
+                {model?.includes('whisper') ? (
+                  <AttentionPairsVisualization 
+                    selectedFile={selectedFile || selectedEmbeddingFile}
+                    model={model}
+                    dataset={dataset}
+                  />
+                ) : (
+                  <AttentionVisualization 
+                    attention={attention} 
+                    transcript={transcript} 
+                    isLoading={isLoadingAttention} 
+                  />
+                )}
               </div>
             </TabsContent>
           )}
