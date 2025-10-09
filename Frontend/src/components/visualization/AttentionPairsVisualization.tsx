@@ -164,8 +164,9 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
       }
     };
 
-    // Get top pairs for display
+    // Get top pairs for display (exclude self-attention pairs)
     const topPairs = pairs
+      .filter(pair => pair.from_index !== pair.to_index) // Exclude self-attention
       .sort((a, b) => b.attention_weight - a.attention_weight)
       .slice(0, 10);
 
@@ -201,26 +202,41 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
                     // Safe matrix access with bounds checking
                     const attentionValue = (i < matrix.length && j < matrix[0]?.length) ? matrix[i][j] : 0;
                     const isSelfAttention = i === j;
-                    const colorInfo = normalizeAttention(attentionValue, isSelfAttention);
                     
-                    // Different colors for self vs inter-word attention
-                    const backgroundColor = isSelfAttention 
-                      ? `rgba(251, 191, 36, ${colorInfo.intensity})` // Gold for self-attention
-                      : `rgba(59, 130, 246, ${colorInfo.intensity})`; // Blue for inter-word attention
+                    if (isSelfAttention) {
+                      // Block out diagonal cells (self-attention)
+                      return (
+                        <div
+                          key={`cell-${i}-${j}`}
+                          className="aspect-square border border-gray-300 flex items-center justify-center"
+                          style={{
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)', // Light black/gray
+                            minWidth: '24px',
+                            minHeight: '24px'
+                          }}
+                          title="Self-attention (blocked)"
+                        >
+                          {/* No value displayed */}
+                        </div>
+                      );
+                    }
+                    
+                    // For non-diagonal cells, use relative coloring
+                    const colorInfo = normalizeAttention(attentionValue, false);
                     
                     return (
                       <div
                         key={`cell-${i}-${j}`}
                         className="aspect-square border border-gray-200 text-xs flex items-center justify-center cursor-pointer hover:border-gray-400 transition-all"
                         style={{
-                          backgroundColor,
+                          backgroundColor: `rgba(59, 130, 246, ${colorInfo.intensity})`,
                           color: colorInfo.intensity > 0.6 ? 'white' : 'black',
                           minWidth: '24px',
                           minHeight: '24px'
                         }}
-                        title={`${fromWord} → ${toWord}: ${(attentionValue * 100).toFixed(2)}%${isSelfAttention ? ' (self)' : ''}`}
+                        title={`${fromWord} → ${toWord}: ${(attentionValue * 100).toFixed(2)}%`}
                       >
-                        {attentionValue > 0.01 ? (attentionValue * 100).toFixed(0) : ''}
+                        {attentionValue > 0.01 ? (attentionValue * 100).toFixed(0) : '0'}
                       </div>
                     );
                   })}
