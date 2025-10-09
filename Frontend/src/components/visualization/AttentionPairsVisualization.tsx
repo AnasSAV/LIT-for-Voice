@@ -143,6 +143,27 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
       }
     });
 
+    // Calculate color scale excluding self-attention for better contrast
+    const nonSelfAttentionValues = pairs
+      .filter(p => p.from_index !== p.to_index) // Exclude self-attention
+      .map(p => p.attention_weight)
+      .filter(val => val > 0);
+    
+    const minNonSelfAttention = Math.min(...nonSelfAttentionValues, 0);
+    const maxNonSelfAttention = Math.max(...nonSelfAttentionValues, 1);
+    
+    // Function to normalize attention values for coloring
+    const normalizeAttention = (value: number, isSelfAttention: boolean) => {
+      if (isSelfAttention) {
+        // Self-attention gets a distinct color (gold/yellow)
+        return { intensity: 0.8, isSelf: true };
+      } else {
+        // Non-self attention uses relative scale
+        const normalized = (value - minNonSelfAttention) / (maxNonSelfAttention - minNonSelfAttention);
+        return { intensity: Math.max(normalized, 0.1), isSelf: false };
+      }
+    };
+
     // Get top pairs for display
     const topPairs = pairs
       .sort((a, b) => b.attention_weight - a.attention_weight)
@@ -167,28 +188,39 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
                 <div></div>
                 {words.map((word, i) => (
                   <div key={i} className="text-xs p-1 text-center font-medium truncate" title={word}>
-                    {word.substring(0, 3)}
+                    {word.length > 6 ? word.substring(0, 6) + '...' : word}
                   </div>
                 ))}
                 
                 {words.map((fromWord, i) => (
                 <>
                   <div key={`row-${i}`} className="text-xs p-1 font-medium truncate" title={fromWord}>
-                    {fromWord.substring(0, 3)}
+                    {fromWord.length > 8 ? fromWord.substring(0, 8) + '...' : fromWord}
                   </div>
                   {words.map((toWord, j) => {
                     // Safe matrix access with bounds checking
                     const attentionValue = (i < matrix.length && j < matrix[0]?.length) ? matrix[i][j] : 0;
+                    const isSelfAttention = i === j;
+                    const colorInfo = normalizeAttention(attentionValue, isSelfAttention);
+                    
+                    // Different colors for self vs inter-word attention
+                    const backgroundColor = isSelfAttention 
+                      ? `rgba(251, 191, 36, ${colorInfo.intensity})` // Gold for self-attention
+                      : `rgba(59, 130, 246, ${colorInfo.intensity})`; // Blue for inter-word attention
+                    
                     return (
                       <div
                         key={`cell-${i}-${j}`}
-                        className="aspect-square border border-gray-200 text-xs flex items-center justify-center"
+                        className="aspect-square border border-gray-200 text-xs flex items-center justify-center cursor-pointer hover:border-gray-400 transition-all"
                         style={{
-                          backgroundColor: `rgba(59, 130, 246, ${attentionValue * 100})`
+                          backgroundColor,
+                          color: colorInfo.intensity > 0.6 ? 'white' : 'black',
+                          minWidth: '24px',
+                          minHeight: '24px'
                         }}
-                        title={`${fromWord} → ${toWord}: ${(attentionValue * 100).toFixed(2)}%`}
+                        title={`${fromWord} → ${toWord}: ${(attentionValue * 100).toFixed(2)}%${isSelfAttention ? ' (self)' : ''}`}
                       >
-                        {(attentionValue * 100).toFixed(0)}
+                        {attentionValue > 0.01 ? (attentionValue * 100).toFixed(0) : ''}
                       </div>
                     );
                   })}
