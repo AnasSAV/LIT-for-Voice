@@ -120,11 +120,27 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
     const pairs = attentionData.attention_pairs as AttentionPair[];
     const words = [...new Set(pairs.map(p => p.from_word))];
     
-    // Create attention matrix
-    const matrix: number[][] = Array(words.length).fill(null).map(() => Array(words.length).fill(0));
+    // Create attention matrix based on actual sequence length, not just unique words
+    const maxIndex = Math.max(
+      ...pairs.map(p => Math.max(p.from_index, p.to_index)),
+      words.length - 1
+    );
+    const matrixSize = maxIndex + 1;
     
+    // Create attention matrix with proper size
+    const matrix: number[][] = Array(matrixSize).fill(null).map(() => Array(matrixSize).fill(0));
+    
+    // Safely populate matrix with bounds checking
     pairs.forEach(pair => {
-      matrix[pair.from_index][pair.to_index] = pair.attention_weight;
+      const fromIdx = pair.from_index;
+      const toIdx = pair.to_index;
+      
+      // Bounds check to prevent array access errors
+      if (fromIdx >= 0 && fromIdx < matrixSize && toIdx >= 0 && toIdx < matrixSize) {
+        matrix[fromIdx][toIdx] = pair.attention_weight;
+      } else {
+        console.warn(`Index out of bounds: from=${fromIdx}, to=${toIdx}, matrixSize=${matrixSize}`);
+      }
     });
 
     // Get top pairs for display
@@ -140,34 +156,46 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
             <CardTitle className="text-sm">Word-to-Word Attention Matrix</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${words.length + 1}, minmax(0, 1fr))` }}>
-              <div></div>
-              {words.map((word, i) => (
-                <div key={i} className="text-xs p-1 text-center font-medium truncate" title={word}>
-                  {word.substring(0, 3)}
-                </div>
-              ))}
-              
-              {words.map((fromWord, i) => (
+            {/* Limit matrix display size for performance and readability */}
+            {words.length > 50 ? (
+              <div className="text-sm text-muted-foreground p-4">
+                Attention matrix too large to display ({words.length}x{words.length}). 
+                Showing top attention pairs below instead.
+              </div>
+            ) : (
+              <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${words.length + 1}, minmax(0, 1fr))` }}>
+                <div></div>
+                {words.map((word, i) => (
+                  <div key={i} className="text-xs p-1 text-center font-medium truncate" title={word}>
+                    {word.substring(0, 3)}
+                  </div>
+                ))}
+                
+                {words.map((fromWord, i) => (
                 <>
                   <div key={`row-${i}`} className="text-xs p-1 font-medium truncate" title={fromWord}>
                     {fromWord.substring(0, 3)}
                   </div>
-                  {words.map((toWord, j) => (
-                    <div
-                      key={`cell-${i}-${j}`}
-                      className="aspect-square border border-gray-200 text-xs flex items-center justify-center"
-                      style={{
-                        backgroundColor: `rgba(59, 130, 246, ${matrix[i][j] * 100})`
-                      }}
-                      title={`${fromWord} → ${toWord}: ${(matrix[i][j] * 100).toFixed(2)}%`}
-                    >
-                      {(matrix[i][j] * 100).toFixed(0)}
-                    </div>
-                  ))}
+                  {words.map((toWord, j) => {
+                    // Safe matrix access with bounds checking
+                    const attentionValue = (i < matrix.length && j < matrix[0]?.length) ? matrix[i][j] : 0;
+                    return (
+                      <div
+                        key={`cell-${i}-${j}`}
+                        className="aspect-square border border-gray-200 text-xs flex items-center justify-center"
+                        style={{
+                          backgroundColor: `rgba(59, 130, 246, ${attentionValue * 100})`
+                        }}
+                        title={`${fromWord} → ${toWord}: ${(attentionValue * 100).toFixed(2)}%`}
+                      >
+                        {(attentionValue * 100).toFixed(0)}
+                      </div>
+                    );
+                  })}
                 </>
               ))}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

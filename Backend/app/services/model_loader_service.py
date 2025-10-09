@@ -4,9 +4,13 @@ from transformers import (
     pipeline,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2ForSequenceClassification,
+    Wav2Vec2Model,
+    Wav2Vec2Processor,
     WhisperProcessor,
     WhisperModel,
     WhisperForConditionalGeneration,
+    AutoProcessor,
+    AutoModel,
 )
 import librosa
 import numpy as np
@@ -29,7 +33,8 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
     if return_attention:
         
         processor = WhisperProcessor.from_pretrained(model_id)
-        model = WhisperForConditionalGeneration.from_pretrained(model_id)
+        # CRITICAL FIX: Use eager attention to support output_attentions=True
+        model = WhisperForConditionalGeneration.from_pretrained(model_id, attn_implementation="eager")
         model = model.to("cuda:0" if torch.cuda.is_available() else "cpu")
         
         # Process audio to input features
@@ -184,29 +189,24 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
             if not attention_data:
                 logger.info("Primary attention extraction failed, trying robust method...")
                 try:
-                    # Import all required transformers components
-                    from transformers import (
-                        WhisperModel, 
-                        WhisperProcessor, 
-                        AutoProcessor, 
-                        AutoModel
-                    )
-                    
-                    # Try with transformers library
+                    # Use already imported classes (no need to re-import)
                     processor = None
-                    model = None
+                    model_for_attention = None
                     
                     try:
+                        from transformers import AutoProcessor, AutoModel
                         processor = AutoProcessor.from_pretrained(model_id)
-                        model = AutoModel.from_pretrained(model_id)
-                        logger.info("Using AutoProcessor and AutoModel")
+                        # CRITICAL FIX: Use eager attention for output_attentions=True
+                        model_for_attention = AutoModel.from_pretrained(model_id, attn_implementation="eager")
+                        logger.info("Using AutoProcessor and AutoModel with eager attention")
                     except Exception as auto_error:
                         logger.info(f"AutoProcessor failed: {auto_error}, trying WhisperProcessor")
                         processor = WhisperProcessor.from_pretrained(model_id)  
-                        model = WhisperModel.from_pretrained(model_id)
+                        # CRITICAL FIX: Use eager attention for output_attentions=True
+                        model_for_attention = WhisperModel.from_pretrained(model_id, attn_implementation="eager")
                     
                     if device and device != "cpu":
-                        model = model.to(device)
+                        model_for_attention = model_for_attention.to(device)
                     
                     # Process audio properly
                     inputs = processor(audio, sampling_rate=sample_rate, return_tensors="pt")
@@ -217,7 +217,7 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
                     
                     # Extract attention with proper error handling
                     with torch.no_grad():
-                        outputs = model.encoder(input_features, output_attentions=True, return_dict=True)
+                        outputs = model_for_attention.encoder(input_features, output_attentions=True, return_dict=True)
                     
                     if hasattr(outputs, 'attentions') and outputs.attentions:
                         for layer_idx, layer_att in enumerate(outputs.attentions):
@@ -581,7 +581,8 @@ def predict_emotion_wave2vec(audio_path, return_attention=False):
                     from transformers import Wav2Vec2Model
                     # Use the base model mentioned in the HuggingFace page
                     base_model_id = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
-                    base_model = Wav2Vec2Model.from_pretrained(base_model_id)
+                    # CRITICAL FIX: Use eager attention for output_attentions=True
+                    base_model = Wav2Vec2Model.from_pretrained(base_model_id, attn_implementation="eager")
                     base_model = base_model.to(emo_device)
                     
                     logger.info(f"Loaded base model: {base_model_id}")
@@ -671,12 +672,11 @@ def predict_emotion_wave2vec(audio_path, return_attention=False):
             if return_attention and (not found_attention or not attention_data):
                 logger.info("Primary methods failed, trying enhanced Wav2Vec2 attention extraction...")
                 try:
-                    from transformers import Wav2Vec2Model, Wav2Vec2Processor
-                    
-                    # Load base Wav2Vec2 model for attention extraction
+                    # Use already imported Wav2Vec2 classes
                     base_model_name = "facebook/wav2vec2-base-960h"
                     processor = Wav2Vec2Processor.from_pretrained(base_model_name)
-                    base_model = Wav2Vec2Model.from_pretrained(base_model_name)
+                    # CRITICAL FIX: Use eager attention for output_attentions=True
+                    base_model = Wav2Vec2Model.from_pretrained(base_model_name, attn_implementation="eager")
                     
                     # Use the available device from the emotion model
                     if emo_device and emo_device != torch.device("cpu"):
