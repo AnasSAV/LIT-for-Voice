@@ -119,30 +119,72 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
             
             logger.info(f"Final attention data layers: {len(attention_data)}")
             
-            # If no real attention data found, create mock data for testing
+            # If no real attention data found, try a more direct approach
             if not attention_data:
-                logger.info("Creating mock attention data for testing...")
-                # Create mock attention: 12 layers, 8 heads each, 10x10 matrix
-                attention_data = []
-                for layer in range(2):  # Just 2 layers for testing
-                    layer_heads = []
-                    for head in range(4):  # 4 heads per layer
-                        # Create random attention matrix
-                        seq_len = 8  # Small sequence length
-                        att_matrix = []
-                        for i in range(seq_len):
-                            row = []
-                            for j in range(seq_len):
-                                # Create some pattern - diagonal bias with some noise
-                                if i == j:
-                                    att_val = 0.7 + np.random.random() * 0.3
-                                else:
-                                    att_val = np.random.random() * 0.3
-                                row.append(float(att_val))
-                            att_matrix.append(row)
-                        layer_heads.append(att_matrix)
-                    attention_data.append(layer_heads)
-                logger.info(f"Created mock attention: {len(attention_data)} layers")
+                logger.info("Attempting direct attention extraction...")
+                try:
+                    # Load model specifically for attention (reuse existing processor)
+                    from transformers import WhisperModel
+                    
+                    whisper_model = WhisperModel.from_pretrained(model_id)
+                    # Use the processor that's already defined above
+                    
+                    # Move to same device
+                    whisper_model = whisper_model.to(device)
+                    
+                    # Process audio using existing processor
+                    input_features = processor(audio, sampling_rate=16000, return_tensors="pt").input_features
+                    input_features = input_features.to(device)
+                    
+                    # Get encoder outputs with attention
+                    logger.info(f"Calling encoder with input shape: {input_features.shape}")
+                    encoder_outputs = whisper_model.encoder(
+                        input_features,
+                        output_attentions=True,
+                        return_dict=True
+                    )
+                    
+                    logger.info(f"Encoder outputs type: {type(encoder_outputs)}")
+                    logger.info(f"Encoder outputs keys: {list(encoder_outputs.keys()) if hasattr(encoder_outputs, 'keys') else 'No keys'}")
+                    logger.info(f"Has attentions attr: {hasattr(encoder_outputs, 'attentions')}")
+                    
+                    # Check if we got encoder attention
+                    if hasattr(encoder_outputs, 'attentions') and encoder_outputs.attentions is not None:
+                        encoder_attentions = encoder_outputs.attentions
+                        logger.info(f"Got encoder attentions: {len(encoder_attentions)} layers")
+                        
+                        # Convert encoder attention to our format
+                        for layer_idx, layer_att in enumerate(encoder_attentions):
+                            if layer_att is not None:
+                                # layer_att shape: [batch_size, num_heads, seq_len, seq_len]
+                                # Convert to [num_heads, seq_len, seq_len] format
+                                layer_data = []
+                                batch_att = layer_att[0]  # Take first batch
+                                num_heads = batch_att.shape[0]
+                                
+                                for head_idx in range(num_heads):
+                                    head_att = batch_att[head_idx].cpu().numpy()
+                                    layer_data.append(head_att.tolist())
+                                
+                                attention_data.append(layer_data)
+                                logger.info(f"Added encoder layer {layer_idx}: {batch_att.shape}")
+                        
+                        logger.info(f"Successfully extracted real attention: {len(attention_data)} layers")
+                    else:
+                        logger.warning("No encoder attentions found")
+                        if hasattr(encoder_outputs, 'attentions'):
+                            logger.warning(f"Attentions is None: {encoder_outputs.attentions}")
+                        
+                except Exception as e:
+                    logger.error(f"Direct attention extraction failed: {e}")
+                    import traceback
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
+                    
+            # No fallback mock data - return None if real extraction fails
+            if not attention_data:
+                logger.warning("No real attention data available - attention extraction failed")
+                logger.info("All attention extraction methods failed, returning None attention data")
+                attention_data = None
             
             result_dict = {
                 "text": transcript,
@@ -235,19 +277,10 @@ def predict_emotion_wave2vec_with_attention(audio_path):
     result = predict_emotion_wave2vec(audio_path, return_attention=True)
     logger.info(f"predict_emotion_wave2vec_with_attention result: has_attention={bool(result.get('attention'))}")
     
-    # TEMPORARY DEBUG: Ensure there's always attention data for testing
+    # No mock data fallback - return actual results only
     if not result.get('attention'):
-        logger.warning("Creating fallback attention data for frontend testing")
-        result['attention'] = [
-            [  # Layer 0
-                [[0.8, 0.1, 0.1], [0.2, 0.6, 0.2], [0.1, 0.1, 0.8]],  # Head 0
-                [[0.7, 0.2, 0.1], [0.3, 0.5, 0.2], [0.1, 0.2, 0.7]]   # Head 1
-            ],
-            [  # Layer 1
-                [[0.6, 0.3, 0.1], [0.4, 0.4, 0.2], [0.1, 0.3, 0.6]],  # Head 0
-                [[0.5, 0.4, 0.1], [0.3, 0.3, 0.4], [0.2, 0.3, 0.5]]   # Head 1
-            ]
-        ]
+        logger.warning("No real attention data extracted from Wav2Vec2 model")
+        result['attention'] = None
     
     return result
 
@@ -540,31 +573,10 @@ def predict_emotion_wave2vec(audio_path, return_attention=False):
                     import traceback
                     logger.warning(f"Method 4 traceback: {traceback.format_exc()}")
             
-            # Fallback: Create mock data only if no real attention found
+            # No mock data fallback - only return real attention data
             if return_attention and (not found_attention or not attention_data):
-                logger.warning("All attention extraction methods failed, creating mock data...")
-                try:
-                    attention_data = []
-                    for layer in range(3):  # 3 layers
-                        layer_heads = []
-                        for head in range(6):  # 6 heads per layer  
-                            seq_len = 12  # Sequence length for audio
-                            att_matrix = []
-                            for i in range(seq_len):
-                                row = []
-                                for j in range(seq_len):
-                                    if abs(i - j) <= 2:  # Local attention
-                                        att_val = 0.6 + np.random.random() * 0.4
-                                    else:  # Long-range attention
-                                        att_val = np.random.random() * 0.2
-                                    row.append(float(att_val))
-                                att_matrix.append(row)
-                            layer_heads.append(att_matrix)
-                        attention_data.append(layer_heads)
-                    logger.info(f"Created mock Wav2Vec2 attention: {len(attention_data)} layers")
-                except Exception as mock_error:
-                    logger.error(f"Failed to create mock attention: {mock_error}")
-                    attention_data = None  # Set to None if even mock data fails
+                logger.warning("All attention extraction methods failed - no attention data available")
+                attention_data = None
             elif return_attention and attention_data:
                 logger.info(f"Successfully extracted real Wav2Vec2 attention: {len(attention_data)} layers")
         

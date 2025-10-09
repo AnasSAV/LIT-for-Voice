@@ -28,7 +28,7 @@ interface AttentionPairsVisualizationProps {
 }
 
 export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: AttentionPairsVisualizationProps) => {
-  const [selectedLayer, setSelectedLayer] = useState(0);  // Start with layer 0 since mock data has only 2 layers
+  const [selectedLayer, setSelectedLayer] = useState(6);  // Middle layer for better semantic attention patterns
   const [selectedHead, setSelectedHead] = useState(0);
   const [attentionData, setAttentionData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -309,7 +309,7 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 4 }, (_, i) => (
+                  {Array.from({ length: 12 }, (_, i) => (
                     <SelectItem key={i} value={i.toString()}>Layer {i}</SelectItem>
                   ))}
                 </SelectContent>
@@ -323,7 +323,7 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 4 }, (_, i) => (
+                  {Array.from({ length: 12 }, (_, i) => (
                     <SelectItem key={i} value={i.toString()}>Head {i}</SelectItem>
                   ))}
                 </SelectContent>

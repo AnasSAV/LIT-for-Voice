@@ -762,6 +762,14 @@ async def get_wav2vec2_detailed_prediction(
         if include_attention:
             # Use the more expensive attention-enabled function
             detailed_result = await asyncio.to_thread(predict_emotion_wave2vec_with_attention, str(resolved_path))
+            
+            # Check if attention extraction failed (returns None for research integrity)
+            if detailed_result is None:
+                logger.warning(f"Wave2Vec2 attention extraction failed for {resolved_path} - returning error instead of mock data")
+                raise HTTPException(
+                    status_code=422, 
+                    detail="Attention extraction failed. This model/file combination does not support attention analysis."
+                )
         else:
             # Use the regular prediction function which is faster
             detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
@@ -1325,12 +1333,20 @@ async def extract_attention_pairs_endpoint(
         # Use your existing attention function as base
         attention_result = transcribe_whisper_with_attention(str(resolved_path), model_size)
         
+        # Check if attention extraction failed (returns None for research integrity)
+        if attention_result is None:
+            logger.warning(f"Attention extraction failed for {resolved_path} - returning error instead of mock data")
+            raise HTTPException(
+                status_code=422, 
+                detail="Attention extraction failed. This model/file combination does not support attention analysis."
+            )
+        
         logger.info(f"Attention result type: {type(attention_result)}")
         logger.info(f"Attention result keys: {list(attention_result.keys()) if isinstance(attention_result, dict) else 'Not a dict'}")
         
         if not attention_result or "attention" not in attention_result:
             logger.error(f"No attention in result. Available keys: {list(attention_result.keys()) if attention_result else 'None'}")
-            raise HTTPException(status_code=500, detail="Failed to extract attention from model")
+            raise HTTPException(status_code=422, detail="Attention data not available for this model/file combination")
         
         # Also get timestamps separately since attention result doesn't include them
         timestamp_result = transcribe_whisper_with_timestamps(str(resolved_path), model_size)
@@ -1353,6 +1369,14 @@ async def extract_attention_pairs_endpoint(
             layer_idx,
             head_idx
         )
+        
+        # Check if processing also failed
+        if attention_pairs_data is None:
+            logger.warning(f"Attention processing failed for {resolved_path}")
+            raise HTTPException(
+                status_code=422, 
+                detail="Attention data processing failed. Unable to generate attention pairs for this audio."
+            )
         
         # Cache result following your pattern
         await cache_result(model, cache_key, attention_pairs_data, ttl=24*60*60)

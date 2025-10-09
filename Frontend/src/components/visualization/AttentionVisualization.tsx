@@ -45,8 +45,8 @@ export const AttentionVisualization = ({ attention, transcript, isLoading }: Att
           <CardContent>
             <div className="text-center text-muted-foreground py-8">
               {!attention ? 
-                "No attention data available. Select an audio file and run prediction to see attention patterns." :
-                `Attention data received but empty (${attention.length} layers). This may indicate the model doesn't support attention extraction.`
+                "Attention extraction not available for this model/audio combination. Only authentic attention data is shown - no synthetic data is generated." :
+                `Attention data received but empty (${attention.length} layers). This model may not support attention extraction for this audio file.`
               }
             </div>
           </CardContent>
