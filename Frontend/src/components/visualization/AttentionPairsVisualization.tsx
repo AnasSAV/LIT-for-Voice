@@ -282,185 +282,157 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
     const timestamps = attentionData.timestamp_attention as TimestampAttention[];
     if (timestamps.length === 0) return null;
 
-    // Enhanced scaling to show differences more clearly
-    const attentionValues = timestamps.map(t => t.attention);
-    const minAttention = Math.min(...attentionValues);
-    const maxAttention = Math.max(...attentionValues);
-    const range = maxAttention - minAttention;
+    try {
+      const attentionValues = timestamps.map(t => t.attention || 0);
+      
+      // Check for valid data
+      if (attentionValues.length === 0 || attentionValues.some(val => isNaN(val))) {
+        return <div className="text-red-500 p-4">Invalid attention data</div>;
+      }
+      
+      const minVal = Math.min(...attentionValues);
+      const maxVal = Math.max(...attentionValues);
+      const range = maxVal - minVal;
+      
+      // Always use full 0-1 scale for maximum visual clarity
+      const normalizedValues = attentionValues.map(val => (val - minVal) / (range || 1));
     
-    // Use different scaling strategies
-    const normalizedValues = attentionValues.map(val => {
-      if (range === 0) return 0.5; // All values are the same
-      return (val - minAttention) / range; // 0 to 1 scale based on actual range
-    });
-
-    // Calculate some statistics for better visualization
-    const mean = attentionValues.reduce((sum, val) => sum + val, 0) / attentionValues.length;
-    const variance = attentionValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / attentionValues.length;
-    const stdDev = Math.sqrt(variance);
-    
-    // Normalize statistics for display
-    const normalizedMean = (mean - minAttention) / (range || 1);
-    const normalizedThreshold = Math.min(1, (mean + stdDev - minAttention) / (range || 1));
-    
-    // Calculate SVG dimensions
-    const svgHeight = 120;
-    const margin = 20;
-    const plotHeight = svgHeight - 2 * margin;
+    const width = 800;
+    const height = 250;
+    const padding = 60;
 
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Attention Over Time</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Range: {(minAttention * 100).toFixed(2)}% - {(maxAttention * 100).toFixed(2)}% | 
-            Std Dev: {(stdDev * 100).toFixed(2)}%
+          <CardTitle>Attention Timeline</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Showing attention values over time - scaled to highlight differences
           </p>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {/* Enhanced Line Chart */}
-            <div className="relative border rounded bg-white p-2">
-              <svg 
-                className="w-full" 
-                style={{ height: `${svgHeight}px` }}
-                viewBox={`0 0 100 ${svgHeight}`}
-                preserveAspectRatio="none"
-              >
-                {/* Grid lines */}
-                {[0.25, 0.5, 0.75, 1].map(fraction => (
-                  <line
-                    key={fraction}
-                    x1="0"
-                    y1={`${margin + (1 - fraction) * plotHeight}px`}
-                    x2="100%"
-                    y2={`${margin + (1 - fraction) * plotHeight}px`}
-                    stroke="rgba(0, 0, 0, 0.1)"
+          <div className="flex justify-center">
+            <svg width={width} height={height} className="border rounded bg-white">
+              {/* Grid lines for reference */}
+              {[0, 0.2, 0.4, 0.6, 0.8, 1].map(ratio => {
+                const y = padding + (1 - ratio) * (height - 2 * padding);
+                const actualValue = minVal + ratio * range;
+                return (
+                  <g key={`grid-${ratio}`}>
+                    <line
+                      x1={padding}
+                      y1={y}
+                      x2={width - padding}
+                      y2={y}
+                      stroke={ratio === 0 || ratio === 1 ? "#666" : "#e5e5e5"}
+                      strokeWidth={ratio === 0 || ratio === 1 ? "2" : "1"}
+                      strokeDasharray={ratio === 0 || ratio === 1 ? "none" : "2,2"}
+                    />
+                    <text x={padding - 10} y={y + 4} textAnchor="end" className="text-xs fill-gray-600">
+                      {(actualValue * 100).toFixed(2)}%
+                    </text>
+                  </g>
+                );
+              })}
+              
+              {/* Smooth attention curve */}
+              <polyline
+                points={normalizedValues.map((val, i) => {
+                  const x = padding + (i / (normalizedValues.length - 1)) * (width - 2 * padding);
+                  const y = padding + (1 - val) * (height - 2 * padding);
+                  return `${x},${y}`;
+                }).join(' ')}
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="2"
+              />
+              
+              {/* Data points */}
+              {normalizedValues.map((val, i) => {
+                const x = padding + (i / (normalizedValues.length - 1)) * (width - 2 * padding);
+                const y = padding + (1 - val) * (height - 2 * padding);
+                const originalVal = attentionValues[i];
+                
+                return (
+                  <circle
+                    key={`point-${i}`}
+                    cx={x}
+                    cy={y}
+                    r="3"
+                    fill="#2563eb"
+                    stroke="white"
                     strokeWidth="1"
-                  />
-                ))}
-                
-                {/* Mean line */}
-                <line
-                  x1="0"
-                  y1={`${margin + (1 - normalizedMean) * plotHeight}px`}
-                  x2="100%"
-                  y2={`${margin + (1 - normalizedMean) * plotHeight}px`}
-                  stroke="rgba(255, 165, 0, 0.6)"
-                  strokeWidth="2"
-                  strokeDasharray="3,3"
-                />
-                
-                {/* Threshold line (mean + std dev) */}
-                <line
-                  x1="0"
-                  y1={`${margin + (1 - normalizedThreshold) * plotHeight}px`}
-                  x2="100%"
-                  y2={`${margin + (1 - normalizedThreshold) * plotHeight}px`}
-                  stroke="rgba(255, 0, 0, 0.3)"
-                  strokeWidth="1"
-                  strokeDasharray="5,5"
-                />
-                
-                {/* Area fill under the line */}
-                <polygon
-                  fill="rgba(59, 130, 246, 0.1)"
-                  points={[
-                    `0,${svgHeight - margin}`,
-                    ...normalizedValues.map((val, i) => 
-                      `${(i / (normalizedValues.length - 1)) * 100},${margin + (1 - val) * plotHeight}`
-                    ),
-                    `100,${svgHeight - margin}`
-                  ].join(' ')}
-                />
-                
-                {/* Main attention line */}
-                <polyline
-                  fill="none"
-                  stroke="rgb(59, 130, 246)"
-                  strokeWidth="3"
-                  points={normalizedValues.map((val, i) => 
-                    `${(i / (normalizedValues.length - 1)) * 100},${margin + (1 - val) * plotHeight}`
-                  ).join(' ')}
-                />
-                
-                {/* Enhanced data points with simplified tooltips */}
-                {normalizedValues.map((val, i) => {
-                  const x = (i / (normalizedValues.length - 1)) * 100;
-                  const y = margin + (1 - val) * plotHeight;
-                  const originalVal = attentionValues[i];
-                  const isHighlight = originalVal > mean + stdDev;
-                  
-                  return (
-                    <g key={i}>
-                      <circle
-                        cx={`${x}%`}
-                        cy={`${y}px`}
-                        r={isHighlight ? "4" : "2"}
-                        fill={isHighlight ? "rgb(239, 68, 68)" : "rgb(59, 130, 246)"}
-                        stroke="white"
-                        strokeWidth="1"
-                      />
-                      {/* Simplified tooltip - only show time */}
-                      <title>Time: {timestamps[i].time.toFixed(2)}s</title>
-                    </g>
-                  );
-                })}
-                
-                {/* Y-axis labels */}
-                <text x="5" y={margin + 5} fontSize="10" fill="gray">
-                  {(maxAttention * 100).toFixed(1)}%
-                </text>
-                <text x="5" y={svgHeight - margin - 5} fontSize="10" fill="gray">
-                  {(minAttention * 100).toFixed(1)}%
-                </text>
-              </svg>
-            </div>
-            
-            {/* Bar Chart View for Comparison */}
-            <div className="relative border rounded bg-gray-50" style={{ height: "60px" }}>
-              <svg className="w-full h-full">
-                {normalizedValues.map((val, i) => {
-                  const barWidth = 100 / normalizedValues.length;
-                  const x = i * barWidth;
-                  const height = val * 50; // 50px max height
-                  const originalVal = attentionValues[i];
-                  const isHighlight = originalVal > mean + stdDev;
-                  
-                  return (
-                    <rect
-                      key={i}
-                      x={`${x}%`}
-                      y={`${50 - height}px`}
-                      width={`${barWidth * 0.8}%`}
-                      height={`${height}px`}
-                      fill={isHighlight ? "rgb(239, 68, 68)" : "rgb(59, 130, 246)"}
-                      opacity="0.7"
-                    >
-                      <title>Time: {timestamps[i].time.toFixed(2)}s</title>
-                    </rect>
-                  );
-                })}
-              </svg>
-            </div>
+                    className="hover:r-4 transition-all"
+                  >
+                    <title>
+                      Time: {timestamps[i].time.toFixed(2)}s
+                      Attention: {(originalVal * 100).toFixed(4)}%
+                    </title>
+                  </circle>
+                );
+              })}
+              
+              {/* Time axis */}
+              {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
+                const x = padding + ratio * (width - 2 * padding);
+                const timeIndex = Math.floor(ratio * (timestamps.length - 1));
+                const time = timestamps[timeIndex]?.time || 0;
+                return (
+                  <g key={`time-${ratio}`}>
+                    <line x1={x} y1={height - padding} x2={x} y2={height - padding + 5} stroke="#666" />
+                    <text x={x} y={height - padding + 18} textAnchor="middle" className="text-xs fill-gray-600">
+                      {time.toFixed(1)}s
+                    </text>
+                  </g>
+                );
+              })}
+              
+              {/* Axis labels */}
+              <text x={width / 2} y={height - 15} textAnchor="middle" className="text-sm font-medium fill-gray-700">
+                Time (seconds)
+              </text>
+              <text x={15} y={height / 2} textAnchor="middle" className="text-sm font-medium fill-gray-700" transform={`rotate(-90, 15, ${height / 2})`}>
+                Attention Values
+              </text>
+            </svg>
           </div>
           
-          {/* Enhanced Timeline info */}
+          {/* Simple stats */}
+          <div className="mt-4 flex justify-center gap-8 text-sm">
+            <div><span className="font-medium">Min:</span> {(minVal * 100).toFixed(4)}%</div>
+            <div><span className="font-medium">Max:</span> {(maxVal * 100).toFixed(4)}%</div>
+            <div><span className="font-medium">Range:</span> {(range * 100).toFixed(4)}%</div>
+            <div><span className="font-medium">Points:</span> {attentionValues.length}</div>
+          </div>
+          
+          <div className="mt-2 text-xs text-center text-gray-500">
+            Hover over points for exact values • Scale adjusted to show all differences
+          </div>
+
           <div className="mt-3 text-xs text-muted-foreground space-y-1">
             <div>
               Duration: {attentionData.total_duration?.toFixed(1)}s | 
               Points: {timestamps.length} | 
               Resolution: {((attentionData.total_duration || 0) / timestamps.length * 1000).toFixed(0)}ms
             </div>
-            <div>
-              Mean: {(mean * 100).toFixed(2)}% | 
-              Range: {(range * 100).toFixed(2)}% | 
-              Variability: {variance > 0 ? 'Dynamic' : 'Stable'}
-            </div>
           </div>
         </CardContent>
       </Card>
     );
+    } catch (error) {
+      console.error('Error rendering timeline:', error);
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Attention Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-red-500 p-4">
+              Error displaying attention timeline. Please try again.
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
   };
 
   if (isLoading) {
