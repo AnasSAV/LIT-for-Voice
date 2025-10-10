@@ -40,11 +40,6 @@ DATASET_DIRS = {
 logger = logging.getLogger(__name__)
 
 
-def get_session_id(request: Request) -> Optional[str]:
-    """Extract session ID from request (optional for backwards compatibility)"""
-    return getattr(request.state, 'sid', None)
-
-
 MODEL_FUNCTIONS = {
     "whisper-base": transcribe_whisper_base,
     "whisper-large": transcribe_whisper_large,
@@ -54,7 +49,6 @@ MODEL_FUNCTIONS = {
 
 @router.post("/inferences/run")
 async def run_inference_endpoint(
-    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "file_path": "/path/to/audio.wav",
@@ -71,13 +65,11 @@ async def run_inference_endpoint(
     if not model:
         raise HTTPException(status_code=400, detail="Model is required")
     
-    session_id = get_session_id(http_request)
-    return await run_inference(model, file_path, dataset, dataset_file, session_id)
+    return await run_inference(model, file_path, dataset, dataset_file)
 
 
 @router.post("/inferences/batch-check")
 async def check_batch_cache(
-    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "dataset": "common-voice",
@@ -92,15 +84,13 @@ async def check_batch_cache(
     if not model or not dataset:
         raise HTTPException(status_code=400, detail="Model and dataset are required")
     
-    session_id = get_session_id(http_request)
-    
     cached_results = {}
     missing_files = []
     
     for filename in files:
         try:
             # Resolve the file path
-            resolved_path = resolve_file(dataset, filename, session_id)
+            resolved_path = resolve_file(dataset, filename)
             
             # Create cache key
             file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
@@ -129,16 +119,14 @@ async def run_inference(
     file_path: Optional[str] = None,
     dataset: Optional[str] = None,
     dataset_file: Optional[str] = None,
-    session_id: Optional[str] = None,
 ):
     """Internal function for running inference - can be called directly or via HTTP endpoint"""
     logger.info(
-        "inferences.run model=%s file_path=%s dataset=%s dataset_file=%s session_id=%s",
+        "inferences.run model=%s file_path=%s dataset=%s dataset_file=%s",
         model,
         file_path,
         dataset,
         dataset_file,
-        session_id,
     )
 
     func = MODEL_FUNCTIONS.get(model)
@@ -152,7 +140,7 @@ async def run_inference(
     elif dataset and dataset_file:
         try:
             # Resolve using service (enforces allowed datasets and basename-only)
-            resolved_path = resolve_file(dataset, dataset_file, session_id)
+            resolved_path = resolve_file(dataset, dataset_file)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
@@ -201,8 +189,6 @@ async def batch_whisper_analysis(request: Request):
         model = body.get("model", "whisper-base")
         dataset = body.get("dataset")
         
-        logger.info(f"batch_whisper_analysis called with: filenames={len(filenames)} files, dataset={dataset}, model={model}")
-        
         if not filenames:
             raise HTTPException(status_code=400, detail="No filenames provided")
         
@@ -215,13 +201,11 @@ async def batch_whisper_analysis(request: Request):
         cached_count = 0
         missing_count = 0
         
-        session_id = get_session_id(request)
-        
         for filename in filenames:
             try:
                 # Get file path and create cache key
                 if dataset:
-                    file_path = resolve_file(dataset, filename, session_id)
+                    file_path = resolve_file(dataset, filename)
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():
@@ -236,24 +220,6 @@ async def batch_whisper_analysis(request: Request):
                 # Try to get from cache first
                 cached_result = await get_result(model, cache_key)
                 
-                # If not found and this is a custom dataset with session mismatch, try alternative cache keys
-                if cached_result is None and dataset and dataset.startswith('custom:'):
-                    from app.services.custom_dataset_service import parse_custom_dataset_name
-                    try:
-                        session_id_from_name, dataset_name = parse_custom_dataset_name(dataset)
-                        if session_id_from_name != session_id:
-                            # Try cache key with the original session ID path
-                            from app.services.custom_dataset_service import get_custom_dataset_manager
-                            original_manager = get_custom_dataset_manager(session_id_from_name)
-                            original_file_path = original_manager.resolve_file_path(dataset_name, filename)
-                            original_hash = hashlib.md5(str(original_file_path).encode()).hexdigest()
-                            original_cache_key = f"{model}_{original_hash}"
-                            cached_result = await get_result(model, original_cache_key)
-                            if cached_result is not None:
-                                logger.info(f"Found cached result using original session path for {filename}")
-                    except Exception as e:
-                        logger.warning(f"Could not try alternative cache key for {filename}: {e}")
-                
                 transcript = None
                 if cached_result is not None:
                     # Extract transcript from cached result
@@ -262,35 +228,11 @@ async def batch_whisper_analysis(request: Request):
                     else:
                         transcript = cached_result
                     cached_count += 1
-                    logger.info(f"Using cached transcript for {filename}")
                 else:
-                    # Not in cache - run inference to generate transcript
-                    logger.info(f"No cached transcript found for {filename}, running inference...")
-                    try:
-                        # Run inference to generate transcript
-                        inference_result = await run_inference(model, None, dataset, filename, session_id)
-                        
-                        if inference_result and isinstance(inference_result, dict):
-                            transcript = inference_result.get("prediction", inference_result.get("transcript"))
-                            if transcript:
-                                logger.info(f"Generated and cached transcript for {filename}")
-                                # The transcript is automatically cached by run_inference
-                            else:
-                                logger.warning(f"No transcript in inference result for {filename}")
-                                missing_count += 1
-                                continue
-                        elif isinstance(inference_result, str):
-                            transcript = inference_result
-                            logger.info(f"Generated transcript for {filename}")
-                        else:
-                            logger.warning(f"Invalid inference result for {filename}: {type(inference_result)}")
-                            missing_count += 1
-                            continue
-                            
-                    except Exception as inference_error:
-                        logger.error(f"Failed to run inference for {filename}: {inference_error}")
-                        missing_count += 1
-                        continue
+                    # Not in cache - skip this file for now
+                    print(f"No cached transcript found for {filename}")
+                    missing_count += 1
+                    continue
                 
                 if transcript:
                     # Clean and tokenize transcript
@@ -312,9 +254,8 @@ async def batch_whisper_analysis(request: Request):
                 missing_count += 1
                 continue
         
-        logger.info(f"Successfully processed {len(individual_transcripts)} files out of {len(filenames)} (cached: {cached_count}, generated: {len(individual_transcripts) - cached_count}, failed: {missing_count})")
         if not individual_transcripts:
-            raise HTTPException(status_code=404, detail=f"Could not process any of the selected files. Failed to generate transcripts for {missing_count} files.")
+            raise HTTPException(status_code=404, detail=f"No cached transcripts found for the selected files. Found {cached_count} cached, {missing_count} missing. Please run inference on these files first.")
         
         # Calculate word frequency
         from collections import Counter
@@ -369,13 +310,11 @@ async def get_whisper_accuracy(request: Request):
         if not dataset_file and not file_path:
             raise HTTPException(status_code=400, detail="Either dataset_file or file_path must be provided")
         
-        session_id = get_session_id(request)
-        
         # Get file path
         if file_path:
             resolved_path = Path(file_path)
         else:
-            resolved_path = resolve_file(dataset, dataset_file, session_id)
+            resolved_path = resolve_file(dataset, dataset_file)
         
         if not resolved_path.exists():
             raise HTTPException(status_code=404, detail="Audio file not found")
@@ -395,9 +334,9 @@ async def get_whisper_accuracy(request: Request):
             try:
                 # Run inference to get the prediction and cache it
                 if dataset and dataset_file:
-                    inference_result = await run_inference(model, None, dataset, dataset_file, session_id)
+                    inference_result = await run_inference(model, None, dataset, dataset_file)
                 else:
-                    inference_result = await run_inference(model, str(resolved_path), None, None, session_id)
+                    inference_result = await run_inference(model, str(resolved_path), None, None)
                 
                 # Now try to get the cached result again
                 cached_result = await get_result(model, cache_key)
@@ -422,56 +361,48 @@ async def get_whisper_accuracy(request: Request):
                 metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
             elif dataset == "ravdess":
                 metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
-            elif dataset.startswith("custom:"):
-                # For custom datasets, ground truth is not available - skip ground truth extraction
-                ground_truth = ""
-                metadata_path = None
             else:
                 raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
             
-            if metadata_path and metadata_path.exists():
+            if metadata_path.exists():
                 df = pd.read_csv(metadata_path)
-                print(f"DEBUG: Loaded metadata from {metadata_path} with {len(df)} rows")
-                print(f"DEBUG: Columns in metadata: {df.columns.tolist()}")
-                print(f"DEBUG: Looking for dataset_file: {dataset_file}")
-                
                 # Find the row for this file
                 # Try both with and without path prefix
                 file_rows = df[df['filename'] == dataset_file]
-                print(f"DEBUG: Direct match found: {len(file_rows)} rows")
-                
                 if file_rows.empty:
                     # Try with path prefix for common-voice
                     if dataset == "common-voice":
-                        prefixed_filename = f"cv-valid-dev/{dataset_file}"
-                        file_rows = df[df['filename'] == prefixed_filename]
-                        print(f"DEBUG: Prefixed match ({prefixed_filename}) found: {len(file_rows)} rows")
+                        file_rows = df[df['filename'] == f"cv-valid-dev/{dataset_file}"]
                 
                 if not file_rows.empty:
-                    print(f"DEBUG: Found matching row: {file_rows.iloc[0].to_dict()}")
                     # Try different column names for transcript/text
                     if dataset == "common-voice":
                         # For common-voice, use 'text' column
                         for col in ['text', 'transcript', 'sentence', 'label']:
                             if col in df.columns:
                                 ground_truth = str(file_rows.iloc[0][col])
-                                print(f"DEBUG: Found ground truth in column '{col}': {ground_truth}")
                                 break
                     elif dataset == "ravdess":
                         # For RAVDESS, use 'statement' column
                         for col in ['statement', 'text', 'transcript', 'sentence']:
                             if col in df.columns:
                                 ground_truth = str(file_rows.iloc[0][col])
-                                print(f"DEBUG: Found ground truth in column '{col}': {ground_truth}")
                                 break
-                else:
-                    print(f"DEBUG: No matching row found for {dataset_file}")
-                    print(f"DEBUG: Available filenames (first 10): {df['filename'].head(10).tolist()}")
         
-        # If ground truth is not available, we'll return None for metrics but still provide the prediction
-        has_ground_truth = bool(ground_truth)
         if not ground_truth:
-            print(f"DEBUG: No ground truth found for dataset: {dataset}, file: {dataset_file}. Continuing without accuracy metrics.")
+            # More specific error message for debugging
+            error_msg = f"Ground truth not found in dataset metadata. Dataset: {dataset}, File: {dataset_file}"
+            if dataset and dataset_file:
+                if dataset == "common-voice":
+                    metadata_path = DATA_DIR / "common_voice_valid_dev" / "common_voice_valid_data_metadata.csv"
+                elif dataset == "ravdess":
+                    metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
+                else:
+                    metadata_path = None
+                if metadata_path:
+                    error_msg += f", Metadata path: {metadata_path}, Exists: {metadata_path.exists()}"
+            print(f"DEBUG: {error_msg}")
+            raise HTTPException(status_code=404, detail=error_msg)
         
         # Calculate accuracy metrics
         def calculate_accuracy(predicted, ground_truth):
@@ -562,28 +493,13 @@ async def get_whisper_accuracy(request: Request):
                 "word_count_truth": len(truth_words)
             }
         
-        # Calculate accuracy metrics only if ground truth is available
-        if has_ground_truth:
-            accuracy_metrics = calculate_accuracy(predicted_transcript, ground_truth)
-            return {
-                "predicted_transcript": predicted_transcript,
-                "ground_truth": ground_truth,
-                **accuracy_metrics
-            }
-        else:
-            # Return just the prediction without ground truth metrics
-            return {
-                "predicted_transcript": predicted_transcript,
-                "ground_truth": "",
-                "accuracy_percentage": None,
-                "word_error_rate": None,
-                "character_error_rate": None,
-                "levenshtein_distance": None,
-                "exact_match": None,
-                "character_similarity": None,
-                "word_count_predicted": len(predicted_transcript.split()) if predicted_transcript else 0,
-                "word_count_truth": 0
-            }
+        accuracy_metrics = calculate_accuracy(predicted_transcript, ground_truth)
+        
+        return {
+            "predicted_transcript": predicted_transcript,
+            "ground_truth": ground_truth,
+            **accuracy_metrics
+        }
         
     except HTTPException:
         raise
@@ -609,8 +525,6 @@ async def batch_wav2vec2_prediction(request: Request):
         if len(filenames) > 50:  # Limit batch size
             raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
         
-        session_id = get_session_id(request)
-        
         # Process each file
         individual_predictions = []
         predicted_emotions = []  # Store just the predicted emotions for distribution
@@ -620,7 +534,7 @@ async def batch_wav2vec2_prediction(request: Request):
             try:
                 # Resolve file path
                 if dataset:
-                    file_path = resolve_file(dataset, filename, session_id)
+                    file_path = resolve_file(dataset, filename)
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():
@@ -701,21 +615,16 @@ async def batch_wav2vec2_prediction(request: Request):
 
 @router.post("/inferences/wav2vec2-detailed")
 async def get_wav2vec2_detailed_prediction(
-    http_request: Request,
     request: dict = Body(..., example={
         "file_path": "/path/to/audio.wav",
         "dataset": "common-voice", 
-        "dataset_file": "sample-001.mp3",
-        "include_attention": True
+        "dataset_file": "sample-001.mp3"
     })
 ):
-    """Get detailed wav2vec2 prediction with probabilities for all emotions and ground truth if available"""
+    """Get detailed wav2vec2 prediction with probabilities for all emotions"""
     file_path = request.get("file_path")
     dataset = request.get("dataset")
     dataset_file = request.get("dataset_file")
-    include_attention = request.get("include_attention", True)  # Default to True for attention extraction
-    
-    session_id = get_session_id(http_request)
     
     # Resolve file path
     resolved_path = None
@@ -723,7 +632,7 @@ async def get_wav2vec2_detailed_prediction(
         resolved_path = Path(file_path)
     elif dataset and dataset_file:
         try:
-            resolved_path = resolve_file(dataset, dataset_file, session_id)
+            resolved_path = resolve_file(dataset, dataset_file)
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(status_code=404, detail=str(e))
     else:
@@ -735,110 +644,34 @@ async def get_wav2vec2_detailed_prediction(
     if not resolved_path.exists():
         raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
     
-    # Create cache key for detailed predictions (v3 after fixing attention extraction)
+    # Create cache key for detailed predictions
     file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
-    cache_key = f"wav2vec2_detailed_attention_v3_{file_content_hash}"
+    cache_key = f"wav2vec2_detailed_{file_content_hash}"
     
     # Check if result is cached
     cached_result = await get_result("wav2vec2", cache_key)
     if cached_result is not None:
-        logger.info(f"Found cached detailed wav2vec2 result for {resolved_path}")
-        cached_prediction = cached_result.get("prediction", cached_result)
-        
-        # Check if cached result has attention data
-        cached_has_attention = cached_prediction.get("attention") is not None if isinstance(cached_prediction, dict) else False
-        
-        # If attention is requested but not in cache, we need to regenerate
-        if include_attention and not cached_has_attention:
-            logger.info(f"Attention requested but not in cache, regenerating for {resolved_path}")
-        else:
-            # Debug: Check if cached result has attention
-            cached_layers = len(cached_prediction.get("attention", [])) if cached_has_attention else 0
-            logger.info(f"Returning cached wav2vec2 result - has attention: {cached_has_attention}, layers: {cached_layers}")
-            return cached_prediction
+        logger.info(f"Returning cached detailed wav2vec2 result for {resolved_path}")
+        return cached_result.get("prediction", cached_result)
     
-    # Get detailed prediction with probabilities and conditionally include attention
+    # Get detailed prediction with probabilities
     try:
-        if include_attention:
-            # Use the more expensive attention-enabled function
-            detailed_result = await asyncio.to_thread(predict_emotion_wave2vec_with_attention, str(resolved_path))
-            
-            # Check if attention extraction failed (returns None for research integrity)
-            if detailed_result is None:
-                logger.warning(f"Wave2Vec2 attention extraction failed for {resolved_path} - returning error instead of mock data")
-                raise HTTPException(
-                    status_code=422, 
-                    detail="Attention extraction failed. This model/file combination does not support attention analysis."
-                )
-        else:
-            # Use the regular prediction function which is faster
-            detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
-            # Ensure the result has the expected structure
-            if "attention" not in detailed_result:
-                detailed_result["attention"] = None
+        detailed_result = await asyncio.to_thread(predict_emotion_wave2vec, str(resolved_path))
+
         
-        # Try to get ground truth emotion if we have dataset information
-        ground_truth_emotion = ""
-        if dataset and dataset_file:
-            # Only try to get emotion ground truth from RAVDESS dataset
-            if dataset == "ravdess":
-                metadata_path = DATA_DIR / "ravdess_subset" / "ravdess_subset_metadata.csv"
-                if metadata_path.exists():
-                    df = pd.read_csv(metadata_path)
-                    file_rows = df[df['filename'] == dataset_file]
-                    if not file_rows.empty:
-                        # Try different column names for emotion
-                        for col in ['emotion', 'label', 'category']:
-                            if col in df.columns:
-                                ground_truth_emotion = str(file_rows.iloc[0][col])
-                                break
-        
-        # Add ground truth to the result if available
-        if ground_truth_emotion:
-            detailed_result["ground_truth_emotion"] = ground_truth_emotion
-        else:
-            detailed_result["ground_truth_emotion"] = None
-        
-        # Cache the detailed result without attention data to avoid memory issues
-        cache_data = detailed_result.copy()
-        if "attention" in cache_data:
-            # Remove attention data from cache to prevent MemoryError
-            cache_data["attention"] = None
-            logger.info(f"Excluded attention data from cache to prevent memory issues")
-        
-        await cache_result("wav2vec2", cache_key, {"prediction": cache_data}, ttl=6*60*60)
-        logger.info(f"Cached detailed wav2vec2 prediction for {resolved_path} (without attention data)")
-        
-        # Debug: Log if attention data is present
-        has_attention = detailed_result.get("attention") is not None
-        logger.info(f"Wav2Vec2 result has attention data: {has_attention}")
-        if has_attention:
-            attention_shape = f"layers: {len(detailed_result['attention'])}"
-            logger.info(f"Attention shape: {attention_shape}")
+        # Cache the detailed result
+        await cache_result("wav2vec2", cache_key, {"prediction": detailed_result}, ttl=6*60*60)
+        logger.info(f"Cached detailed wav2vec2 prediction for {resolved_path}")
         
         return detailed_result
         
     except Exception as e:
         logger.error(f"Error getting detailed wav2vec2 prediction: {str(e)}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        
-        # Return a fallback response instead of raising 500 error
-        fallback_result = {
-            "predicted_emotion": "unknown",
-            "probabilities": {"unknown": 1.0},
-            "confidence": 0.0,
-            "attention": None,
-            "error": str(e),
-            "fallback": True
-        }
-        logger.info("Returning fallback result for wav2vec2 prediction")
-        return fallback_result
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @router.post("/inferences/embeddings")
 async def extract_embeddings_endpoint(
-    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "dataset": "common-voice",
@@ -857,7 +690,6 @@ async def extract_embeddings_endpoint(
     if not model or not dataset or not files:
         raise HTTPException(status_code=400, detail="Model, dataset, and files are required")
     
-    session_id = get_session_id(http_request)
     logger.info(f"Extracting embeddings for {len(files)} files with model {model}")
     
     embeddings_data = []
@@ -866,7 +698,7 @@ async def extract_embeddings_endpoint(
     for filename in files:
         try:
             # Resolve the file path
-            resolved_path = resolve_file(dataset, filename, session_id)
+            resolved_path = resolve_file(dataset, filename)
             
             # Create cache key for embeddings
             file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
@@ -958,7 +790,6 @@ async def extract_embeddings_endpoint(
 
 @router.post("/inferences/embeddings/single")
 async def extract_single_embedding_endpoint(
-    http_request: Request,
     request: dict = Body(..., example={
         "model": "whisper-base",
         "file_path": "/path/to/audio.wav",
@@ -975,15 +806,13 @@ async def extract_single_embedding_endpoint(
     if not model:
         raise HTTPException(status_code=400, detail="Model is required")
     
-    session_id = get_session_id(http_request)
-    
     # Resolve file path
     resolved_path = None
     if file_path:
         resolved_path = Path(file_path)
     elif dataset and dataset_file:
         try:
-            resolved_path = resolve_file(dataset, dataset_file, session_id)
+            resolved_path = resolve_file(dataset, dataset_file)
         except (FileNotFoundError, ValueError) as e:
             raise HTTPException(status_code=404, detail=str(e))
     else:
@@ -1035,16 +864,11 @@ async def batch_audio_frequency_analysis(request: Request):
         dataset = body.get("dataset")
         model = body.get("model", "whisper-base")  # Track which model context this is for
         
-        logger.info(f"batch_audio_frequency_analysis called with: filenames={filenames}, dataset={dataset}, model={model}")
-        
         if not filenames:
             raise HTTPException(status_code=400, detail="No filenames provided")
         
         if len(filenames) > 50:  # Limit batch size
             raise HTTPException(status_code=400, detail="Too many files. Maximum 50 files per batch.")
-        
-        session_id = get_session_id(request)
-        logger.info(f"Session ID: {session_id}")
         
         # Process each file
         individual_analyses = []
@@ -1053,17 +877,14 @@ async def batch_audio_frequency_analysis(request: Request):
         
         for filename in filenames:
             try:
-                logger.info(f"Processing file: {filename}")
                 # Resolve file path
                 if dataset:
-                    file_path = resolve_file(dataset, filename, session_id)
-                    logger.info(f"Resolved file path: {file_path}")
+                    file_path = resolve_file(dataset, filename)
                 else:
                     file_path = UPLOAD_DIR / filename
                     if not file_path.exists():
-                        logger.warning(f"File not found: {file_path}")
+                        print(f"Warning: File not found: {file_path}")
                         continue
-                    logger.info(f"Using upload file path: {file_path}")
                 
                 # Create cache key for audio frequency features
                 file_content_hash = hashlib.md5(str(file_path).encode()).hexdigest()
@@ -1092,10 +913,9 @@ async def batch_audio_frequency_analysis(request: Request):
                 all_features.append(features)
                     
             except Exception as file_error:
-                logger.error(f"Error processing {filename}: {file_error}")
+                print(f"Error processing {filename}: {file_error}")
                 continue
         
-        logger.info(f"Successfully processed {len(individual_analyses)} files out of {len(filenames)}")
         if not individual_analyses:
             raise HTTPException(status_code=404, detail="No valid files could be processed for frequency analysis")
         
@@ -1189,79 +1009,100 @@ async def batch_audio_frequency_analysis(request: Request):
         raise HTTPException(status_code=500, detail=f"Audio frequency analysis failed: {str(e)}")
 
 
-@router.post("/inferences/whisper-attention")
-async def get_whisper_with_attention(
-    http_request: Request,
+    return {
+        "model": model,
+        "file_path": str(resolved_path),
+        "embedding": embedding.tolist(),
+        "embedding_dim": len(embedding)
+    }
+
+
+@router.post("/inferences/attention-pairs")
+async def extract_attention_pairs_endpoint(
     request: dict = Body(..., example={
         "model": "whisper-base",
         "file_path": "/path/to/audio.wav",
-        "dataset": "common-voice", 
-        "dataset_file": "sample-001.mp3"
+        "dataset": "common-voice",
+        "dataset_file": "sample-001.mp3",
+        "layer": 6,
+        "head": 0
     })
 ):
-    """Get Whisper transcription with attention weights"""
-    model = request.get("model", "whisper-base")
-    file_path = request.get("file_path")
-    dataset = request.get("dataset")
-    dataset_file = request.get("dataset_file")
-    
-    session_id = get_session_id(http_request)
-    
-    # Validate model
-    if not model.startswith("whisper"):
-        raise HTTPException(status_code=400, detail="This endpoint is only for Whisper models")
-    
-    # Resolve file path
-    resolved_path = None
-    if file_path:
-        resolved_path = Path(file_path)
-    elif dataset and dataset_file:
-        try:
-            resolved_path = resolve_file(dataset, dataset_file, session_id)
-        except (FileNotFoundError, ValueError) as e:
-            raise HTTPException(status_code=404, detail=str(e))
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing audio reference. Provide either 'file_path' or 'dataset' + 'dataset_file'."
-        )
-    
-    if not resolved_path.exists():
-        raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
-    
-    # Create cache key for attention predictions (v2 to avoid old cache)
-    file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
-    cache_key = f"{model}_attention_v2_{file_content_hash}"
-    
-    # Check if result is cached
-    cached_result = await get_result(model, cache_key)
-    if cached_result is not None:
-        logger.info(f"Returning cached {model} attention result for {resolved_path}")
-        cached_prediction = cached_result.get("prediction", cached_result)
-        # Debug: Check if cached result has attention
-        cached_has_attention = cached_prediction.get("attention") is not None if isinstance(cached_prediction, dict) else False
-        cached_layers = len(cached_prediction.get("attention", [])) if cached_has_attention else 0
-        logger.info(f"Cached result has attention: {cached_has_attention}, layers: {cached_layers}")
-        return cached_prediction
-    
-    # Get transcription with attention
+    """Extract word-to-word attention relationships and timestamp-level attention from Whisper model"""
     try:
+        model = request.get("model", "whisper-base")
+        file_path = request.get("file_path")
+        dataset = request.get("dataset")
+        dataset_file = request.get("dataset_file")
+        layer_idx = request.get("layer", 6)  # Default to layer 6 (middle layer)
+        head_idx = request.get("head", 0)    # Default to head 0
+        
+        # Validate model
+        if "whisper" not in model.lower():
+            raise HTTPException(status_code=400, detail="Attention pairs extraction only supports Whisper models")
+        
+        # Resolve file path
+        resolved_path = None
+        if file_path:
+            resolved_path = Path(file_path)
+        elif dataset and dataset_file:
+            try:
+                logger.info(f"Resolving file: dataset='{dataset}', file='{dataset_file}'")
+                resolved_path = resolve_file(dataset, dataset_file)
+                logger.info(f"Resolved to: {resolved_path}")
+                logger.info(f"Path exists: {resolved_path.exists()}")
+                logger.info(f"Path is file: {resolved_path.is_file() if resolved_path.exists() else 'N/A'}")
+            except (FileNotFoundError, ValueError) as e:
+                logger.error(f"resolve_file failed: {e}")
+                raise HTTPException(status_code=404, detail=str(e))
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing audio reference. Provide either 'file_path' or 'dataset' + 'dataset_file'."
+            )
+        
+        if not resolved_path.exists():
+            logger.error(f"Resolved path does not exist: {resolved_path}")
+            raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
+        
+        # Create cache key for attention pairs
+        file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
+        cache_key = f"{model}_attention_pairs_{file_content_hash}_l{layer_idx}_h{head_idx}"
+        
+        # Check if attention pairs are cached
+        cached_attention = await get_result(model, cache_key)
+        
+        if cached_attention is not None:
+            logger.info(f"Using cached attention pairs for {resolved_path}")
+            return cached_attention
+        
+        # Determine model size
         model_size = "base" if "base" in model else "large"
-        result = await asyncio.to_thread(transcribe_whisper_with_attention, str(resolved_path), model_size)
         
-        # Cache the result
-        await cache_result(model, cache_key, {"prediction": result}, ttl=6*60*60)
-        logger.info(f"Cached {model} attention prediction for {resolved_path}")
+        # Extract attention pairs
+        from app.services.model_loader_service import extract_whisper_attention_pairs
         
-        # Debug: Log if attention data is present
-        has_attention = result.get("attention") is not None
-        logger.info(f"Whisper result has attention data: {has_attention}")
-        if has_attention:
-            attention_shape = f"layers: {len(result['attention'])}"
-            logger.info(f"Attention shape: {attention_shape}")
+        attention_data = await asyncio.to_thread(
+            extract_whisper_attention_pairs,
+            str(resolved_path),
+            model_size,
+            layer_idx,
+            head_idx
+        )
         
-        return result
+        if "error" in attention_data:
+            raise HTTPException(status_code=500, detail=attention_data["error"])
         
+        # Cache the result (24 hour TTL)
+        await cache_result(model, cache_key, attention_data, ttl=24*60*60)
+        
+        logger.info(f"Generated attention pairs: {len(attention_data.get('attention_pairs', []))} pairs, "
+                   f"{len(attention_data.get('timestamp_attention', []))} timestamps")
+        
+        return attention_data
+        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting {model} transcription with attention: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Transcription with attention failed: {str(e)}")

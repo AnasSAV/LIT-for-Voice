@@ -21,10 +21,9 @@ import umap
 logger = logging.getLogger(__name__)
 
 
-def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, return_timestamps=False, return_attention=False):
+def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, return_timestamps=False):
     device = 0 if torch.cuda.is_available() else -1
     torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
     # Load audio
     audio, sample_rate = librosa.load(audio_file, sr=16000)
     audio = audio.astype(np.float32)
@@ -319,8 +318,11 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
                     pass  # Stay on CPU if move fails
         else:
             raise
+    audio, sample_rate = librosa.load(audio_file, sr=16000)
+    audio = audio.astype(np.float32)
 
     if return_timestamps:
+        
         result = pipe(
             audio,
             return_timestamps="word",  # Get word-level timestamps instead of chunk-level
@@ -381,22 +383,17 @@ def predict_emotion_wave2vec_with_attention(audio_path):
 
 _EMO_MODEL_ID = "r-f/wav2vec-english-speech-emotion-recognition"
 feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(_EMO_MODEL_ID)
-emo_model = Wav2Vec2ForSequenceClassification.from_pretrained(
-    _EMO_MODEL_ID,
-    attn_implementation="eager"  # Use eager attention to enable attention extraction
-)
+emo_model = Wav2Vec2ForSequenceClassification.from_pretrained(_EMO_MODEL_ID)
 emo_device = "cuda:0" if torch.cuda.is_available() else "cpu"
 emo_model = emo_model.to(emo_device)
 
-def predict_emotion_wave2vec(audio_path, return_attention=False):
-    global feature_extractor
-    try:
-        audio, rate = librosa.load(audio_path, sr=16000)
-        inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
+def predict_emotion_wave2vec(audio_path):
+    audio, rate = librosa.load(audio_path, sr=16000)
+    inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
 
-        # Move tensors to model device
-        input_values = inputs.input_values.to(emo_device)
-        attention_mask = inputs.attention_mask.to(emo_device) if "attention_mask" in inputs else None
+    # Move tensors to model device
+    input_values = inputs.input_values.to(emo_device)
+    attention_mask = inputs.attention_mask.to(emo_device) if "attention_mask" in inputs else None
 
         with torch.no_grad():
             # Ensure the model config allows attention output
@@ -767,28 +764,11 @@ def predict_emotion_wave2vec(audio_path, return_attention=False):
         result = {
             "predicted_emotion": predicted_emotion,
             "probabilities": emotion_probs,
-            "confidence": float(probs[0][label_idx].item()),
-            "attention": attention_data
+            "confidence": float(probs[0][label_idx].item())
         }
         
         logger.debug("Emotion logits shape=%s, predicted=%s, label=%s", tuple(logits.shape), label_idx, predicted_emotion)
-        logger.info(f"Wav2Vec2 result: emotion={predicted_emotion}, attention_layers={len(attention_data) if attention_data else 0}")
-        
-        return result
-    
-    except Exception as main_error:
-        logger.error(f"❌ Error in predict_emotion_wave2vec: {main_error}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        # Return a fallback result to prevent 500 errors
-        return {
-            "predicted_emotion": "unknown",
-            "probabilities": {"unknown": 1.0},
-            "confidence": 0.0,
-            "attention": None,
-            "error": str(main_error)
-        }
+    return result
 
 def wave2vec(audio_file_path: str, return_probabilities: bool = False):
     """
@@ -1139,6 +1119,7 @@ def process_attention_into_pairs(attention_result, audio_file_path, model_size, 
                         "to_index": j
                     })
                     
+
                 except Exception as e:
                     logger.error(f"Error processing word pair {i}-{j}: {e}")
                     continue
@@ -1222,4 +1203,3 @@ def process_attention_into_pairs(attention_result, audio_file_path, model_size, 
             "total_duration": 0,
             "error": f"Processing failed: {str(e)}"
         }
-
