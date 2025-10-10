@@ -60,10 +60,26 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
       modelIncludesWhisper: model?.includes('whisper')
     });
 
-    if (!selectedFile || !model || !model.includes('whisper')) {
-      console.log("AttentionVisualization - Skipping fetch due to conditions");
-      return;
-    }
+  // If no real attention data, show placeholder
+  if (!attention || attention.length === 0) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Attention Visualization</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-muted-foreground py-8">
+              {!attention ? 
+                "Attention extraction not available for this model/audio combination. Only authentic attention data is shown - no synthetic data is generated." :
+                `Attention data received but empty (${attention.length} layers). This model may not support attention extraction for this audio file.`
+              }
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
     setIsLoading(true);
     setError(null);

@@ -6,6 +6,8 @@ import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { ScalersVisualization } from "../visualization/ScalersVisualization";
+import { AttentionVisualization } from "../visualization/AttentionVisualization";
+import { AttentionPairsVisualization } from "../visualization/AttentionPairsVisualization";
 import { useState, useEffect } from "react";
 import { API_BASE } from '@/lib/api';
 
@@ -723,6 +725,26 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
               />
             </div>
           </TabsContent>
+
+          {model !== 'wav2vec2' && (
+            <TabsContent value="attention" className="m-0 h-full">
+              <div className="p-3">
+                {model?.includes('whisper') ? (
+                  <AttentionPairsVisualization 
+                    selectedFile={selectedFile || selectedEmbeddingFile}
+                    model={model}
+                    dataset={dataset}
+                  />
+                ) : (
+                  <AttentionVisualization 
+                    attention={attention} 
+                    transcript={transcript} 
+                    isLoading={isLoadingAttention} 
+                  />
+                )}
+              </div>
+            </TabsContent>
+          )}
         </div>
       </Tabs>
     </div>
