@@ -297,9 +297,13 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
       // Always use full 0-1 scale for maximum visual clarity
       const normalizedValues = attentionValues.map(val => (val - minVal) / (range || 1));
     
-    const width = 800;
+    // Responsive width based on audio duration and number of points
+    const duration = attentionData.total_duration || timestamps[timestamps.length - 1]?.time || 10;
+    const minWidth = 800;
+    const maxWidth = 1200;
+    const width = Math.min(maxWidth, Math.max(minWidth, duration * 60)); // 60px per second, with limits
     const height = 250;
-    const padding = 60;
+    const padding = 80; // Increased padding for better label spacing
 
     return (
       <Card>
@@ -310,8 +314,8 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
           </p>
         </CardHeader>
         <CardContent>
-          <div className="flex justify-center">
-            <svg width={width} height={height} className="border rounded bg-white">
+          <div className="flex justify-center overflow-x-auto">
+            <svg width={width} height={height} className="border rounded bg-white" style={{minWidth: `${width}px`}}>
               {/* Grid lines for reference */}
               {[0, 0.2, 0.4, 0.6, 0.8, 1].map(ratio => {
                 const y = padding + (1 - ratio) * (height - 2 * padding);
@@ -327,7 +331,7 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
                       strokeWidth={ratio === 0 || ratio === 1 ? "2" : "1"}
                       strokeDasharray={ratio === 0 || ratio === 1 ? "none" : "2,2"}
                     />
-                    <text x={padding - 10} y={y + 4} textAnchor="end" className="text-xs fill-gray-600">
+                    <text x={padding - 15} y={y + 4} textAnchor="end" className="text-xs fill-gray-600">
                       {(actualValue * 100).toFixed(2)}%
                     </text>
                   </g>
@@ -371,37 +375,44 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
                 );
               })}
               
-              {/* Time axis */}
-              {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
-                const x = padding + ratio * (width - 2 * padding);
-                const timeIndex = Math.floor(ratio * (timestamps.length - 1));
-                const time = timestamps[timeIndex]?.time || 0;
-                return (
-                  <g key={`time-${ratio}`}>
-                    <line x1={x} y1={height - padding} x2={x} y2={height - padding + 5} stroke="#666" />
-                    <text x={x} y={height - padding + 18} textAnchor="middle" className="text-xs fill-gray-600">
-                      {time.toFixed(1)}s
-                    </text>
-                  </g>
-                );
-              })}
+              {/* Time axis - adaptive markers based on duration */}
+              {(() => {
+                const numMarkers = duration > 10 ? 6 : 5;
+                const markers = Array.from({ length: numMarkers }, (_, i) => i / (numMarkers - 1));
+                
+                return markers.map(ratio => {
+                  const x = padding + ratio * (width - 2 * padding);
+                  const timeIndex = Math.floor(ratio * (timestamps.length - 1));
+                  const time = timestamps[timeIndex]?.time || 0;
+                  return (
+                    <g key={`time-${ratio}`}>
+                      <line x1={x} y1={height - padding} x2={x} y2={height - padding + 5} stroke="#666" />
+                      <text x={x} y={height - padding + 18} textAnchor="middle" className="text-xs fill-gray-600">
+                        {time.toFixed(1)}s
+                      </text>
+                    </g>
+                  );
+                });
+              })()}
               
               {/* Axis labels */}
               <text x={width / 2} y={height - 15} textAnchor="middle" className="text-sm font-medium fill-gray-700">
                 Time (seconds)
               </text>
-              <text x={15} y={height / 2} textAnchor="middle" className="text-sm font-medium fill-gray-700" transform={`rotate(-90, 15, ${height / 2})`}>
+              <text x={20} y={height / 2} textAnchor="middle" className="text-sm font-medium fill-gray-700" transform={`rotate(-90, 20, ${height / 2})`}>
                 Attention Values
               </text>
             </svg>
           </div>
           
           {/* Simple stats */}
-          <div className="mt-4 flex justify-center gap-8 text-sm">
+          <div className="mt-4 flex justify-center gap-6 text-sm flex-wrap">
+            <div><span className="font-medium">Duration:</span> {duration.toFixed(1)}s</div>
             <div><span className="font-medium">Min:</span> {(minVal * 100).toFixed(4)}%</div>
             <div><span className="font-medium">Max:</span> {(maxVal * 100).toFixed(4)}%</div>
             <div><span className="font-medium">Range:</span> {(range * 100).toFixed(4)}%</div>
             <div><span className="font-medium">Points:</span> {attentionValues.length}</div>
+            <div><span className="font-medium">Resolution:</span> {(duration / attentionValues.length * 1000).toFixed(0)}ms</div>
           </div>
           
           <div className="mt-2 text-xs text-center text-gray-500">
