@@ -71,12 +71,11 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
           throw new Error("Dataset required for dataset file selection");
         }
       } else if (selectedFile?.file_path) {
-        // Check if it's a dataset file path or upload path
-        if (dataset && (selectedFile.file_path.includes('/') || selectedFile.file_path.includes('\\'))) {
-          // Dataset file with path prefix
-          const cleanFileName = selectedFile.file_path.split(/[\\\/]/).pop();
+        // Check if we have a dataset - if so, this is a dataset file
+        if (dataset) {
+          // This is a dataset file (either custom or standard dataset)
           requestBody.dataset = dataset;
-          requestBody.dataset_file = cleanFileName;
+          requestBody.dataset_file = selectedFile.file_path;
         } else {
           // Regular uploaded file
           requestBody.file_path = selectedFile.file_path;
