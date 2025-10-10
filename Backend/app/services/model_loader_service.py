@@ -1143,23 +1143,62 @@ def process_attention_into_pairs(attention_result, audio_file_path, model_size, 
                     logger.error(f"Error processing word pair {i}-{j}: {e}")
                     continue
         
-        # Generate timestamp-level attention (timeline view)
+        # Generate timestamp-level attention (timeline view) with better variation
         timestamp_attention = []
         time_resolution = 0.1  # 100ms resolution
         
         for t in np.arange(0, audio_duration, time_resolution):
-            # Find corresponding attention value for this timestamp
-            frame_idx = int(t / audio_duration * len(head_attention)) if head_attention else 0
-            frame_idx = min(frame_idx, len(head_attention) - 1) if head_attention else 0
-            
-            # Average attention from this frame to all other frames
-            avg_attention = float(np.mean(head_attention[frame_idx])) if head_attention else 0.0
-            
-            timestamp_attention.append({
-                "time": float(t),
-                "attention": avg_attention,
-                "frame_index": frame_idx
-            })
+            if head_attention and len(head_attention) > 0:
+                # Map time to sequence position more precisely
+                relative_pos = t / audio_duration  # 0 to 1
+                frame_idx = int(relative_pos * len(head_attention))
+                frame_idx = min(frame_idx, len(head_attention) - 1)
+                
+                # Method 1: Max attention from this frame (outgoing attention)
+                max_outgoing = float(np.max(head_attention[frame_idx])) if len(head_attention[frame_idx]) > 0 else 0.0
+                
+                # Method 2: Sum of attention TO this frame (incoming attention)  
+                incoming_attention = 0.0
+                for row in head_attention:
+                    if frame_idx < len(row):
+                        incoming_attention += row[frame_idx]
+                avg_incoming = float(incoming_attention / len(head_attention)) if len(head_attention) > 0 else 0.0
+                
+                # Method 3: Diagonal attention (self-attention strength)
+                self_attention = float(head_attention[frame_idx][frame_idx]) if frame_idx < len(head_attention[frame_idx]) else 0.0
+                
+                # Method 4: Entropy-based attention diversity
+                frame_row = np.array(head_attention[frame_idx])
+                if len(frame_row) > 0 and np.sum(frame_row) > 0:
+                    # Normalize to probabilities
+                    probs = frame_row / np.sum(frame_row)
+                    # Calculate entropy (higher = more distributed attention)
+                    entropy = -np.sum(probs * np.log(probs + 1e-10))
+                    # Normalize entropy by max possible (log of length)
+                    max_entropy = np.log(len(probs))
+                    normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0.0
+                else:
+                    normalized_entropy = 0.0
+                
+                # Combine different measures for a rich temporal signal
+                # Use max outgoing as primary with entropy as variation
+                combined_attention = max_outgoing * (0.7 + 0.3 * normalized_entropy)
+                
+                timestamp_attention.append({
+                    "time": float(t),
+                    "attention": float(combined_attention),
+                    "frame_index": frame_idx,
+                    "max_outgoing": max_outgoing,
+                    "avg_incoming": avg_incoming, 
+                    "self_attention": self_attention,
+                    "attention_entropy": normalized_entropy
+                })
+            else:
+                timestamp_attention.append({
+                    "time": float(t),
+                    "attention": 0.0,
+                    "frame_index": 0
+                })
         
         result = {
             "model": f"whisper-{model_size}",
