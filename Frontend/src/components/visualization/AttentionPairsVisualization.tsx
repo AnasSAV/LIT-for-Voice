@@ -84,9 +84,6 @@ export const AttentionPairsVisualization = ({ selectedFile, model, dataset }: At
         throw new Error("No valid file selected");
       }
 
-      console.log("AttentionPairsVisualization - Request body:", requestBody);
-      console.log("AttentionPairsVisualization - API URL:", `${API_BASE}/inferences/attention-pairs`);
-
       const response = await fetch(`${API_BASE}/inferences/attention-pairs`, {
         method: "POST",
         headers: {

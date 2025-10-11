@@ -13,6 +13,7 @@ import { ScalarPlot } from "../visualization/ScalarPlot";
 import { useEmbedding } from "../../contexts/EmbeddingContext";
 import { RefreshCw, Eye, Box, Square, BarChart3, HelpCircle } from "lucide-react";
 import { getFeatureExplanation } from "@/lib/audioFeatures";
+import { API_BASE } from "@/lib/api";
 
 interface EmbeddingPanelProps {
   model?: string;
@@ -161,7 +162,7 @@ export const EmbeddingPanel = ({ model = "whisper-base", dataset = "common-voice
         requestBody.dataset = dataset;
       }
 
-      const response = await fetch("http://localhost:8000/inferences/audio-frequency-batch", {
+      const response = await fetch(`${API_BASE}/inferences/audio-frequency-batch`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

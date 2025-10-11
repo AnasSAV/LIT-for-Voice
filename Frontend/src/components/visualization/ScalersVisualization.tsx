@@ -163,7 +163,7 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
       console.log('Browser cookies:', document.cookie);
       console.log('Dataset being sent:', dataset);
 
-      const response = await fetch("http://localhost:8000/inferences/audio-frequency-batch", {
+      const response = await fetch(`${API_BASE}/inferences/audio-frequency-batch`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

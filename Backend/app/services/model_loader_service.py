@@ -21,7 +21,7 @@ import umap
 logger = logging.getLogger(__name__)
 
 
-def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, return_timestamps=False):
+def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, return_timestamps=False, return_attention=False):
     device = 0 if torch.cuda.is_available() else -1
     torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
     # Load audio
@@ -241,6 +241,8 @@ def transcribe_whisper(model_id, audio_file, chunk_length_s=30, batch_size=8, re
                     try:
                         # Analyze audio to create meaningful attention
                         seq_length = min(1500, len(audio) // 320)  # Rough estimate of sequence length
+                        # Derive model size from model_id
+                        model_size = "base" if "base" in model_id else "large"
                         num_layers = 6 if model_size == "base" else 12 
                         num_heads = 8 if model_size == "base" else 16
                         
@@ -387,7 +389,7 @@ emo_model = Wav2Vec2ForSequenceClassification.from_pretrained(_EMO_MODEL_ID)
 emo_device = "cuda:0" if torch.cuda.is_available() else "cpu"
 emo_model = emo_model.to(emo_device)
 
-def predict_emotion_wave2vec(audio_path):
+def predict_emotion_wave2vec(audio_path, return_attention=False):
     audio, rate = librosa.load(audio_path, sr=16000)
     inputs = feature_extractor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
 
@@ -395,363 +397,363 @@ def predict_emotion_wave2vec(audio_path):
     input_values = inputs.input_values.to(emo_device)
     attention_mask = inputs.attention_mask.to(emo_device) if "attention_mask" in inputs else None
 
-        with torch.no_grad():
-            # Ensure the model config allows attention output
-            if return_attention:
-                # Temporarily set config to ensure attention is returned
-                original_output_attentions = getattr(emo_model.config, 'output_attentions', False)
-                emo_model.config.output_attentions = True
+    with torch.no_grad():
+        # Ensure the model config allows attention output
+        if return_attention:
+            # Temporarily set config to ensure attention is returned
+            original_output_attentions = getattr(emo_model.config, 'output_attentions', False)
+            emo_model.config.output_attentions = True
+        
+        outputs = emo_model(
+            input_values=input_values, 
+            attention_mask=attention_mask,
+            output_attentions=return_attention
+        )
+        
+        # Restore original config
+        if return_attention:
+            emo_model.config.output_attentions = original_output_attentions
+        logits = outputs.logits  # [batch, num_labels]
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        pred = torch.argmax(probs, dim=-1)
+        label_idx = int(pred.item())
+        
+        # Get all emotion labels and their probabilities
+        id2label = emo_model.config.id2label if isinstance(emo_model.config.id2label, dict) else {}
+        emotion_probs = {}
+        
+        for i, prob in enumerate(probs[0]):
+            emotion_label = id2label.get(i, f"emotion_{i}")
+            emotion_probs[emotion_label] = float(prob.item())
+        
+        # Get the predicted emotion
+        predicted_emotion = id2label.get(label_idx, str(label_idx))
+        
+        # Extract attention weights if requested
+        attention_data = None
+        found_attention = False
+        if return_attention:
+            logger.info(f"🎯 EXTRACTING ATTENTION from fine-tuned emotion model: {type(emo_model)}")
+            logger.info(f"Model config output_attentions: {getattr(emo_model.config, 'output_attentions', 'Not set')}")
             
-            outputs = emo_model(
-                input_values=input_values, 
-                attention_mask=attention_mask,
-                output_attentions=return_attention
-            )
+            # For fine-tuned emotion models, we need to access the base wav2vec2 encoder
             
-            # Restore original config
-            if return_attention:
-                emo_model.config.output_attentions = original_output_attentions
-            logits = outputs.logits  # [batch, num_labels]
-            probs = torch.nn.functional.softmax(logits, dim=-1)
-            pred = torch.argmax(probs, dim=-1)
-            label_idx = int(pred.item())
-            
-            # Get all emotion labels and their probabilities
-            id2label = emo_model.config.id2label if isinstance(emo_model.config.id2label, dict) else {}
-            emotion_probs = {}
-            
-            for i, prob in enumerate(probs[0]):
-                emotion_label = id2label.get(i, f"emotion_{i}")
-                emotion_probs[emotion_label] = float(prob.item())
-            
-            # Get the predicted emotion
-            predicted_emotion = id2label.get(label_idx, str(label_idx))
-            
-            # Extract attention weights if requested
-            attention_data = None
-            found_attention = False
-            if return_attention:
-                logger.info(f"🎯 EXTRACTING ATTENTION from fine-tuned emotion model: {type(emo_model)}")
-                logger.info(f"Model config output_attentions: {getattr(emo_model.config, 'output_attentions', 'Not set')}")
+            # Method 0: Direct access to base wav2vec2 from fine-tuned model (PRIORITY for emotion models)
+            logger.info("Method 0 - Accessing wav2vec2 base from fine-tuned emotion model...")
+            try:
+                if hasattr(emo_model, 'wav2vec2'):
+                    base_wav2vec2 = emo_model.wav2vec2
+                logger.info(f"Found base wav2vec2 in emotion model: {type(base_wav2vec2)}")
                 
-                # For fine-tuned emotion models, we need to access the base wav2vec2 encoder
+                # Force attention output on the base model
+                original_config = base_wav2vec2.config.output_attentions
+                base_wav2vec2.config.output_attentions = True
                 
-                # Method 0: Direct access to base wav2vec2 from fine-tuned model (PRIORITY for emotion models)
-                logger.info("Method 0 - Accessing wav2vec2 base from fine-tuned emotion model...")
-                try:
-                    if hasattr(emo_model, 'wav2vec2'):
-                        base_wav2vec2 = emo_model.wav2vec2
-                    logger.info(f"Found base wav2vec2 in emotion model: {type(base_wav2vec2)}")
-                    
-                    # Force attention output on the base model
-                    original_config = base_wav2vec2.config.output_attentions
-                    base_wav2vec2.config.output_attentions = True
-                    
-                    # Run the base wav2vec2 model directly with attention
-                    base_outputs = base_wav2vec2(
-                        input_values=input_values,
-                        attention_mask=attention_mask,
-                        output_attentions=True
-                    )
-                    
-                    # Restore original config
-                    base_wav2vec2.config.output_attentions = original_config
-                    
-                    logger.info(f"Base wav2vec2 output keys: {list(base_outputs.keys()) if hasattr(base_outputs, 'keys') else dir(base_outputs)}")
-                    
-                    if hasattr(base_outputs, "attentions") and base_outputs.attentions is not None:
-                        logger.info(f"🎉 Method 0 SUCCESS - Found attentions: {len(base_outputs.attentions)} layers")
-                        attention_data = []
-                        for layer_idx, layer_attention in enumerate(base_outputs.attentions):
-                            if layer_attention is not None:
-                                logger.info(f"Layer {layer_idx} shape: {layer_attention.shape}")
-                                try:
-                                    layer_data = []
-                                    num_heads = min(layer_attention.shape[1], 16)  # Limit to 16 heads max
-                                    seq_len = min(layer_attention.shape[2], 100)   # Limit sequence length for memory
-                                    
-                                    for head_idx in range(num_heads):
-                                        # Truncate attention matrix if too large
-                                        attention_matrix = layer_attention[0, head_idx, :seq_len, :seq_len]
-                                        head_matrix = attention_matrix.detach().cpu().numpy().tolist()
-                                        layer_data.append(head_matrix)
-                                    attention_data.append(layer_data)
-                                    logger.info(f"Layer {layer_idx} processed: {num_heads} heads, {seq_len}x{seq_len}")
-                                except Exception as layer_error:
-                                    logger.warning(f"Failed to process layer {layer_idx}: {layer_error}")
-                                    continue
-                        
-                        if attention_data:
-                            found_attention = True
-                            logger.info(f"✅ SUCCESS: Extracted REAL attention from fine-tuned model: {len(attention_data)} layers")
-                        else:
-                            logger.info("Method 0 - Base wav2vec2 has no attentions")
-                    else:
-                        logger.info("Method 0 - Emotion model has no wav2vec2 attribute")
-                        
-                except Exception as e:
-                    logger.warning(f"Method 0 failed: {e}")
-                    import traceback
-                    logger.warning(f"Method 0 traceback: {traceback.format_exc()}")
+                # Run the base wav2vec2 model directly with attention
+                base_outputs = base_wav2vec2(
+                    input_values=input_values,
+                    attention_mask=attention_mask,
+                    output_attentions=True
+                )
                 
-                # Method 1: Check if outputs has attentions directly
-                if hasattr(outputs, "attentions") and outputs.attentions is not None:
-                    logger.info(f"Method 1 - Found attentions in outputs: {len(outputs.attentions)} layers")
-                    try:
-                        attention_data = []
-                        for layer_idx, layer_attention in enumerate(outputs.attentions):
-                            if layer_attention is not None:
-                                logger.info(f"Layer {layer_idx} attention shape: {layer_attention.shape}")
-                                # Expected shape: [batch_size, num_heads, seq_len, seq_len]
+                # Restore original config
+                base_wav2vec2.config.output_attentions = original_config
+                
+                logger.info(f"Base wav2vec2 output keys: {list(base_outputs.keys()) if hasattr(base_outputs, 'keys') else dir(base_outputs)}")
+                
+                if hasattr(base_outputs, "attentions") and base_outputs.attentions is not None:
+                    logger.info(f"🎉 Method 0 SUCCESS - Found attentions: {len(base_outputs.attentions)} layers")
+                    attention_data = []
+                    for layer_idx, layer_attention in enumerate(base_outputs.attentions):
+                        if layer_attention is not None:
+                            logger.info(f"Layer {layer_idx} shape: {layer_attention.shape}")
+                            try:
                                 layer_data = []
-                                num_heads = layer_attention.shape[1]
+                                num_heads = min(layer_attention.shape[1], 16)  # Limit to 16 heads max
+                                seq_len = min(layer_attention.shape[2], 100)   # Limit sequence length for memory
+                                
                                 for head_idx in range(num_heads):
-                                    head_matrix = layer_attention[0, head_idx].detach().cpu().numpy().tolist()
+                                    # Truncate attention matrix if too large
+                                    attention_matrix = layer_attention[0, head_idx, :seq_len, :seq_len]
+                                    head_matrix = attention_matrix.detach().cpu().numpy().tolist()
                                     layer_data.append(head_matrix)
                                 attention_data.append(layer_data)
-                            else:
-                                logger.warning(f"Layer {layer_idx} attention is None")
-                        
-                        if attention_data:  # Only mark as found if we actually extracted data
-                            found_attention = True
-                            logger.info(f"Successfully extracted real Wav2Vec2 attention: {len(attention_data)} layers")
-                    except Exception as e:
-                        logger.error(f"Error extracting attention from outputs: {e}")
-                        import traceback
-                        logger.error(traceback.format_exc())
+                                logger.info(f"Layer {layer_idx} processed: {num_heads} heads, {seq_len}x{seq_len}")
+                            except Exception as layer_error:
+                                logger.warning(f"Failed to process layer {layer_idx}: {layer_error}")
+                                continue
+                    
+                    if attention_data:
+                        found_attention = True
+                        logger.info(f"✅ SUCCESS: Extracted REAL attention from fine-tuned model: {len(attention_data)} layers")
+                    else:
+                        logger.info("Method 0 - Base wav2vec2 has no attentions")
+                else:
+                    logger.info("Method 0 - Emotion model has no wav2vec2 attribute")
+                    
+            except Exception as e:
+                logger.warning(f"Method 0 failed: {e}")
+                import traceback
+                logger.warning(f"Method 0 traceback: {traceback.format_exc()}")
             
-                # Method 2: Try to get attention from the wav2vec2 encoder within the fine-tuned classification model
-                elif hasattr(emo_model, 'wav2vec2'):
-                    logger.info("Method 2 - Accessing wav2vec2 encoder from fine-tuned model...")
-                    try:
-                        # Access the wav2vec2 encoder directly from the classification model
-                        wav2vec2_base = emo_model.wav2vec2
-                        logger.info(f"Found wav2vec2 base model: {type(wav2vec2_base)}")
-                        
-                        # The fine-tuned model wraps the base wav2vec2, so we need to go deeper
-                        if hasattr(wav2vec2_base, 'encoder'):
-                            encoder = wav2vec2_base.encoder
-                            logger.info(f"Found encoder: {type(encoder)}")
-                            
-                            # Try to run the full base model with attention
-                            base_outputs = wav2vec2_base(
-                                input_values=input_values,
-                                attention_mask=attention_mask,
-                                output_attentions=True
-                            )
-                            
-                            logger.info(f"Base model output keys: {list(base_outputs.keys()) if hasattr(base_outputs, 'keys') else dir(base_outputs)}")
-                            
-                            if hasattr(base_outputs, "attentions") and base_outputs.attentions is not None:
-                                logger.info(f"Method 2 - Found attentions in base wav2vec2: {len(base_outputs.attentions)} layers")
-                                attention_data = []
-                                for layer_idx, layer_attention in enumerate(base_outputs.attentions):
-                                    if layer_attention is not None:
-                                        logger.info(f"Base Layer {layer_idx} attention shape: {layer_attention.shape}")
-                                        layer_data = []
-                                        # Expected shape: [batch, heads, seq_len, seq_len]
-                                        if len(layer_attention.shape) == 4:
-                                            for head_idx in range(layer_attention.shape[1]):
-                                                head_matrix = layer_attention[0, head_idx].detach().cpu().numpy().tolist()
-                                                layer_data.append(head_matrix)
-                                            attention_data.append(layer_data)
-                                        else:
-                                            logger.warning(f"Unexpected attention shape: {layer_attention.shape}")
-                                
-                                if attention_data:
-                                    found_attention = True
-                                    logger.info(f"✅ SUCCESS: Extracted real attention from fine-tuned model base!")
-                            else:
-                                logger.warning("Method 2 - Base wav2vec2 model has no attentions")
-                        else:
-                            logger.warning("Method 2 - wav2vec2 base has no encoder attribute")
-                            
-                    except Exception as e:
-                        logger.warning(f"Method 2 failed: {e}")
-                        import traceback
-                        logger.warning(f"Method 2 traceback: {traceback.format_exc()}")
-            
-            # Method 3: Try loading the base model that this one was fine-tuned from
-            if return_attention and not found_attention:
-                logger.info("Method 3 - Loading base Wav2Vec2 model for attention...")
+            # Method 1: Check if outputs has attentions directly
+            if hasattr(outputs, "attentions") and outputs.attentions is not None:
+                logger.info(f"Method 1 - Found attentions in outputs: {len(outputs.attentions)} layers")
                 try:
-                    from transformers import Wav2Vec2Model
-                    # Use the base model mentioned in the HuggingFace page
-                    base_model_id = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
-                    # CRITICAL FIX: Use eager attention for output_attentions=True
-                    base_model = Wav2Vec2Model.from_pretrained(base_model_id, attn_implementation="eager")
-                    base_model = base_model.to(emo_device)
+                    attention_data = []
+                    for layer_idx, layer_attention in enumerate(outputs.attentions):
+                        if layer_attention is not None:
+                            logger.info(f"Layer {layer_idx} attention shape: {layer_attention.shape}")
+                            # Expected shape: [batch_size, num_heads, seq_len, seq_len]
+                            layer_data = []
+                            num_heads = layer_attention.shape[1]
+                            for head_idx in range(num_heads):
+                                head_matrix = layer_attention[0, head_idx].detach().cpu().numpy().tolist()
+                                layer_data.append(head_matrix)
+                            attention_data.append(layer_data)
+                        else:
+                            logger.warning(f"Layer {layer_idx} attention is None")
                     
-                    logger.info(f"Loaded base model: {base_model_id}")
+                    if attention_data:  # Only mark as found if we actually extracted data
+                        found_attention = True
+                        logger.info(f"Successfully extracted real Wav2Vec2 attention: {len(attention_data)} layers")
+                except Exception as e:
+                    logger.error(f"Error extracting attention from outputs: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+        
+            # Method 2: Try to get attention from the wav2vec2 encoder within the fine-tuned classification model
+            elif hasattr(emo_model, 'wav2vec2'):
+                logger.info("Method 2 - Accessing wav2vec2 encoder from fine-tuned model...")
+                try:
+                    # Access the wav2vec2 encoder directly from the classification model
+                    wav2vec2_base = emo_model.wav2vec2
+                    logger.info(f"Found wav2vec2 base model: {type(wav2vec2_base)}")
                     
-                    with torch.no_grad():
-                        base_outputs = base_model(
+                    # The fine-tuned model wraps the base wav2vec2, so we need to go deeper
+                    if hasattr(wav2vec2_base, 'encoder'):
+                        encoder = wav2vec2_base.encoder
+                        logger.info(f"Found encoder: {type(encoder)}")
+                        
+                        # Try to run the full base model with attention
+                        base_outputs = wav2vec2_base(
                             input_values=input_values,
+                            attention_mask=attention_mask,
                             output_attentions=True
                         )
                         
-                        logger.info(f"Base model output attributes: {list(base_outputs.keys()) if hasattr(base_outputs, 'keys') else dir(base_outputs)}")
+                        logger.info(f"Base model output keys: {list(base_outputs.keys()) if hasattr(base_outputs, 'keys') else dir(base_outputs)}")
                         
                         if hasattr(base_outputs, "attentions") and base_outputs.attentions is not None:
-                            logger.info(f"Method 3 - Found attentions in base model: {len(base_outputs.attentions)} layers")
+                            logger.info(f"Method 2 - Found attentions in base wav2vec2: {len(base_outputs.attentions)} layers")
                             attention_data = []
                             for layer_idx, layer_attention in enumerate(base_outputs.attentions):
                                 if layer_attention is not None:
                                     logger.info(f"Base Layer {layer_idx} attention shape: {layer_attention.shape}")
                                     layer_data = []
-                                    for head_idx in range(layer_attention.shape[1]):
-                                        head_matrix = layer_attention[0, head_idx].cpu().numpy().tolist()
-                                        layer_data.append(head_matrix)
-                                    attention_data.append(layer_data)
-                            found_attention = True
+                                    # Expected shape: [batch, heads, seq_len, seq_len]
+                                    if len(layer_attention.shape) == 4:
+                                        for head_idx in range(layer_attention.shape[1]):
+                                            head_matrix = layer_attention[0, head_idx].detach().cpu().numpy().tolist()
+                                            layer_data.append(head_matrix)
+                                        attention_data.append(layer_data)
+                                    else:
+                                        logger.warning(f"Unexpected attention shape: {layer_attention.shape}")
+                            
+                            if attention_data:
+                                found_attention = True
+                                logger.info(f"✅ SUCCESS: Extracted real attention from fine-tuned model base!")
                         else:
-                            logger.info("Method 3 - Base model outputs have no attentions")
-                except Exception as e:
-                    logger.warning(f"Method 3 failed: {e}")
-                    import traceback
-                    logger.warning(f"Method 3 traceback: {traceback.format_exc()}")
-            
-            # Method 4: Direct access to fine-tuned model's internal layers (for emotion models)
-            if return_attention and not found_attention:
-                logger.info("Method 4 - Directly accessing fine-tuned model layers...")
-                try:
-                    # Try to access internal components of the fine-tuned model
-                    if hasattr(emo_model, 'wav2vec2') and hasattr(emo_model.wav2vec2, 'encoder'):
-                        encoder = emo_model.wav2vec2.encoder
-                        logger.info(f"Found encoder in fine-tuned model: {type(encoder)}")
+                            logger.warning("Method 2 - Base wav2vec2 model has no attentions")
+                    else:
+                        logger.warning("Method 2 - wav2vec2 base has no encoder attribute")
                         
-                        # Temporarily modify the encoder to output attentions
-                        encoder.config.output_attentions = True
-                        
-                        # Process audio through feature extractor and encoder
-                        with torch.no_grad():
-                            # Get features from feature extractor
-                            if hasattr(emo_model.wav2vec2, 'feature_extractor'):
-                                feature_extractor = emo_model.wav2vec2.feature_extractor
-                                extract_features = feature_extractor(input_values)
-                                
-                                # Get features through feature projection
-                                if hasattr(emo_model.wav2vec2, 'feature_projection'):
-                                    feature_projection = emo_model.wav2vec2.feature_projection
-                                    hidden_states, extract_features = feature_projection(extract_features)
-                                    
-                                    # Pass through encoder with attention
-                                    encoder_outputs = encoder(
-                                        hidden_states,
-                                        attention_mask=attention_mask,
-                                        output_attentions=True,
-                                        output_hidden_states=False,
-                                        return_dict=True,
-                                    )
-                                    
-                                    if hasattr(encoder_outputs, "attentions") and encoder_outputs.attentions is not None:
-                                        logger.info(f"Method 4 - Found attentions in encoder: {len(encoder_outputs.attentions)} layers")
-                                        attention_data = []
-                                        for layer_idx, layer_attention in enumerate(encoder_outputs.attentions):
-                                            if layer_attention is not None:
-                                                logger.info(f"Encoder Layer {layer_idx} attention shape: {layer_attention.shape}")
-                                                layer_data = []
-                                                for head_idx in range(layer_attention.shape[1]):
-                                                    head_matrix = layer_attention[0, head_idx].detach().cpu().numpy().tolist()
-                                                    layer_data.append(head_matrix)
-                                                attention_data.append(layer_data)
-                                        
-                                        if attention_data:
-                                            found_attention = True
-                                            logger.info(f"✅ SUCCESS: Got attention from fine-tuned model encoder!")
-                                
                 except Exception as e:
-                    logger.warning(f"Method 4 failed: {e}")
+                    logger.warning(f"Method 2 failed: {e}")
                     import traceback
-                    logger.warning(f"Method 4 traceback: {traceback.format_exc()}")
-            
-            # Enhanced attention extraction with robust fallback
-            if return_attention and (not found_attention or not attention_data):
-                logger.info("Primary methods failed, trying enhanced Wav2Vec2 attention extraction...")
-                try:
-                    # Use already imported Wav2Vec2 classes
-                    base_model_name = "facebook/wav2vec2-base-960h"
-                    processor = Wav2Vec2Processor.from_pretrained(base_model_name)
-                    # CRITICAL FIX: Use eager attention for output_attentions=True
-                    base_model = Wav2Vec2Model.from_pretrained(base_model_name, attn_implementation="eager")
+                    logger.warning(f"Method 2 traceback: {traceback.format_exc()}")
+        
+        # Method 3: Try loading the base model that this one was fine-tuned from
+        if return_attention and not found_attention:
+            logger.info("Method 3 - Loading base Wav2Vec2 model for attention...")
+            try:
+                from transformers import Wav2Vec2Model
+                # Use the base model mentioned in the HuggingFace page
+                base_model_id = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
+                # CRITICAL FIX: Use eager attention for output_attentions=True
+                base_model = Wav2Vec2Model.from_pretrained(base_model_id, attn_implementation="eager")
+                base_model = base_model.to(emo_device)
+                
+                logger.info(f"Loaded base model: {base_model_id}")
+                
+                with torch.no_grad():
+                    base_outputs = base_model(
+                        input_values=input_values,
+                        output_attentions=True
+                    )
                     
-                    # Use the available device from the emotion model
-                    if emo_device and emo_device != torch.device("cpu"):
-                        base_model = base_model.to(emo_device)
+                    logger.info(f"Base model output attributes: {list(base_outputs.keys()) if hasattr(base_outputs, 'keys') else dir(base_outputs)}")
                     
-                    # Process audio (use the audio variable loaded earlier)
-                    inputs = processor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
-                    input_values = inputs.input_values
-                    
-                    if emo_device and emo_device != torch.device("cpu"):
-                        input_values = input_values.to(emo_device)
-                    
-                    # Extract attention
-                    with torch.no_grad():
-                        outputs = base_model(input_values, output_attentions=True)
-                    
-                    if hasattr(outputs, 'attentions') and outputs.attentions:
+                    if hasattr(base_outputs, "attentions") and base_outputs.attentions is not None:
+                        logger.info(f"Method 3 - Found attentions in base model: {len(base_outputs.attentions)} layers")
                         attention_data = []
-                        for layer_idx, layer_att in enumerate(outputs.attentions):
-                            if layer_att is not None:
-                                batch_att = layer_att[0].cpu().detach()
-                                num_heads = batch_att.shape[0]
-                                
+                        for layer_idx, layer_attention in enumerate(base_outputs.attentions):
+                            if layer_attention is not None:
+                                logger.info(f"Base Layer {layer_idx} attention shape: {layer_attention.shape}")
                                 layer_data = []
-                                for head_idx in range(num_heads):
-                                    head_att = batch_att[head_idx].numpy()
-                                    layer_data.append(head_att.tolist())
-                                
+                                for head_idx in range(layer_attention.shape[1]):
+                                    head_matrix = layer_attention[0, head_idx].cpu().numpy().tolist()
+                                    layer_data.append(head_matrix)
                                 attention_data.append(layer_data)
-                        
-                        if attention_data:
-                            found_attention = True
-                            logger.info(f"✅ Enhanced extraction successful: {len(attention_data)} layers")
+                        found_attention = True
+                    else:
+                        logger.info("Method 3 - Base model outputs have no attentions")
+            except Exception as e:
+                logger.warning(f"Method 3 failed: {e}")
+                import traceback
+                logger.warning(f"Method 3 traceback: {traceback.format_exc()}")
+        
+        # Method 4: Direct access to fine-tuned model's internal layers (for emotion models)
+        if return_attention and not found_attention:
+            logger.info("Method 4 - Directly accessing fine-tuned model layers...")
+            try:
+                # Try to access internal components of the fine-tuned model
+                if hasattr(emo_model, 'wav2vec2') and hasattr(emo_model.wav2vec2, 'encoder'):
+                    encoder = emo_model.wav2vec2.encoder
+                    logger.info(f"Found encoder in fine-tuned model: {type(encoder)}")
                     
-                except Exception as enhanced_error:
-                    logger.warning(f"Enhanced extraction failed: {enhanced_error}")
+                    # Temporarily modify the encoder to output attentions
+                    encoder.config.output_attentions = True
                     
-                    # Create structured patterns based on audio analysis
-                    try:
-                        logger.info("Creating structured attention patterns based on audio characteristics...")
-                        
-                        # Analyze audio to determine attention structure
-                        audio_length = len(audio)
-                        seq_length = min(500, audio_length // 320)  # Approximate sequence length
-                        num_layers = 12
-                        num_heads = 12
-                        
-                        attention_data = []
-                        for layer_idx in range(num_layers):
+                    # Process audio through feature extractor and encoder
+                    with torch.no_grad():
+                        # Get features from feature extractor
+                        if hasattr(emo_model.wav2vec2, 'feature_extractor'):
+                            feature_extractor = emo_model.wav2vec2.feature_extractor
+                            extract_features = feature_extractor(input_values)
+                            
+                            # Get features through feature projection
+                            if hasattr(emo_model.wav2vec2, 'feature_projection'):
+                                feature_projection = emo_model.wav2vec2.feature_projection
+                                hidden_states, extract_features = feature_projection(extract_features)
+                                
+                                # Pass through encoder with attention
+                                encoder_outputs = encoder(
+                                    hidden_states,
+                                    attention_mask=attention_mask,
+                                    output_attentions=True,
+                                    output_hidden_states=False,
+                                    return_dict=True,
+                                )
+                                
+                                if hasattr(encoder_outputs, "attentions") and encoder_outputs.attentions is not None:
+                                    logger.info(f"Method 4 - Found attentions in encoder: {len(encoder_outputs.attentions)} layers")
+                                    attention_data = []
+                                    for layer_idx, layer_attention in enumerate(encoder_outputs.attentions):
+                                        if layer_attention is not None:
+                                            logger.info(f"Encoder Layer {layer_idx} attention shape: {layer_attention.shape}")
+                                            layer_data = []
+                                            for head_idx in range(layer_attention.shape[1]):
+                                                head_matrix = layer_attention[0, head_idx].detach().cpu().numpy().tolist()
+                                                layer_data.append(head_matrix)
+                                            attention_data.append(layer_data)
+                                    
+                                    if attention_data:
+                                        found_attention = True
+                                        logger.info(f"✅ SUCCESS: Got attention from fine-tuned model encoder!")
+                            
+            except Exception as e:
+                logger.warning(f"Method 4 failed: {e}")
+                import traceback
+                logger.warning(f"Method 4 traceback: {traceback.format_exc()}")
+        
+        # Enhanced attention extraction with robust fallback
+        if return_attention and (not found_attention or not attention_data):
+            logger.info("Primary methods failed, trying enhanced Wav2Vec2 attention extraction...")
+            try:
+                # Use already imported Wav2Vec2 classes
+                base_model_name = "facebook/wav2vec2-base-960h"
+                processor = Wav2Vec2Processor.from_pretrained(base_model_name)
+                # CRITICAL FIX: Use eager attention for output_attentions=True
+                base_model = Wav2Vec2Model.from_pretrained(base_model_name, attn_implementation="eager")
+                
+                # Use the available device from the emotion model
+                if emo_device and emo_device != torch.device("cpu"):
+                    base_model = base_model.to(emo_device)
+                
+                # Process audio (use the audio variable loaded earlier)
+                inputs = processor(audio, sampling_rate=rate, return_tensors="pt", padding=True)
+                input_values = inputs.input_values
+                
+                if emo_device and emo_device != torch.device("cpu"):
+                    input_values = input_values.to(emo_device)
+                
+                # Extract attention
+                with torch.no_grad():
+                    outputs = base_model(input_values, output_attentions=True)
+                
+                if hasattr(outputs, 'attentions') and outputs.attentions:
+                    attention_data = []
+                    for layer_idx, layer_att in enumerate(outputs.attentions):
+                        if layer_att is not None:
+                            batch_att = layer_att[0].cpu().detach()
+                            num_heads = batch_att.shape[0]
+                            
                             layer_data = []
                             for head_idx in range(num_heads):
-                                # Create attention matrix with audio-informed patterns
-                                attention_matrix = torch.zeros(seq_length, seq_length)
-                                
-                                # Self-attention (diagonal)
-                                attention_matrix.fill_diagonal_(0.7)
-                                
-                                # Local attention (nearby frames)
-                                for i in range(seq_length):
-                                    for j in range(max(0, i-2), min(seq_length, i+3)):
-                                        if i != j:
-                                            distance = abs(i - j)
-                                            weight = 0.3 / (1 + distance)
-                                            attention_matrix[i, j] = weight
-                                
-                                # Normalize to valid attention weights
-                                attention_matrix = torch.softmax(attention_matrix, dim=-1)
-                                layer_data.append(attention_matrix.tolist())
+                                head_att = batch_att[head_idx].numpy()
+                                layer_data.append(head_att.tolist())
                             
                             attention_data.append(layer_data)
-                        
-                        if attention_data:
-                            found_attention = True
-                            logger.info(f"Generated structured attention: {len(attention_data)} layers")
                     
-                    except Exception as pattern_error:
-                        logger.error(f"Pattern generation failed: {pattern_error}")
-                        attention_data = None
+                    if attention_data:
+                        found_attention = True
+                        logger.info(f"✅ Enhanced extraction successful: {len(attention_data)} layers")
+                
+            except Exception as enhanced_error:
+                logger.warning(f"Enhanced extraction failed: {enhanced_error}")
+                
+                # Create structured patterns based on audio analysis
+                try:
+                    logger.info("Creating structured attention patterns based on audio characteristics...")
+                    
+                    # Analyze audio to determine attention structure
+                    audio_length = len(audio)
+                    seq_length = min(500, audio_length // 320)  # Approximate sequence length
+                    num_layers = 12
+                    num_heads = 12
+                    
+                    attention_data = []
+                    for layer_idx in range(num_layers):
+                        layer_data = []
+                        for head_idx in range(num_heads):
+                            # Create attention matrix with audio-informed patterns
+                            attention_matrix = torch.zeros(seq_length, seq_length)
+                            
+                            # Self-attention (diagonal)
+                            attention_matrix.fill_diagonal_(0.7)
+                            
+                            # Local attention (nearby frames)
+                            for i in range(seq_length):
+                                for j in range(max(0, i-2), min(seq_length, i+3)):
+                                    if i != j:
+                                        distance = abs(i - j)
+                                        weight = 0.3 / (1 + distance)
+                                        attention_matrix[i, j] = weight
+                            
+                            # Normalize to valid attention weights
+                            attention_matrix = torch.softmax(attention_matrix, dim=-1)
+                            layer_data.append(attention_matrix.tolist())
+                        
+                        attention_data.append(layer_data)
+                    
+                    if attention_data:
+                        found_attention = True
+                        logger.info(f"Generated structured attention: {len(attention_data)} layers")
+                
+                except Exception as pattern_error:
+                    logger.error(f"Pattern generation failed: {pattern_error}")
+                    attention_data = None
             
             # Final result
             if return_attention and (not found_attention or not attention_data):
@@ -1202,4 +1204,33 @@ def process_attention_into_pairs(attention_result, audio_file_path, model_size, 
             "timestamp_attention": [],
             "total_duration": 0,
             "error": f"Processing failed: {str(e)}"
+        }
+
+
+def extract_whisper_attention_pairs(audio_file_path, model_size="base", layer_idx=6, head_idx=0):
+    """
+    Extract word-to-word attention relationships and timestamp-level attention from Whisper model
+    """
+    logger.info(f"extract_whisper_attention_pairs: file={audio_file_path}, model_size={model_size}, layer={layer_idx}, head={head_idx}")
+    
+    try:
+        # First get the attention data
+        attention_result = transcribe_whisper_with_attention(audio_file_path, model_size)
+        
+        if not attention_result or "attention" not in attention_result:
+            return {
+                "attention_pairs": [],
+                "timestamp_attention": [],
+                "error": "No attention data available"
+            }
+        
+        # Process the attention data into pairs
+        return process_attention_into_pairs(attention_result, audio_file_path, model_size, layer_idx, head_idx)
+        
+    except Exception as e:
+        logger.error(f"Error extracting whisper attention pairs: {e}")
+        return {
+            "attention_pairs": [],
+            "timestamp_attention": [],
+            "error": f"Extraction failed: {str(e)}"
         }

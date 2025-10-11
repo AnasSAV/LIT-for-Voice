@@ -22,6 +22,7 @@ from app.services.model_loader_service import (
     transcribe_whisper_with_attention,
     predict_emotion_wave2vec_with_attention,
     transcribe_whisper_with_timestamps,
+    extract_whisper_attention_pairs,
 )
 from app.services.dataset_service import resolve_file
 from app.core.redis import get_result, cache_result
@@ -38,6 +39,11 @@ DATASET_DIRS = {
     "ravdess": DATA_DIR / "ravdess_subset",
 }
 logger = logging.getLogger(__name__)
+
+
+def get_session_id(request: Request) -> Optional[str]:
+    """Extract session ID from request (optional for backwards compatibility)"""
+    return getattr(request.state, 'sid', None)
 
 
 MODEL_FUNCTIONS = {
@@ -1015,97 +1021,6 @@ async def batch_audio_frequency_analysis(request: Request):
         "embedding": embedding.tolist(),
         "embedding_dim": len(embedding)
     }
-
-
-@router.post("/inferences/attention-pairs")
-async def extract_attention_pairs_endpoint(
-    request: dict = Body(..., example={
-        "model": "whisper-base",
-        "file_path": "/path/to/audio.wav",
-        "dataset": "common-voice",
-        "dataset_file": "sample-001.mp3",
-        "layer": 6,
-        "head": 0
-    })
-):
-    """Extract word-to-word attention relationships and timestamp-level attention from Whisper model"""
-    try:
-        model = request.get("model", "whisper-base")
-        file_path = request.get("file_path")
-        dataset = request.get("dataset")
-        dataset_file = request.get("dataset_file")
-        layer_idx = request.get("layer", 6)  # Default to layer 6 (middle layer)
-        head_idx = request.get("head", 0)    # Default to head 0
-        
-        # Validate model
-        if "whisper" not in model.lower():
-            raise HTTPException(status_code=400, detail="Attention pairs extraction only supports Whisper models")
-        
-        # Resolve file path
-        resolved_path = None
-        if file_path:
-            resolved_path = Path(file_path)
-        elif dataset and dataset_file:
-            try:
-                logger.info(f"Resolving file: dataset='{dataset}', file='{dataset_file}'")
-                resolved_path = resolve_file(dataset, dataset_file)
-                logger.info(f"Resolved to: {resolved_path}")
-                logger.info(f"Path exists: {resolved_path.exists()}")
-                logger.info(f"Path is file: {resolved_path.is_file() if resolved_path.exists() else 'N/A'}")
-            except (FileNotFoundError, ValueError) as e:
-                logger.error(f"resolve_file failed: {e}")
-                raise HTTPException(status_code=404, detail=str(e))
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Missing audio reference. Provide either 'file_path' or 'dataset' + 'dataset_file'."
-            )
-        
-        if not resolved_path.exists():
-            logger.error(f"Resolved path does not exist: {resolved_path}")
-            raise HTTPException(status_code=404, detail=f"Audio file not found: {resolved_path}")
-        
-        # Create cache key for attention pairs
-        file_content_hash = hashlib.md5(str(resolved_path).encode()).hexdigest()
-        cache_key = f"{model}_attention_pairs_{file_content_hash}_l{layer_idx}_h{head_idx}"
-        
-        # Check if attention pairs are cached
-        cached_attention = await get_result(model, cache_key)
-        
-        if cached_attention is not None:
-            logger.info(f"Using cached attention pairs for {resolved_path}")
-            return cached_attention
-        
-        # Determine model size
-        model_size = "base" if "base" in model else "large"
-        
-        # Extract attention pairs
-        from app.services.model_loader_service import extract_whisper_attention_pairs
-        
-        attention_data = await asyncio.to_thread(
-            extract_whisper_attention_pairs,
-            str(resolved_path),
-            model_size,
-            layer_idx,
-            head_idx
-        )
-        
-        if "error" in attention_data:
-            raise HTTPException(status_code=500, detail=attention_data["error"])
-        
-        # Cache the result (24 hour TTL)
-        await cache_result(model, cache_key, attention_data, ttl=24*60*60)
-        
-        logger.info(f"Generated attention pairs: {len(attention_data.get('attention_pairs', []))} pairs, "
-                   f"{len(attention_data.get('timestamp_attention', []))} timestamps")
-        
-        return attention_data
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting {model} transcription with attention: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Transcription with attention failed: {str(e)}")
 
 
 @router.get("/inferences/attention-pairs-test")
