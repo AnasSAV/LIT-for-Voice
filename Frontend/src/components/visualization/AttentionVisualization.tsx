@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
 import { API_BASE } from "@/lib/api";
 
 interface AttentionPair {
@@ -12,9 +10,7 @@ interface AttentionPair {
   to_word: string;
   from_time: [number, number];
   to_time: [number, number];
-  attention_weight: number;  // Raw attention value (0.001-0.008)
-  attention_normalized?: number;  // 0-100 percentage of maximum
-  attention_relative?: number;  // Relative to average
+  attention_weight: number;
   from_index: number;
   to_index: number;
 }
@@ -22,64 +18,38 @@ interface AttentionPair {
 interface TimestampAttention {
   time: number;
   attention: number;
-  frame_index: number;
+  max_outgoing?: number;
+  avg_incoming?: number;
+  self_attention?: number;
+  attention_entropy?: number;
+  frame_index?: number;
 }
 
-interface AttentionData {
-  model: string;
-  layer: number;
-  head: number;
-  attention_pairs: AttentionPair[];
-  timestamp_attention: TimestampAttention[];
-  total_duration: number;
-  sequence_length: number;
-  word_chunks: any[];
-}
-
-interface Props {
+interface AttentionVisualizationProps {
   selectedFile?: any;
   model?: string;
   dataset?: string;
 }
 
-export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, dataset }) => {
-  const [attentionData, setAttentionData] = useState<AttentionData | null>(null);
+export const AttentionVisualization = ({ selectedFile, model, dataset }: AttentionVisualizationProps) => {
+  const [selectedLayer, setSelectedLayer] = useState(6);  // Middle layer for better semantic attention patterns
+  const [selectedHead, setSelectedHead] = useState(0);
+  const [attentionData, setAttentionData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedLayer, setSelectedLayer] = useState(6);
-  const [selectedHead, setSelectedHead] = useState(0);
-  const [viewMode, setViewMode] = useState<"pairs" | "timeline">("pairs");
 
   const fetchAttentionData = async () => {
     console.log("AttentionVisualization - fetchAttentionData called:", {
       selectedFile,
-      selectedFileType: typeof selectedFile,
-      selectedFileValue: selectedFile,
       model,
       dataset,
-      modelIncludesWhisper: model?.includes('whisper')
+      hasWhisper: model?.includes('whisper')
     });
 
-  // If no real attention data, show placeholder
-  if (!attention || attention.length === 0) {
-    return (
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Attention Visualization</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center text-muted-foreground py-8">
-              {!attention ? 
-                "Attention extraction not available for this model/audio combination. Only authentic attention data is shown - no synthetic data is generated." :
-                `Attention data received but empty (${attention.length} layers). This model may not support attention extraction for this audio file.`
-              }
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+    if (!selectedFile || !model || !model.includes('whisper')) {
+      console.log("AttentionVisualization - Skipping fetch due to conditions");
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -91,52 +61,28 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
         head: selectedHead
       };
 
-      // Handle different file selection scenarios
+      // Handle file path resolution following your patterns
       if (typeof selectedFile === 'string') {
-        // Dataset file (filename as string)
+        // Dataset file
         if (dataset) {
           requestBody.dataset = dataset;
-          // Extract just the filename if it includes dataset prefix
-          const cleanFileName = selectedFile.includes('\\') || selectedFile.includes('/') 
-            ? selectedFile.split(/[\\\/]/).pop() 
-            : selectedFile;
-          console.log("AttentionVisualization - File processing:", {
-            originalSelectedFile: selectedFile,
-            cleanFileName: cleanFileName,
-            dataset: dataset
-          });
-          requestBody.dataset_file = cleanFileName;
+          requestBody.dataset_file = selectedFile;
         } else {
           throw new Error("Dataset required for dataset file selection");
         }
-      } else if (typeof selectedFile === 'object' && selectedFile) {
-        // Check if it's a dataset file (file_path contains dataset prefix)
-        if (selectedFile.file_path && dataset && 
-            (selectedFile.file_path.includes('/') || selectedFile.file_path.includes('\\'))) {
-          // Dataset file with path like "cv-valid-dev/sample-000775.mp3"
-          const cleanFileName = selectedFile.file_path.split(/[\\\/]/).pop();
-          console.log("AttentionVisualization - Dataset object processing:", {
-            originalFilePath: selectedFile.file_path,
-            cleanFileName: cleanFileName,
-            dataset: dataset
-          });
+      } else if (selectedFile?.file_path) {
+        // Check if we have a dataset - if so, this is a dataset file
+        if (dataset) {
+          // This is a dataset file (either custom or standard dataset)
           requestBody.dataset = dataset;
-          requestBody.dataset_file = cleanFileName;
-        } else if (selectedFile.file_path) {
+          requestBody.dataset_file = selectedFile.file_path;
+        } else {
           // Regular uploaded file
           requestBody.file_path = selectedFile.file_path;
-        } else if (selectedFile.file_id) {
-          // If only file_id is available, construct path
-          requestBody.file_path = selectedFile.file_path || `/uploads/${selectedFile.file_id}`;
-        } else {
-          throw new Error("Selected upload has no file_path or file_id");
         }
       } else {
         throw new Error("No valid file selected");
       }
-
-      console.log("AttentionVisualization - Request body:", requestBody);
-      console.log("AttentionVisualization - API URL:", `${API_BASE}/inferences/attention-pairs`);
 
       const response = await fetch(`${API_BASE}/inferences/attention-pairs`, {
         method: "POST",
@@ -148,22 +94,17 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
       });
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown server error');
-        throw new Error(`Failed to fetch attention data: ${response.status} - ${errorText}`);
+        const errorText = await response.text();
+        throw new Error(`${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      console.log("AttentionVisualization - Success:", data);
+      console.log("AttentionVisualization - Response data:", data);
       setAttentionData(data);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      console.error("Error fetching attention data:", err);
+
+    } catch (err: any) {
+      console.error("AttentionVisualization - Error:", err);
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -173,232 +114,445 @@ export const AttentionVisualization: React.FC<Props> = ({ selectedFile, model, d
     fetchAttentionData();
   }, [selectedFile, model, dataset, selectedLayer, selectedHead]);
 
-  const getAttentionMatrix = (): number[][] => {
-    if (!attentionData || !attentionData.word_chunks) return [];
+  const renderWordPairsMatrix = () => {
+    if (!attentionData?.attention_pairs) return null;
+
+    const pairs = attentionData.attention_pairs as AttentionPair[];
+    const words = [...new Set(pairs.map(p => p.from_word))];
     
-    const numWords = attentionData.word_chunks.length;
-    const matrix: number[][] = Array(numWords).fill(null).map(() => Array(numWords).fill(0));
+    // Create attention matrix based on actual sequence length, not just unique words
+    const maxIndex = Math.max(
+      ...pairs.map(p => Math.max(p.from_index, p.to_index)),
+      words.length - 1
+    );
+    const matrixSize = maxIndex + 1;
     
-    attentionData.attention_pairs.forEach(pair => {
-      if (pair.from_index < numWords && pair.to_index < numWords) {
-        matrix[pair.from_index][pair.to_index] = pair.attention_weight;
+    // Create attention matrix with proper size
+    const matrix: number[][] = Array(matrixSize).fill(null).map(() => Array(matrixSize).fill(0));
+    
+    // Safely populate matrix with bounds checking
+    pairs.forEach(pair => {
+      const fromIdx = pair.from_index;
+      const toIdx = pair.to_index;
+      
+      // Bounds check to prevent array access errors
+      if (fromIdx >= 0 && fromIdx < matrixSize && toIdx >= 0 && toIdx < matrixSize) {
+        matrix[fromIdx][toIdx] = pair.attention_weight;
+      } else {
+        console.warn(`Index out of bounds: from=${fromIdx}, to=${toIdx}, matrixSize=${matrixSize}`);
       }
     });
-    
-    return matrix;
-  };
 
-  const getTopAttentionPairs = (limit: number = 5): AttentionPair[] => {
-    if (!attentionData) return [];
+    // Calculate color scale excluding self-attention for better contrast
+    const nonSelfAttentionValues = pairs
+      .filter(p => p.from_index !== p.to_index) // Exclude self-attention
+      .map(p => p.attention_weight)
+      .filter(val => val > 0);
     
-    return attentionData.attention_pairs
+    const minNonSelfAttention = Math.min(...nonSelfAttentionValues, 0);
+    const maxNonSelfAttention = Math.max(...nonSelfAttentionValues, 1);
+    
+    // Function to normalize attention values for coloring
+    const normalizeAttention = (value: number, isSelfAttention: boolean) => {
+      if (isSelfAttention) {
+        // Self-attention gets a distinct color (gold/yellow)
+        return { intensity: 0.8, isSelf: true };
+      } else {
+        // Non-self attention uses relative scale
+        const normalized = (value - minNonSelfAttention) / (maxNonSelfAttention - minNonSelfAttention);
+        return { intensity: Math.max(normalized, 0.1), isSelf: false };
+      }
+    };
+
+    // Get top pairs for display (exclude self-attention pairs)
+    const topPairs = pairs
       .filter(pair => pair.from_index !== pair.to_index) // Exclude self-attention
       .sort((a, b) => b.attention_weight - a.attention_weight)
-      .slice(0, limit);
-  };
+      .slice(0, 10);
 
-  if (!selectedFile || !model || !model.includes('whisper')) {
     return (
       <div className="space-y-4">
+        {/* Attention Matrix */}
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            <AlertCircle className="w-8 h-8 mx-auto mb-2" />
-            <p className="text-sm">Select a Whisper model and audio file to view attention patterns</p>
+          <CardHeader>
+            <CardTitle className="text-xs">Word-to-Word Attention Matrix</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Limit matrix display size for performance and readability */}
+            {words.length > 50 ? (
+              <div className="text-xs text-muted-foreground p-4">
+                Attention matrix too large to display ({words.length}x{words.length}). 
+                Showing top attention pairs below instead.
+              </div>
+            ) : (
+              <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${words.length + 1}, minmax(0, 1fr))` }}>
+                <div></div>
+                {words.map((word, i) => (
+                  <div key={i} className="text-[9px] p-1 text-center font-medium truncate" title={word}>
+                    {word.length > 6 ? word.substring(0, 6) + '...' : word}
+                  </div>
+                ))}
+                
+                {words.map((fromWord, i) => (
+                <>
+                  <div key={`row-${i}`} className="text-[9px] p-1 font-medium truncate" title={fromWord}>
+                    {fromWord.length > 8 ? fromWord.substring(0, 8) + '...' : fromWord}
+                  </div>
+                  {words.map((toWord, j) => {
+                    // Safe matrix access with bounds checking
+                    const attentionValue = (i < matrix.length && j < matrix[0]?.length) ? matrix[i][j] : 0;
+                    const isSelfAttention = i === j;
+                    
+                    if (isSelfAttention) {
+                      // Block out diagonal cells (self-attention)
+                      return (
+                        <div
+                          key={`cell-${i}-${j}`}
+                          className="aspect-square border border-gray-300 flex items-center justify-center"
+                          style={{
+                            backgroundColor: 'rgba(0, 0, 0, 0.1)', // Light black/gray
+                            minWidth: '20px',
+                            minHeight: '20px'
+                          }}
+                          title="Self-attention (blocked)"
+                        >
+                          {/* No value displayed */}
+                        </div>
+                      );
+                    }
+                    
+                    // For non-diagonal cells, use relative coloring
+                    const colorInfo = normalizeAttention(attentionValue, false);
+                    
+                    return (
+                      <div
+                        key={`cell-${i}-${j}`}
+                        className="aspect-square border border-gray-200 text-[9px] flex items-center justify-center cursor-pointer hover:border-gray-400 transition-all"
+                        style={{
+                          backgroundColor: `rgba(59, 130, 246, ${colorInfo.intensity})`,
+                          color: colorInfo.intensity > 0.6 ? 'white' : 'black',
+                          minWidth: '20px',
+                          minHeight: '20px'
+                        }}
+                        title={`${fromWord} → ${toWord}: ${(attentionValue * 100).toFixed(2)}%`}
+                      >
+                        {attentionValue > 0.01 ? (attentionValue * 100).toFixed(0) : '0'}
+                      </div>
+                    );
+                  })}
+                </>
+              ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Attention Pairs */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xs">Strongest Attention Relationships</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {topPairs.map((pair, i) => (
+                <div key={i} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline">{pair.from_word}</Badge>
+                    <span className="text-muted-foreground">→</span>
+                    <Badge variant="outline">{pair.to_word}</Badge>
+                  </div>
+                  <div className="text-xs font-medium">
+                    {(pair.attention_weight * 100).toFixed(1)}%
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
+    );
+  };
+
+  const renderTimelineView = () => {
+    if (!attentionData?.timestamp_attention) return null;
+
+    const timestamps = attentionData.timestamp_attention as TimestampAttention[];
+    if (timestamps.length === 0) return null;
+
+    try {
+      const attentionValues = timestamps.map(t => t.attention || 0);
+      
+      // Check for valid data
+      if (attentionValues.length === 0 || attentionValues.some(val => isNaN(val))) {
+        return <div className="text-red-500 p-4">Invalid attention data</div>;
+      }
+      
+      const minVal = Math.min(...attentionValues);
+      const maxVal = Math.max(...attentionValues);
+      const range = maxVal - minVal;
+      
+      // Always use full 0-1 scale for maximum visual clarity
+      const normalizedValues = attentionValues.map(val => (val - minVal) / (range || 1));
+    
+    // Responsive width based on audio duration and number of points
+    const duration = attentionData.total_duration || timestamps[timestamps.length - 1]?.time || 10;
+    const minWidth = 800;
+    const maxWidth = 1200;
+    const width = Math.min(maxWidth, Math.max(minWidth, duration * 60)); // 60px per second, with limits
+    const height = 250;
+    const padding = 80; // Increased padding for better label spacing
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xs">Attention Timeline</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Showing attention values over time - scaled to highlight differences
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-center overflow-x-auto">
+            <svg width={width} height={height} className="border rounded bg-white" style={{minWidth: `${width}px`}}>
+              {/* Grid lines for reference */}
+              {[0, 0.2, 0.4, 0.6, 0.8, 1].map(ratio => {
+                const y = padding + (1 - ratio) * (height - 2 * padding);
+                const actualValue = minVal + ratio * range;
+                return (
+                  <g key={`grid-${ratio}`}>
+                    <line
+                      x1={padding}
+                      y1={y}
+                      x2={width - padding}
+                      y2={y}
+                      stroke={ratio === 0 || ratio === 1 ? "#666" : "#e5e5e5"}
+                      strokeWidth={ratio === 0 || ratio === 1 ? "2" : "1"}
+                      strokeDasharray={ratio === 0 || ratio === 1 ? "none" : "2,2"}
+                    />
+                    <text x={padding - 15} y={y + 4} textAnchor="end" className="text-xs fill-gray-600">
+                      {(actualValue * 100).toFixed(2)}%
+                    </text>
+                  </g>
+                );
+              })}
+              
+              {/* Smooth attention curve */}
+              <polyline
+                points={normalizedValues.map((val, i) => {
+                  const x = padding + (i / (normalizedValues.length - 1)) * (width - 2 * padding);
+                  const y = padding + (1 - val) * (height - 2 * padding);
+                  return `${x},${y}`;
+                }).join(' ')}
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="2"
+              />
+              
+              {/* Data points */}
+              {normalizedValues.map((val, i) => {
+                const x = padding + (i / (normalizedValues.length - 1)) * (width - 2 * padding);
+                const y = padding + (1 - val) * (height - 2 * padding);
+                const originalVal = attentionValues[i];
+                
+                return (
+                  <circle
+                    key={`point-${i}`}
+                    cx={x}
+                    cy={y}
+                    r="3"
+                    fill="#2563eb"
+                    stroke="white"
+                    strokeWidth="1"
+                    className="hover:r-4 transition-all"
+                  >
+                    <title>
+                      Time: {timestamps[i].time.toFixed(2)}s
+                      Attention: {(originalVal * 100).toFixed(4)}%
+                    </title>
+                  </circle>
+                );
+              })}
+              
+              {/* Time axis - adaptive markers based on duration */}
+              {(() => {
+                const numMarkers = duration > 10 ? 6 : 5;
+                const markers = Array.from({ length: numMarkers }, (_, i) => i / (numMarkers - 1));
+                
+                return markers.map(ratio => {
+                  const x = padding + ratio * (width - 2 * padding);
+                  const timeIndex = Math.floor(ratio * (timestamps.length - 1));
+                  const time = timestamps[timeIndex]?.time || 0;
+                  return (
+                    <g key={`time-${ratio}`}>
+                      <line x1={x} y1={height - padding} x2={x} y2={height - padding + 5} stroke="#666" />
+                      <text x={x} y={height - padding + 18} textAnchor="middle" className="text-xs fill-gray-600">
+                        {time.toFixed(1)}s
+                      </text>
+                    </g>
+                  );
+                });
+              })()}
+              
+              {/* Axis labels */}
+              <text x={width / 2} y={height - 15} textAnchor="middle" className="text-sm font-medium fill-gray-700">
+                Time (seconds)
+              </text>
+              <text x={20} y={height / 2} textAnchor="middle" className="text-sm font-medium fill-gray-700" transform={`rotate(-90, 20, ${height / 2})`}>
+                Attention Values
+              </text>
+            </svg>
+          </div>
+          
+          {/* Simple stats */}
+          <div className="mt-4 flex justify-center gap-6 text-xs flex-wrap">
+            <div><span className="font-medium">Duration:</span> {duration.toFixed(1)}s</div>
+            <div><span className="font-medium">Min:</span> {(minVal * 100).toFixed(4)}%</div>
+            <div><span className="font-medium">Max:</span> {(maxVal * 100).toFixed(4)}%</div>
+            <div><span className="font-medium">Range:</span> {(range * 100).toFixed(4)}%</div>
+            <div><span className="font-medium">Points:</span> {attentionValues.length}</div>
+            <div><span className="font-medium">Resolution:</span> {(duration / attentionValues.length * 1000).toFixed(0)}ms</div>
+          </div>
+          
+          <div className="mt-2 text-xs text-center text-gray-500">
+            Hover over points for exact values • Scale adjusted to show all differences
+          </div>
+
+          <div className="mt-3 text-xs text-muted-foreground space-y-1">
+            <div>
+              Duration: {attentionData.total_duration?.toFixed(1)}s | 
+              Points: {timestamps.length} | 
+              Resolution: {((attentionData.total_duration || 0) / timestamps.length * 1000).toFixed(0)}ms
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+    } catch (error) {
+      console.error('Error rendering timeline:', error);
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Attention Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-red-500 p-4">
+              Error displaying attention timeline. Please try again.
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xs">Attention Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+              <span className="text-xs text-muted-foreground">Extracting attention patterns...</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xs">Attention Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <div className="text-red-500 text-xs">{error}</div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!selectedFile || !model?.includes('whisper')) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xs">Attention Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-xs text-muted-foreground py-8">
+            Select a Whisper model and audio file to analyze attention patterns
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-4">
+      {/* Controls */}
       <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">Attention Analysis</CardTitle>
-            <div className="flex items-center gap-2">
-              <Select value={selectedLayer.toString()} onValueChange={(value) => setSelectedLayer(parseInt(value))}>
-                <SelectTrigger className="w-20 h-6 text-xs">
+        <CardHeader>
+          <CardTitle className="text-xs">Attention Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium">Layer</label>
+              <Select value={selectedLayer.toString()} onValueChange={(v) => setSelectedLayer(parseInt(v))}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 12 }, (_, i) => (
+                <SelectItem key={i} value={i.toString()}>Layer {i}</SelectItem>
+                ))}
+              </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-xs font-medium">Head</label>
+              <Select value={selectedHead.toString()} onValueChange={(v) => setSelectedHead(parseInt(v))}>
+                <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({length: 12}, (_, i) => (
-                    <SelectItem key={i} value={i.toString()}>L{i}</SelectItem>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <SelectItem key={i} value={i.toString()}>Head {i}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={selectedHead.toString()} onValueChange={(value) => setSelectedHead(parseInt(value))}>
-                <SelectTrigger className="w-16 h-6 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({length: 12}, (_, i) => (
-                    <SelectItem key={i} value={i.toString()}>H{i}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm" 
-                className="h-6 w-6 p-0"
-                onClick={fetchAttentionData}
-                disabled={isLoading}
-              >
-                <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
             </div>
           </div>
-        </CardHeader>
-        
-        <CardContent className="space-y-3">
-          {isLoading && (
-            <div className="text-center py-4">
-              <div className="text-sm text-muted-foreground">Loading attention data...</div>
-            </div>
-          )}
-          
-          {error && (
-            <div className="text-center py-4">
-              <div className="text-sm text-red-600">Error: {error}</div>
-            </div>
-          )}
-          
-          {attentionData && !isLoading && (
-            <Tabs defaultValue="pairs" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="pairs" className="text-xs">Word Pairs</TabsTrigger>
-                <TabsTrigger value="timeline" className="text-xs">Timeline</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="pairs" className="space-y-3">
-                {/* Attention Matrix */}
-                <div className="overflow-auto">
-                  <div className="text-xs font-medium mb-2">Word-to-Word Attention Matrix:</div>
-                  <div className={`grid gap-1 text-xs min-w-fit`} 
-                       style={{gridTemplateColumns: `auto repeat(${attentionData.word_chunks.length}, 1fr)`}}>
-                    <div></div>
-                    {attentionData.word_chunks.map((chunk, idx) => (
-                      <div key={idx} className="text-center font-mono text-[10px] p-1 max-w-16 truncate">
-                        {chunk.text?.trim() || `W${idx}`}
-                      </div>
-                    ))}
-                    
-                    {getAttentionMatrix().map((row, i) => (
-                      <React.Fragment key={i}>
-                        <div className="text-right font-mono text-[10px] p-1 max-w-16 truncate">
-                          {attentionData.word_chunks[i]?.text?.trim() || `W${i}`}
-                        </div>
-                        {row.map((attention, j) => (
-                          <div
-                            key={j}
-                            className="w-6 h-6 border border-border/20 flex items-center justify-center cursor-pointer rounded-sm"
-                            style={{
-                              backgroundColor: `hsl(220 70% ${50 + attention * 30}% / ${0.3 + attention * 0.7})`,
-                            }}
-                            title={`${attentionData.word_chunks[i]?.text?.trim() || `W${i}`} → ${attentionData.word_chunks[j]?.text?.trim() || `W${j}`}: ${(attention * 100).toFixed(1)}%`}
-                          >
-                            <span className="text-[8px] text-white font-bold">
-                              {attention > 0.6 ? '●' : attention > 0.3 ? '·' : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Top Attention Pairs */}
-                <div className="text-xs space-y-2">
-                  <div className="font-medium">Highest Attention Pairs:</div>
-                  <div className="space-y-1">
-                    {getTopAttentionPairs().map((pair, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-medium">{pair.from_word}</span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="font-mono font-medium">{pair.to_word}</span>
-                        </div>
-                        <Badge variant="outline" className="text-[10px]">
-                          {pair.attention_normalized?.toFixed(1) || (pair.attention_weight * 100).toFixed(1)}%
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="timeline" className="space-y-3">
-                {/* Timestamp-level Attention */}
-                <div className="text-xs font-medium mb-2">Attention Over Time:</div>
-                <div className="space-y-2">
-                  {/* Timeline visualization */}
-                  <div className="relative h-20 bg-muted/20 rounded border">
-                    <div className="absolute inset-0 flex items-end px-2 py-1">
-                      {attentionData.timestamp_attention.map((point, idx) => {
-                        const x = (point.time / attentionData.total_duration) * 100;
-                        const height = point.attention * 60; // Max 60px height
-                        return (
-                          <div
-                            key={idx}
-                            className="absolute bg-primary/70"
-                            style={{
-                              left: `${x}%`,
-                              bottom: '4px',
-                              width: '2px',
-                              height: `${height}px`
-                            }}
-                            title={`Time: ${point.time.toFixed(2)}s, Attention: ${(point.attention * 100).toFixed(1)}%`}
-                          />
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Word overlays */}
-                    {attentionData.word_chunks.map((chunk, idx) => {
-                      const startX = (chunk.timestamp?.[0] || 0) / attentionData.total_duration * 100;
-                      const endX = (chunk.timestamp?.[1] || 0) / attentionData.total_duration * 100;
-                      const width = endX - startX;
-                      
-                      return (
-                        <div
-                          key={idx}
-                          className="absolute top-1 text-[8px] font-mono bg-background/80 px-1 rounded border"
-                          style={{
-                            left: `${startX}%`,
-                            width: `${width}%`,
-                            minWidth: '20px'
-                          }}
-                          title={`${chunk.text?.trim()}: ${chunk.timestamp?.[0]?.toFixed(2)}s - ${chunk.timestamp?.[1]?.toFixed(2)}s`}
-                        >
-                          {chunk.text?.trim()}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Timeline stats */}
-                  <div className="grid grid-cols-3 gap-4 text-xs">
-                    <div className="p-2 bg-muted/30 rounded">
-                      <div className="text-muted-foreground">Duration</div>
-                      <div className="font-medium">{attentionData.total_duration.toFixed(2)}s</div>
-                    </div>
-                    <div className="p-2 bg-muted/30 rounded">
-                      <div className="text-muted-foreground">Avg Attention</div>
-                      <div className="font-medium">
-                        {(attentionData.timestamp_attention.reduce((sum, p) => sum + p.attention, 0) / attentionData.timestamp_attention.length * 100).toFixed(1)}%
-                      </div>
-                    </div>
-                    <div className="p-2 bg-muted/30 rounded">
-                      <div className="text-muted-foreground">Words</div>
-                      <div className="font-medium">{attentionData.word_chunks.length}</div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
+          {attentionData && (
+            <div className="text-xs text-muted-foreground">
+              Model: {attentionData.model} | Words: {attentionData.word_chunks?.length || 0} | 
+              Sequence Length: {attentionData.sequence_length}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Attention Views */}
+      <Tabs defaultValue="pairs" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="pairs" className="text-xs">Word Pairs</TabsTrigger>
+          <TabsTrigger value="timeline" className="text-xs">Timeline</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="pairs" className="mt-4">
+          {renderWordPairsMatrix()}
+        </TabsContent>
+        
+        <TabsContent value="timeline" className="mt-4">
+          {renderTimelineView()}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

@@ -6,7 +6,6 @@ import { SaliencyVisualization } from "../visualization/SaliencyVisualization";
 import { AttentionVisualization } from "../visualization/AttentionVisualization";
 import { PerturbationTools } from "../analysis/PerturbationTools";
 import { ScalersVisualization } from "../visualization/ScalersVisualization";
-import { AttentionPairsVisualization } from "../visualization/AttentionPairsVisualization";
 import { useState, useEffect } from "react";
 import { API_BASE } from '@/lib/api';
 
@@ -412,14 +411,17 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     fetchWhisperPrediction();
   }, [selectedFile, selectedEmbeddingFile, model, dataset, originalDataset]);
 
+  const hasAttention = !!model && model.includes('whisper');
+  const tabCount = hasAttention ? 4 : 3;
+
   return (
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="scalers" className="h-full">
         <div className="panel-header border-b panel-border px-3 py-2">
-          <TabsList className="h-7 grid grid-cols-4 w-full">
+          <TabsList className={`h-7 grid grid-cols-${tabCount} w-full`}>
             <TabsTrigger value="scalers" className="text-xs">Scalers</TabsTrigger>
             <TabsTrigger value="saliency" className="text-xs">Saliency</TabsTrigger>
-            <TabsTrigger value="attention" className="text-xs">Attention</TabsTrigger>
+            {hasAttention && <TabsTrigger value="attention" className="text-xs">Attention</TabsTrigger>}
             <TabsTrigger value="perturbation" className="text-xs">Perturbation</TabsTrigger>
           </TabsList>
         </div>
@@ -444,15 +446,17 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
             </div>
           </TabsContent>
           
-          <TabsContent value="attention" className="m-0 h-full">
-            <div className="p-3">
-              <AttentionVisualization 
-                selectedFile={selectedFile || selectedEmbeddingFile} 
-                model={model} 
-                dataset={dataset} 
-              />
-            </div>
-          </TabsContent>
+          {hasAttention && (
+            <TabsContent value="attention" className="m-0 h-full">
+              <div className="p-3">
+                <AttentionVisualization 
+                  selectedFile={selectedFile || selectedEmbeddingFile} 
+                  model={model} 
+                  dataset={dataset} 
+                />
+              </div>
+            </TabsContent>
+          )}
           
           <TabsContent value="perturbation" className="m-0 h-full">
             <div className="p-3">
