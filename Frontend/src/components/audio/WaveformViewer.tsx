@@ -20,8 +20,6 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
   useEffect(() => {
     if (!waveformRef.current) return;
     
-    console.log('Initializing WaveSurfer...');
-    
     // Test browser FLAC support
     const audio = new Audio();
     const flacSupport = audio.canPlayType('audio/flac');
@@ -52,7 +50,6 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
 
     // Set up event listeners
     wavesurfer.on('ready', () => {
-      console.log('WaveSurfer ready, duration:', wavesurfer.getDuration());
       setIsLoading(false);
       setError(null);
       if (onReady) {
@@ -86,7 +83,6 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
     });
 
     wavesurfer.on('loading', (progress) => {
-      console.log('Loading progress:', progress);
       if (progress < 100) {
         setIsLoading(true);
       }
@@ -94,7 +90,6 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
 
     // Cleanup function
     return () => {
-      console.log('Cleaning up WaveSurfer...');
       if (wavesurferRef.current) {
         wavesurferRef.current.destroy();
         wavesurferRef.current = null;
@@ -110,12 +105,9 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
   // Handle audio URL changes
   useEffect(() => {
     if (!wavesurferRef.current || !audioUrl) {
-      console.log('No WaveSurfer instance or audioUrl:', { wavesurfer: !!wavesurferRef.current, audioUrl });
       return;
     }
 
-    console.log('Loading audio URL:', audioUrl);
-    console.log('Document cookies:', document.cookie);
     setIsLoading(true);
     setError(null);
     
@@ -131,8 +123,6 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
     
     fetch(audioUrl, fetchOptions)
       .then(response => {
-        console.log('Audio URL HEAD response:', response.status, response.statusText);
-        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
         if (!response.ok) {
           throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
         }
@@ -141,7 +131,6 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
         try {
           // For cross-origin requests (like ngrok) or custom datasets, try to preload audio data
           if (audioUrl.includes('ngrok') || audioUrl.includes('colab') || audioUrl.includes('https://') || audioUrl.includes('custom%3A')) {
-            console.log('Loading audio with credentials (cross-origin or custom dataset)...');
             // First try to fetch audio data
             fetch(audioUrl, {
               credentials: 'include',
@@ -158,7 +147,6 @@ export const WaveformViewer = ({ audioUrl, isPlaying, onReady, onProgress }: Wav
               }
               const audioBlob = URL.createObjectURL(blob);
               currentBlobUrlRef.current = audioBlob;
-              console.log('Loading audio from blob URL for custom dataset');
               wavesurferRef.current?.load(audioBlob);
             }).catch(blobErr => {
               console.warn('Blob loading failed, trying direct URL:', blobErr);

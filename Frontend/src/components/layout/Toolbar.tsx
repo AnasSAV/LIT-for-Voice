@@ -91,8 +91,6 @@ const onModelChange = (value: string) => {
   // Update dataset based on model
   const allowedDatasets = modelDatasetMap[value] || ["custom"];
   const defaultDataset = defaultDatasetForModel[value] || "custom";
-
-  console.log("Model selected:", value);
   
   // Check if current dataset is a custom dataset
   const isCurrentCustomDataset = dataset.startsWith('custom:');
@@ -108,7 +106,6 @@ const onModelChange = (value: string) => {
 
   const onDatasetChange = (value: string) => {
     setDataset(value);
-    console.log("Dataset selected:", value);
     
     // Check if this is a custom dataset (formatted as custom:session_id:dataset_name)
     const isCustomDataset = value.startsWith('custom:');

@@ -113,8 +113,6 @@ export const MainLayout = () => {
 
         const prediction = await response.json();
         setPerturbedPredictions(prediction);
-        
-        console.log("DEBUG: Fetched perturbed predictions:", prediction);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
         setPredictionError(errorMessage);
@@ -320,12 +318,6 @@ export const MainLayout = () => {
 
         const prediction = await response.json();
         
-        console.log("DEBUG: Whisper prediction response:", prediction);
-        console.log("DEBUG: Has ground truth:", !!prediction.ground_truth);
-        console.log("DEBUG: Ground truth value:", prediction.ground_truth);
-        console.log("DEBUG: Accuracy percentage:", prediction.accuracy_percentage);
-        console.log("DEBUG: Word error rate:", prediction.word_error_rate);
-        
         let whisperPrediction: WhisperPrediction;
         
         if (isUploadedFile || isCustomDataset) {
@@ -405,19 +397,15 @@ export const MainLayout = () => {
   const [predictionMap, setPredictionMap] = useState<Record<string, string>>({});
 
   const handlePredictionUpdate = (fileId: string, prediction: string) => {
-    console.log("DEBUG: MainLayout handlePredictionUpdate called with:", fileId, prediction);
     setPredictionMap(prev => {
       const updated = { ...prev, [fileId]: prediction };
-      console.log("DEBUG: MainLayout - Updated predictionMap:", updated);
       return updated;
     });
   };
 
   const handleUploadSuccess = (uploadResponse: UploadedFile) => {
-    console.log("DEBUG: Upload success response:", uploadResponse);
     setUploadedFiles(prev => {
       const newFiles = [...prev, uploadResponse];
-      console.log("DEBUG: Updated uploaded files:", newFiles);
       return newFiles;
     });
     // Always select the newly uploaded file
@@ -425,7 +413,6 @@ export const MainLayout = () => {
   };
 
   const handleFileSelection = (file: UploadedFile) => {
-    console.log("DEBUG: handleFileSelection called with:", file.filename, "message:", file.message, "file_path:", file.file_path);
     setSelectedFile(file);
     // Sync embedding selection with audio dataset selection
     setSelectedEmbeddingFile(file.filename);
@@ -461,10 +448,6 @@ export const MainLayout = () => {
   };
 
   const handlePredictionRefresh = (file: UploadedFile, prediction: string) => {
-    console.log("DEBUG: handlePredictionRefresh called with:", file.filename, prediction);
-    
-    // For uploaded files, we'll handle prediction updates through the AudioDatasetPanel
-    // This function is now mainly for perturbed files
     if (file.message === "Perturbed file") {
       // Add the perturbed file to uploaded files
       setUploadedFiles(prevFiles => {
@@ -483,7 +466,6 @@ export const MainLayout = () => {
       // Update predictionMap for perturbed file
       setPredictionMap(prev => {
         const updated = { ...prev, [file.filename]: prediction };
-        console.log("DEBUG: Updated predictionMap for perturbed file:", updated);
         return updated;
       });
     }
@@ -504,7 +486,6 @@ export const MainLayout = () => {
 
   // Clear predictions when model or dataset changes
   useEffect(() => {
-    console.log('Model or dataset changed, clearing predictions:', model, dataset);
     setPredictionMap({});
     setBatchInferenceStatus('idle');
   }, [model, dataset]);
@@ -514,12 +495,9 @@ export const MainLayout = () => {
     if (selectedDataset === 'custom') return;
     
     // Clear predictions when dataset/model changes to avoid showing old predictions
-    console.log('Clearing predictions for new dataset/model combination:', selectedModel, selectedDataset);
     setPredictionMap({});
     
     setBatchInferenceStatus('running');
-    console.log(`Starting batch inference for ${selectedModel} on ${selectedDataset} dataset`);
-    
     try {
       // This will be implemented by AudioDatasetPanel to run inference on all files
       // For now, just set the status to indicate batch inference is requested

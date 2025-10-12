@@ -12,30 +12,24 @@ interface AudioUploaderProps {
 
 export const AudioUploader = ({ onUploadSuccess, model }: AudioUploaderProps) => {
   const uploadFile = async (file: File) => {
-    console.log('Starting upload for file:', file.name, 'Type:', file.type, 'Size:', file.size);
     
     const formData = new FormData();
     formData.append('file', file);
     formData.append('model', model || 'whisper-base'); // Default to whisper-base if no model specified
 
     try {
-      console.log(`Sending request to ${API_BASE}/upload...`);
       const response = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
       });
 
-      console.log('Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('Upload failed with error:', errorData);
         throw new Error(errorData.detail || 'Upload failed');
       }
 
       const data = await response.json();
-      console.log('Upload successful:', data);
       toast.success(`Uploaded: ${file.name}`);
       
       // Call the callback with upload response
@@ -52,9 +46,7 @@ export const AudioUploader = ({ onUploadSuccess, model }: AudioUploaderProps) =>
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    console.log('Files dropped:', acceptedFiles.length, 'files');
     acceptedFiles.forEach(async (file, index) => {
-      console.log(`Processing file ${index + 1}:`, file.name, 'Type:', file.type);
       
       // Check both MIME type and file extension for better .flac support
       const allowedExtensions = ['.wav', '.mp3', '.m4a', '.flac'];

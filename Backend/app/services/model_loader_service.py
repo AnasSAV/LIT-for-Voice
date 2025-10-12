@@ -629,8 +629,8 @@ def predict_emotion_wave2vec(audio_path, return_attention=False):
                     with torch.no_grad():
                         # Get features from feature extractor
                         if hasattr(emo_model.wav2vec2, 'feature_extractor'):
-                            feature_extractor = emo_model.wav2vec2.feature_extractor
-                            extract_features = feature_extractor(input_values)
+                            model_feature_extractor = emo_model.wav2vec2.feature_extractor
+                            extract_features = model_feature_extractor(input_values)
                             
                             # Get features through feature projection
                             if hasattr(emo_model.wav2vec2, 'feature_projection'):

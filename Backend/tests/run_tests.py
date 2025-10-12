@@ -52,16 +52,9 @@ PERFORMANCE_BENCHMARKS = {
 def run_category_tests(category: str, verbose: bool = True):
     """Run tests for a specific category."""
     if category not in TEST_CATEGORIES:
-        print(f"Unknown test category: {category}")
-        print(f"Available categories: {list(TEST_CATEGORIES.keys())}")
         return False
     
     config = TEST_CATEGORIES[category]
-    print(f"\n{'='*60}")
-    print(f"Running {config['description']}")
-    print(f"Priority: {config['priority']}")
-    print(f"Estimated time: {config['estimated_time']}")
-    print(f"{'='*60}")
     
     # Build pytest arguments
     pytest_args = []

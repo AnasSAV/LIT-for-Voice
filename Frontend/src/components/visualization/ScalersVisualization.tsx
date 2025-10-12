@@ -159,10 +159,6 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
         requestBody.dataset = dataset;
       }
 
-      console.log('Fetching audio frequency analysis for:', requestBody);
-      console.log('Browser cookies:', document.cookie);
-      console.log('Dataset being sent:', dataset);
-
       const response = await fetch(`${API_BASE}/inferences/audio-frequency-batch`, {
         method: "POST",
         headers: {
@@ -205,8 +201,6 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
         requestBody.dataset = dataset;
       }
 
-      console.log('Fetching whisper analysis for:', requestBody);
-
       const response = await fetch(`${API_BASE}/inferences/whisper-batch`, {
         method: "POST",
         headers: {
@@ -247,8 +241,6 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
       if (dataset) {
         requestBody.dataset = dataset;
       }
-
-      console.log('Fetching batch predictions for:', requestBody);
 
       const response = await fetch(`${API_BASE}/inferences/wav2vec2-batch`, {
         method: "POST",
@@ -696,16 +688,6 @@ export const ScalersVisualization = ({ model, dataset }: ScalersVisualizationPro
                       <div>Avg/File: {whisperAnalysis.summary.avg_words_per_file.toFixed(1)}</div>
                       <div>Files: {whisperAnalysis.summary.total_files}</div>
                     </div>
-                    {whisperAnalysis.cache_info && (
-                      <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                        Cache: {whisperAnalysis.cache_info.cached_count} found, {whisperAnalysis.cache_info.missing_count} missing
-                        {whisperAnalysis.cache_info.missing_count > 0 && (
-                          <div className="text-blue-700 mt-1">
-                            Run inference first for missing files to get complete analysis
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {/* Top Common Terms */}

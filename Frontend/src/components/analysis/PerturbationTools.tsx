@@ -47,7 +47,6 @@ interface PerturbationToolsProps {
 
 // Helper function to generate correct audio URL for original files
 const getAudioUrl = (selectedFile: UploadedFile, dataset?: string, originalDataset?: string): string => {
-  console.log("DEBUG: getAudioUrl called with:", { selectedFile, dataset, originalDataset });
   
   // Check if this is an uploaded file
   const isUploadedFile = selectedFile.file_path && (
@@ -61,14 +60,31 @@ const getAudioUrl = (selectedFile: UploadedFile, dataset?: string, originalDatas
   if (isUploadedFile) {
     // For uploaded files, use the file_id (unique filename) with upload endpoint
     const url = `${API_BASE}/upload/file/${selectedFile.file_id}`;
-    console.log("DEBUG: Generated upload URL:", url);
     return url;
   } else {
     // For dataset files, use the filename with dataset endpoint
-    const datasetToUse = originalDataset || dataset;
-    const url = `${API_BASE}/${datasetToUse}/file/${selectedFile.filename}`;
-    console.log("DEBUG: Generated dataset URL:", url);
-    return url;
+    // Use original dataset if available and it's a real dataset
+    const datasetToUse = originalDataset && originalDataset !== "custom" ? originalDataset : dataset;
+    
+    if (datasetToUse && datasetToUse !== "custom") {
+      // This is a dataset file from built-in or custom datasets
+      const filename = encodeURIComponent(selectedFile.filename);
+      
+      // Handle custom datasets vs built-in datasets
+      if (datasetToUse.startsWith('custom:')) {
+        // Custom dataset: use the original route /{dataset}/file/{filename}
+        const url = `${API_BASE}/${encodeURIComponent(datasetToUse)}/file/${filename}`;
+        return url;
+      } else {
+        // Built-in dataset: use /{dataset}/file/{filename}
+        const url = `${API_BASE}/${encodeURIComponent(datasetToUse)}/file/${filename}`;
+        return url;
+      }
+    } else {
+      // Fallback to upload endpoint when dataset is "custom" (generic case)
+      const url = `${API_BASE}/upload/file/${selectedFile.file_id}`;
+      return url;
+    }
   }
 };
 
@@ -118,7 +134,6 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
         ...prev,
         [perturbationType]: !prev[perturbationType]
       };
-      console.log(`DEBUG: Toggled ${perturbationType} to ${newState[perturbationType]}`);
       return newState;
     });
   }
@@ -194,13 +209,6 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
         })
       };
 
-      console.log("DEBUG: Sending perturbation request:", reqBody);
-      console.log("DEBUG: Selected perturbations:", selectedPerturbations);
-      console.log("DEBUG: Pitch shift value:", pitchShift[0]);
-      console.log("DEBUG: isUploadedFile:", isUploadedFile);
-      console.log("DEBUG: selectedFile:", selectedFile);
-
-
       const response = await fetch(`${API_BASE}/perturb`, {
         method: "POST",
         headers: {
@@ -225,7 +233,6 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
       // Auto-refresh prediction for the perturbed file
       if (result.success && model && onPredictionRefresh) {
         try {
-          console.log("DEBUG: Auto-refreshing prediction for perturbed file...", result);
           
           // Create a file object for the perturbed file
           const perturbedFile: UploadedFile = {
@@ -237,7 +244,6 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
             sample_rate: result.sample_rate
           };
           
-          console.log("DEBUG: Created perturbed file object:", perturbedFile);
           
           // Run inference on the perturbed file
 
@@ -252,17 +258,13 @@ export const PerturbationTools: React.FC<PerturbationToolsProps> = ({
             }),
           });
           
-          console.log("DEBUG: Inference response status:", inferenceResponse.status);
-          
           if (inferenceResponse.ok) {
             const prediction = await inferenceResponse.json();
             const predictionText = typeof prediction === 'string' ? prediction : prediction?.text || JSON.stringify(prediction);
-            
-            console.log("DEBUG: Auto-prediction completed:", predictionText);
             onPredictionRefresh(perturbedFile, predictionText);
           } else {
             const errorText = await inferenceResponse.text();
-            console.error("DEBUG: Auto-prediction failed:", inferenceResponse.status, errorText);
+            console.error("Error during auto-prediction:", errorText);
           }
         } catch (error) {
           console.error("DEBUG: Error running auto-prediction:", error);

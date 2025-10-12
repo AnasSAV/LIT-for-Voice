@@ -173,10 +173,6 @@ export const DatapointEditorPanel = ({
 
   // Debug logging for selectedFile and audioUrl
   useEffect(() => {
-    console.log('DatapointEditorPanel - selectedFile changed:', selectedFile);
-    console.log('DatapointEditorPanel - dataset:', dataset);
-    console.log('DatapointEditorPanel - originalDataset:', originalDataset);
-    console.log('DatapointEditorPanel - audioUrl:', audioUrl);
   }, [selectedFile, audioUrl, dataset, originalDataset]);
 
   // Reset playback when file changes or when switching between original/perturbed
@@ -362,10 +358,9 @@ export const DatapointEditorPanel = ({
               audioUrl={audioUrl}
               isPlaying={isPlaying}
               onReady={(wavesurfer) => {
-                console.log('WaveformViewer ready callback in DatapointEditorPanel');
+      
                 wavesurferRef.current = wavesurfer;
                 const duration = wavesurfer.getDuration();
-                console.log('Duration from WaveSurfer:', duration);
                 setDuration(duration);
                 
                 // Update metadata state for file info display

@@ -111,7 +111,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
     setError(null);
 
     try {
-      console.log("DEBUG: Running inference on perturbed file:", perturbedFile);
       
       let response;
       let prediction;
@@ -155,7 +154,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         prediction = await response.json();
       }
 
-      console.log("DEBUG: Perturbed prediction result:", prediction);
       setPerturbedPredictions(prediction);
       
       // Extract prediction text and notify parent component
@@ -169,7 +167,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
       }
       
       if (predictionText && onPredictionRefresh) {
-        console.log("DEBUG: Calling onPredictionRefresh for perturbed file:", perturbedFile.filename, predictionText);
         onPredictionRefresh(perturbedFile, predictionText);
       }
     } catch (err) {
@@ -258,7 +255,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
           if (isUploadedFile) {
             const predictionText = typeof prediction === 'string' ? prediction : 
               prediction?.predicted_emotion || prediction?.prediction || prediction?.emotion || JSON.stringify(prediction);
-            console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Wav2Vec2:", selectedFile.file_id, predictionText);
             onPredictionUpdate(selectedFile.file_id, predictionText);
           }
         }
@@ -396,7 +392,6 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
         
         // Update predictionMap for uploaded files (same as dataset files)
         if (selectedFile && onPredictionUpdate && isUploadedFile) {
-          console.log("DEBUG: PredictionPanel - Calling onPredictionUpdate for Whisper:", selectedFile.file_id, whisperPrediction.predicted_transcript);
           onPredictionUpdate(selectedFile.file_id, whisperPrediction.predicted_transcript);
         }
       } catch (err) {
@@ -412,13 +407,12 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
   }, [selectedFile, selectedEmbeddingFile, model, dataset, originalDataset]);
 
   const hasAttention = !!model && model.includes('whisper');
-  const tabCount = hasAttention ? 4 : 3;
 
   return (
     <div className="h-full panel-background border-t panel-border">
       <Tabs defaultValue="scalers" className="h-full">
         <div className="panel-header border-b panel-border px-3 py-2">
-          <TabsList className={`h-7 grid grid-cols-${tabCount} w-full`}>
+          <TabsList className={`h-7 grid w-full ${hasAttention ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="scalers" className="text-xs">Scalers</TabsTrigger>
             <TabsTrigger value="saliency" className="text-xs">Saliency</TabsTrigger>
             {hasAttention && <TabsTrigger value="attention" className="text-xs">Attention</TabsTrigger>}
@@ -466,6 +460,7 @@ export const PredictionPanel = ({ selectedFile, selectedEmbeddingFile, model, da
                 onPredictionRefresh={onPredictionRefresh}
                 model={model}
                 dataset={dataset}
+                originalDataset={originalDataset}
               />
             </div>
           </TabsContent>

@@ -99,7 +99,6 @@ export const AttentionVisualization = ({ selectedFile, model, dataset }: Attenti
       }
 
       const data = await response.json();
-      console.log("AttentionVisualization - Response data:", data);
       setAttentionData(data);
 
     } catch (err: any) {

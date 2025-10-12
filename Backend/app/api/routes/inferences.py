@@ -387,9 +387,6 @@ async def get_whisper_accuracy(request: Request):
         
         cached_result = await get_result(model, cache_key)
         
-        print(f"DEBUG: Looking for cache key: {cache_key}")
-        print(f"DEBUG: Cached result found: {cached_result is not None}")
-        
         if cached_result is None:
             # If not cached, run inference first
             print(f"DEBUG: No cached result found, running inference for {dataset_file}")
@@ -474,9 +471,6 @@ async def get_whisper_accuracy(request: Request):
             
             pred_clean = clean_text(predicted)
             truth_clean = clean_text(ground_truth)
-            
-            print(f"DEBUG: Predicted clean: '{pred_clean}'")
-            print(f"DEBUG: Truth clean: '{truth_clean}'")
             
             # Split into words for word-based metrics
             pred_words = pred_clean.split()
@@ -1268,7 +1262,6 @@ async def extract_attention_pairs_endpoint(
     })
 ):
     """Extract word-to-word attention relationships and timestamp-level attention from Whisper model"""
-    print(">>> ATTENTION PAIRS CALLED <<<")  # Using print to ensure it shows
     logger.info("=== ATTENTION PAIRS ENDPOINT START ===")
     try:
         logger.info("=== INSIDE TRY BLOCK ===")
@@ -1285,12 +1278,7 @@ async def extract_attention_pairs_endpoint(
         dataset_file = request.get("dataset_file")
         layer_idx = request.get("layer", 6)
         head_idx = request.get("head", 0)
-        
-        print(f">>> PARAMS: model={model}, file_path={file_path}, dataset={dataset}, dataset_file={dataset_file}")
-        
-        # Enhanced logging for custom dataset debugging
-        logger.info(f"Attention pairs request - model: {model}, file_path: {file_path}, dataset: {dataset}, dataset_file: {dataset_file}, session_id: {session_id}")
-        
+
         # Validate model (following your pattern)
         if "whisper" not in model.lower():
             raise HTTPException(status_code=400, detail="Attention pairs extraction only supports Whisper models")
@@ -1299,10 +1287,8 @@ async def extract_attention_pairs_endpoint(
         resolved_path: Optional[Path] = None
         
         if file_path:
-            print(f">>> TAKING FILE_PATH BRANCH: {file_path}")
             resolved_path = Path(file_path)
         elif dataset and dataset_file:
-            print(f">>> TAKING DATASET BRANCH: dataset={dataset}, file={dataset_file}")
             try:
                 print(f">>> RESOLVING FILE: dataset='{dataset}', file='{dataset_file}', session='{session_id}'")
                 resolved_path = resolve_file(dataset, dataset_file, session_id)
